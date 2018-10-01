@@ -3925,6 +3925,15 @@ static int __init regulatory_init_db(void)
 		return 0;
 	}
 
+	/*
+	 * It's possible that - due to other bugs/issues - cfg80211
+	 * never called regulatory_init() below, or that it failed;
+	 * in that case, don't try to do any further work here as
+	 * it's doomed to lead to crashes.
+	 */
+	if (IS_ERR_OR_NULL(reg_pdev))
+		return -EINVAL;
+
 	err = load_builtin_regdb_keys();
 	if (err)
 		return err;
