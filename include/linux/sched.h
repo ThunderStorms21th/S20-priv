@@ -1224,7 +1224,6 @@ struct task_struct {
 	 * because of depth overrun:
 	 */
 	atomic_t			trace_overrun;
-
 	/* Pause tracing: */
 	atomic_t			tracing_graph_pause;
 #endif
@@ -1236,7 +1235,6 @@ struct task_struct {
 	/* Bitmask and counter of trace recursion: */
 	unsigned long			trace_recursion;
 #endif /* CONFIG_TRACING */
-
 #ifdef CONFIG_KCOV
 	/* Coverage collection mode enabled for this task (0 if disabled): */
 	unsigned int			kcov_mode;
@@ -1502,6 +1500,8 @@ extern struct pid *cad_pid;
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
 #define PF_SWAPWRITE		0x00800000	/* Allowed to write to swap */
 #define PF_MEMSTALL		0x01000000	/* Stalled due to lack of memory */
+#define PF_PERF_CRITICAL 	0x02000000	/* Thread is performance-critical */
+#define PF_LOW_POWER		0x10000000	/* Thread is low-power */
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_PERF_CRITICAL	0x10000000	/* Thread is performance-critical */
