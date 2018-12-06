@@ -486,7 +486,7 @@ static inline int gpiod_get_consumer_name(struct gpio_desc *desc, char **name)
 
 static inline struct gpio_desc *gpio_to_desc(unsigned gpio)
 {
-	return ERR_PTR(-EINVAL);
+	return NULL;
 }
 
 static inline int desc_to_gpio(const struct gpio_desc *desc)
