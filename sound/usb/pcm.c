@@ -516,10 +516,10 @@ static int set_format(struct snd_usb_substream *subs, struct audioformat *fmt)
 	iface = usb_ifnum_to_if(dev, fmt->iface);
 	if (WARN_ON(!iface))
 		return -EINVAL;
-	alts = &iface->altsetting[fmt->altset_idx];
-	altsd = get_iface_desc(alts);
-	if (WARN_ON(altsd->bAlternateSetting != fmt->altsetting))
+	alts = usb_altnum_to_altsetting(iface, fmt->altsetting);
+	if (WARN_ON(!alts))
 		return -EINVAL;
+	altsd = get_iface_desc(alts);
 
 	if (fmt == subs->cur_audiofmt)
 		return 0;
