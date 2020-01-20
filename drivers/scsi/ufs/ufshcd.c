@@ -8604,6 +8604,7 @@ retry:
 			dev_warn(hba->dev, "%s failed to add w-lus %d\n",
 				__func__, ret);
 			ret = 0;
+			goto out;
 		}
 
 		scsi_scan_host(hba->host);
