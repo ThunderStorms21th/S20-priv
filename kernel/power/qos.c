@@ -610,7 +610,7 @@ static struct pm_qos_object *pm_qos_array[] = {
  */
 s32 pm_qos_read_value(struct pm_qos_constraints *c)
 {
-	return c->target_value;
+	return READ_ONCE(c->target_value);
 }
 
 static int pm_qos_get_value(struct pm_qos_constraints *c)
@@ -643,7 +643,7 @@ static int pm_qos_get_value(struct pm_qos_constraints *c)
 
 static void pm_qos_set_value(struct pm_qos_constraints *c, s32 value)
 {
-	c->target_value = value;
+	WRITE_ONCE(c->target_value, value);
 }
 
 static int pm_qos_dbg_show_requests(struct seq_file *s, void *unused)
