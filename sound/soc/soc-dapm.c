@@ -798,10 +798,7 @@ static void dapm_set_mixer_path_status(struct snd_soc_dapm_path *p, int i,
 		 * that the default mixer choice will be
 		 * correctly powered up during initialization.
 		 */
-		val = 0;
-		if (invert)
-			val = max - val;
-		p->connect = !!val;
+		p->connect = invert;
 	}
 }
 
