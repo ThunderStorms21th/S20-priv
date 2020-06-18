@@ -84,6 +84,7 @@ int check_user_usb_string(const char *name,
 #define MAX_NAME_LEN	40
 #define MAX_USB_STRING_LANGS 2
 #define MAX_USB_STRING_LEN	126
+#define USB_MAX_STRING_LEN	126
 #define MAX_USB_STRING_WITH_NULL_LEN	(MAX_USB_STRING_LEN+1)
 
 static const struct usb_descriptor_header *otg_desc[2];
