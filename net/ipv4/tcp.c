@@ -3291,12 +3291,12 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 	case TCP_MD5SIG_EXT:
 #ifdef CONFIG_MPTCP
 		if ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN) && !sock_flag(sk, SOCK_MPTCP))
-#else
-		if ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN))
-#endif
 			err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
 		else
 			err = -EINVAL;
+#else
+		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
+#endif
 		break;
 #endif
 	case TCP_USER_TIMEOUT:
