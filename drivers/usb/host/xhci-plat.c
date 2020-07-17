@@ -839,15 +839,7 @@ static int __maybe_unused xhci_plat_resume(struct device *dev)
 		is_rewa_enabled = 0;
 	}
 
-	ret = xhci_resume(xhci, 0);
-	if (ret)
-		return ret;
-
-	pm_runtime_disable(dev);
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
-
-	return 0;
+	return xhci_resume(xhci, 0);
 }
 
 static int __maybe_unused xhci_plat_runtime_suspend(struct device *dev)
