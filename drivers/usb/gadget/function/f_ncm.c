@@ -1269,7 +1269,6 @@ static int ncm_unwrap_ntb(struct gether *port,
 	const struct ndp_parser_opts *opts = ncm->parser_opts;
 	unsigned	crc_len = ncm->is_crc ? sizeof(uint32_t) : 0;
 	int		dgram_counter;
-	bool		ndp_after_header;
 
 	/* dwSignature */
 	if (get_unaligned_le32(tmp) != opts->nth_sign) {
@@ -1386,6 +1385,8 @@ static int ncm_unwrap_ntb(struct gether *port,
 
 		dgram_counter++;
 
+		if (index2 == 0 || dg_len2 == 0)
+			break;
 	} while (ndp_len > 2 * (opts->dgram_item_len * 2)); /* zero entry */
 
 	VDBG(port->func.config->cdev,
