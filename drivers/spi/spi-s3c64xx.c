@@ -1033,6 +1033,8 @@ try_transfer:
 			enable_cs(sdd, spi);
 		}
 
+		s3c64xx_enable_datapath(sdd, xfer, use_dma);
+
 		spin_unlock_irqrestore(&sdd->lock, flags);
 
 		status = wait_for_xfer(sdd, xfer, use_dma);
