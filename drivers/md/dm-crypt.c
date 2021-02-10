@@ -2948,6 +2948,7 @@ get_bio:
 
 out:
 	ti->num_flush_bios = 1;
+	ti->limit_swap_bios = true;
 
 	return 0;
 
