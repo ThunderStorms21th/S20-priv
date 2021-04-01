@@ -1521,6 +1521,10 @@ static __init int init_domain(struct exynos_cpufreq_domain *domain,
 	if (of_property_read_bool(dn, "need-awake"))
 		domain->need_awake = true;
 
+	/* Default QoS for user */
+	if (!of_property_read_u32(dn, "user-default-qos", &val))
+		domain->user_default_qos = val;
+
 	domain->boot_freq = cal_dfs_get_boot_freq(domain->cal_id);
 	domain->resume_freq = cal_dfs_get_resume_freq(domain->cal_id);
 
