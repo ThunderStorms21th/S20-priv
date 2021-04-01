@@ -80,6 +80,8 @@ struct exynos_cpufreq_domain {
 	struct pm_qos_request		user_qos_min_req;
 	struct pm_qos_request		user_qos_max_req;
 
+	unsigned int			user_default_qos;
+
 	/* for sysfs */
 	unsigned int			user_boost;
 
