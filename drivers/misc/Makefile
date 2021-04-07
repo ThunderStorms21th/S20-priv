@@ -60,6 +60,7 @@ obj-$(CONFIG_OCXL)		+= ocxl/
 obj-$(CONFIG_MISC_RTSX)		+= cardreader/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_EXYNOS_PASR)	+= exynos_pasr.o
+obj-$(CONFIG_BATTERY_SAVER)	+= battery_saver.o
 
 # TEEGRIS kernel driver
 ccflags-$(CONFIG_TZDEV) += -I$(srctree)/drivers/misc/tzdev/include
