@@ -2406,6 +2406,12 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	if (!is_on)
 		msleep(50);
 
+	/* On 2.30a and above this bit enables U3/L2-L1 Suspend Events */
+	if (dwc->revision >= DWC3_REVISION_230A)
+		reg |= DWC3_DEVTEN_EOPFEN;
+
+	dwc3_writel(dwc->regs, DWC3_DEVTEN, reg);
+
 	return ret;
 }
 
