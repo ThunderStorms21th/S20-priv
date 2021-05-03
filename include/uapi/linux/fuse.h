@@ -280,6 +280,8 @@ struct fuse_file_lock {
 #define FUSE_ABORT_ERROR	(1 << 21)
 #define FUSE_MAX_PAGES		(1 << 22)
 
+#define FUSE_SHORTCIRCUIT	(1 << 30)
+
 /**
  * CUSE INIT request/reply flags
  *
