@@ -105,6 +105,7 @@ enum ttu_flags {
 					 * caller holds it */
 	TTU_SPLIT_FREEZE	= 0x100,		/* freeze pte under splitting thp */
 	TTU_FORCE_BATCH_FLUSH	= 0x200,/* just for page_steal */
+	TTU_SYNC		= 0x200, /* avoid racy checks with PVMW_SYNC */
 };
 
 #ifdef CONFIG_MMU
