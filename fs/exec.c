@@ -88,6 +88,8 @@
 #endif
 #endif
 
+#define HWCOMPOSER_BIN_PREFIX "/vendor/bin/hw/android.hardware.graphics.composer"
+
 int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
@@ -1998,6 +2000,13 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;
+
+    if (unlikely(!strncmp(filename->name,
+				   HWCOMPOSER_BIN_PREFIX,
+				   strlen(HWCOMPOSER_BIN_PREFIX)))) {
+		current->flags |= PF_PERF_CRITICAL;
+		set_cpus_allowed_ptr(current, cpu_prime_mask);
+    }
 
 	/* execve succeeded */
 	current->fs->in_exec = 0;
