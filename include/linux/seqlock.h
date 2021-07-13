@@ -38,6 +38,7 @@
 #include <linux/lockdep.h>
 #include <linux/compiler.h>
 #include <asm/processor.h>
+#include <asm-generic/processor.h>
 
 /*
  * Version using sequence counter only.
@@ -110,9 +111,9 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 	unsigned ret;
 
 repeat:
-	ret = READ_ONCE(s->sequence);
+	ret = cpu_relaxed_read((volatile u32 *)&s->sequence);
 	if (unlikely(ret & 1)) {
-		cpu_relax();
+		cpu_read_relax();
 		goto repeat;
 	}
 	return ret;
