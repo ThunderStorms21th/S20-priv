@@ -22,6 +22,7 @@
 #include <linux/percpu.h>
 #include <linux/timer.h>
 #include <linux/timerqueue.h>
+#include <asm-generic/relaxed.h>
 
 struct hrtimer_clock_base;
 struct hrtimer_cpu_base;
@@ -445,6 +446,11 @@ static inline int hrtimer_is_queued(struct hrtimer *timer)
 static inline int hrtimer_callback_running(struct hrtimer *timer)
 {
 	return timer->base->running == timer;
+}
+
+static inline int hrtimer_callback_running_relaxed(struct hrtimer *timer)
+{
+	return cpu_relaxed_read_long(&timer->base->cpu_base->running) == timer;
 }
 
 /* Forward a hrtimer so it expires after now: */
