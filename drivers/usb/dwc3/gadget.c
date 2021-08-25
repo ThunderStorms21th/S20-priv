@@ -2346,6 +2346,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return 0;
 	}
+	if (ret == 0)
+		dev_warn(dwc->dev, "timed out waiting for SETUP phase\n");
 
 	dwc->softconnect = is_on;
 
@@ -2518,6 +2520,7 @@ static int __dwc3_gadget_start(struct dwc3 *dwc)
 	/* begin to receive SETUP packets */
 	dwc->ep0state = EP0_SETUP_PHASE;
 	dwc->link_state = DWC3_LINK_STATE_SS_DIS;
+	dwc->delayed_status = false;
 	dwc3_ep0_out_start(dwc);
 
 	dwc3_gadget_enable_irq(dwc);
