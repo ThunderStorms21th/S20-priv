@@ -10,6 +10,8 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/proc_fs.h>
+
 struct sec_ts_data *tsp_info;
 
 #include "sec_ts.h"
