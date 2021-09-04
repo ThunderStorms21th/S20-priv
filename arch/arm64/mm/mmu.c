@@ -47,8 +47,20 @@
 #include <asm/ptdump.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_UH
+#include <linux/uh.h>
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+#include <linux/rkp.h>
+#endif
+#endif
+
 #define NO_BLOCK_MAPPINGS	BIT(0)
 #define NO_CONT_MAPPINGS	BIT(1)
+
+#ifdef CONFIG_FASTUH_RKP
+u64 robuffer_base __rkp_ro = 0;
+u64 robuffer_size __rkp_ro = 0;
+#endif
 
 u64 idmap_t0sz = TCR_T0SZ(VA_BITS);
 u64 idmap_ptrs_per_pgd = PTRS_PER_PGD;
@@ -60,12 +72,12 @@ EXPORT_SYMBOL(kimage_voffset);
  * Empty_zero_page is a special page that is used for zero-initialized data
  * and COW.
  */
-unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_bss;
+unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_rkp_bss;
 EXPORT_SYMBOL(empty_zero_page);
 
-static pte_t bm_pte[PTRS_PER_PTE] __page_aligned_bss;
-static pmd_t bm_pmd[PTRS_PER_PMD] __page_aligned_bss __maybe_unused;
-static pud_t bm_pud[PTRS_PER_PUD] __page_aligned_bss __maybe_unused;
+static pte_t bm_pte[PTRS_PER_PTE] __page_aligned_rkp_bss;
+static pmd_t bm_pmd[PTRS_PER_PMD] __page_aligned_rkp_bss __maybe_unused;
+static pud_t bm_pud[PTRS_PER_PUD] __page_aligned_rkp_bss __maybe_unused;
 
 pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 			      unsigned long size, pgprot_t vma_prot)
@@ -102,6 +114,15 @@ static phys_addr_t __init early_pgtable_alloc(void)
 
 	return phys;
 }
+
+#ifdef CONFIG_UH_RKP
+static phys_addr_t rkp_ro_alloc_phys(void)
+{
+	phys_addr_t ret = 0;
+	uh_call(UH_APP_RKP, RKP_ROBUFFER_ALLOC, (u64)&ret, 0, 0, 0);
+	return ret;
+}
+#endif
 
 static bool pgattr_change_is_safe(u64 old, u64 new)
 {
@@ -237,6 +258,10 @@ static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 	if (pud_none(pud)) {
 		phys_addr_t pmd_phys;
 		BUG_ON(!pgtable_alloc);
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+		pmd_phys = rkp_ro_alloc_phys();
+		if (!pmd_phys)
+#endif
 		pmd_phys = pgtable_alloc();
 		__pud_populate(pudp, pmd_phys, PUD_TYPE_TABLE);
 		pud = READ_ONCE(*pudp);
@@ -267,8 +292,11 @@ static inline bool use_1G_block(unsigned long addr, unsigned long next,
 
 	if (((addr | next | phys) & ~PUD_MASK) != 0)
 		return false;
-
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+	return false;
+#else
 	return true;
+#endif
 }
 
 static void alloc_init_pud(pgd_t *pgdp, unsigned long addr, unsigned long end,
@@ -352,7 +380,12 @@ static void __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 
 static phys_addr_t pgd_pgtable_alloc(void)
 {
-	void *ptr = (void *)__get_free_page(PGALLOC_GFP);
+	void *ptr;
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+	ptr = (void*)rkp_ro_alloc();
+	if (!ptr)
+#endif
+	ptr = (void *)__get_free_page(PGALLOC_GFP);
 	if (!ptr || !pgtable_page_ctor(virt_to_page(ptr)))
 		BUG();
 
@@ -374,6 +407,7 @@ static void __init create_mapping_noalloc(phys_addr_t phys, unsigned long virt,
 			&phys, virt);
 		return;
 	}
+
 	__create_pgd_mapping(init_mm.pgd, phys, virt, size, prot, NULL,
 			     NO_CONT_MAPPINGS);
 }
@@ -528,9 +562,35 @@ static void __init map_kernel_segment(pgd_t *pgdp, void *va_start, void *va_end,
 	vma->size	= size;
 	vma->flags	= VM_MAP | vm_flags;
 	vma->caller	= __builtin_return_address(0);
+	vm_area_add_early(vma);
+}
+
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+static void __init map_kernel_text_segment(pgd_t *pgd, void *va_start, void *va_end,
+				      pgprot_t prot, struct vm_struct *vma,
+				      int flags, unsigned long vm_flags)
+{
+	phys_addr_t pa_start = __pa_symbol(va_start);
+	unsigned long size = va_end - va_start;
+
+	BUG_ON(!PAGE_ALIGNED(pa_start));
+	BUG_ON(!PAGE_ALIGNED(size));
+
+	__create_pgd_mapping(pgd, pa_start, (unsigned long)va_start, size, prot,
+			     rkp_ro_alloc_phys, flags);
+
+	if (!(vm_flags & VM_NO_GUARD))
+		size += PAGE_SIZE;
+
+	vma->addr	= (void *)((unsigned long)va_start & PMD_MASK);
+	vma->phys_addr	= (phys_addr_t)((unsigned long)pa_start & PMD_MASK);
+	vma->size	= size + (unsigned long)va_start - (unsigned long)vma->addr;
+	vma->flags	= VM_MAP | vm_flags;
+	vma->caller	= __builtin_return_address(0);
 
 	vm_area_add_early(vma);
 }
+#endif
 
 static int __init parse_rodata(char *arg)
 {
@@ -586,8 +646,13 @@ static void __init map_kernel(pgd_t *pgdp)
 	 * Only rodata will be remapped with different permissions later on,
 	 * all other segments are allowed to use contiguous mappings.
 	 */
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+	map_kernel_text_segment(pgdp, _text, _etext, text_prot, &vmlinux_text, 0,
+			   VM_NO_GUARD);
+#else
 	map_kernel_segment(pgdp, _text, _etext, text_prot, &vmlinux_text, 0,
 			   VM_NO_GUARD);
+#endif
 	map_kernel_segment(pgdp, __start_rodata, __inittext_begin, PAGE_KERNEL,
 			   &vmlinux_rodata, NO_CONT_MAPPINGS, VM_NO_GUARD);
 	map_kernel_segment(pgdp, __inittext_begin, __inittext_end, text_prot,
@@ -629,9 +694,14 @@ static void __init map_kernel(pgd_t *pgdp)
  */
 void __init paging_init(void)
 {
-	phys_addr_t pgd_phys = early_pgtable_alloc();
-	pgd_t *pgdp = pgd_set_fixmap(pgd_phys);
-
+	phys_addr_t pgd_phys;
+	pgd_t *pgdp;
+#ifdef CONFIG_FASTUH_RKP
+	uh_call(UH_APP_RKP, RKP_GET_RO_BUFFER, (u64)&robuffer_base, (u64)&robuffer_size, 0, 0);
+#endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_PAGING);
+	pgd_phys = early_pgtable_alloc();
+	pgdp = pgd_set_fixmap(pgd_phys);
 	map_kernel(pgdp);
 	map_mem(pgdp);
 
@@ -654,9 +724,12 @@ void __init paging_init(void)
 	 * We only reuse the PGD from the swapper_pg_dir, not the pud + pmd
 	 * allocated with it.
 	 */
+#if (!defined CONFIG_UH_RKP && !defined CONFIG_FASTUH_RKP)
 	memblock_free(__pa_symbol(swapper_pg_dir) + PAGE_SIZE,
 		      __pa_symbol(swapper_pg_end) - __pa_symbol(swapper_pg_dir)
 		      - PAGE_SIZE);
+#endif
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
 
 /*
@@ -699,6 +772,187 @@ int kern_addr_valid(unsigned long addr)
 
 	return pfn_valid(pte_pfn(pte));
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+static void free_hotplug_page_range(struct page *page, ssize_t size)
+{
+	WARN_ON(PageReserved(page));
+	free_pages((unsigned long)page_address(page), get_order(size));
+}
+
+static void free_hotplug_pgtable_page(struct page *page)
+{
+	free_hotplug_page_range(page, PAGE_SIZE);
+}
+
+static void free_pte_table(pte_t *ptep, pmd_t *pmdp, unsigned long addr)
+{
+	struct page *page;
+	int i;
+
+	for (i = 0; i < PTRS_PER_PTE; i++) {
+		if (!pte_none(ptep[i]))
+			return;
+	}
+
+	page = pmd_page(READ_ONCE(*pmdp));
+	pmd_clear(pmdp);
+	__flush_tlb_kernel_pgtable(addr);
+	free_hotplug_pgtable_page(page);
+}
+
+static void free_pmd_table(pmd_t *pmdp, pud_t *pudp, unsigned long addr)
+{
+	struct page *page;
+	int i;
+
+	if (CONFIG_PGTABLE_LEVELS <= 2)
+		return;
+
+	for (i = 0; i < PTRS_PER_PMD; i++) {
+		if (!pmd_none(pmdp[i]))
+			return;
+	}
+
+	page = pud_page(READ_ONCE(*pudp));
+	pud_clear(pudp);
+	__flush_tlb_kernel_pgtable(addr);
+	free_hotplug_pgtable_page(page);
+}
+
+static void free_pud_table(pud_t *pudp, pgd_t *pgdp, unsigned long addr)
+{
+	struct page *page;
+	int i;
+
+	if (CONFIG_PGTABLE_LEVELS <= 3)
+		return;
+
+	for (i = 0; i < PTRS_PER_PUD; i++) {
+		if (!pud_none(pudp[i]))
+			return;
+	}
+
+	page = pgd_page(READ_ONCE(*pgdp));
+	pgd_clear(pgdp);
+	__flush_tlb_kernel_pgtable(addr);
+	free_hotplug_pgtable_page(page);
+}
+
+static void
+remove_pte_table(pmd_t *pmdp, unsigned long addr,
+			unsigned long end, bool sparse_vmap)
+{
+	struct page *page;
+	pte_t *ptep, pte;
+	unsigned long start = addr;
+
+	for (; addr < end; addr += PAGE_SIZE) {
+		ptep = pte_offset_kernel(pmdp, addr);
+		pte = READ_ONCE(*ptep);
+
+		if (pte_none(pte))
+			continue;
+
+		WARN_ON(!pte_present(pte));
+		if (sparse_vmap) {
+			page = pte_page(pte);
+			free_hotplug_page_range(page, PAGE_SIZE);
+		}
+		pte_clear(&init_mm, addr, ptep);
+	}
+	flush_tlb_kernel_range(start, end);
+}
+
+static void
+remove_pmd_table(pud_t *pudp, unsigned long addr,
+			unsigned long end, bool sparse_vmap)
+{
+	unsigned long next;
+	struct page *page;
+	pte_t *ptep_base;
+	pmd_t *pmdp, pmd;
+
+	for (; addr < end; addr = next) {
+		next = pmd_addr_end(addr, end);
+		pmdp = pmd_offset(pudp, addr);
+		pmd = READ_ONCE(*pmdp);
+
+		if (pmd_none(pmd))
+			continue;
+
+		WARN_ON(!pmd_present(pmd));
+		if (pmd_sect(pmd)) {
+			if (sparse_vmap) {
+				page = pmd_page(pmd);
+				free_hotplug_page_range(page, PMD_SIZE);
+			}
+			pmd_clear(pmdp);
+			continue;
+		}
+		ptep_base = pte_offset_kernel(pmdp, 0UL);
+		remove_pte_table(pmdp, addr, next, sparse_vmap);
+		free_pte_table(ptep_base, pmdp, addr);
+	}
+}
+
+static void
+remove_pud_table(pgd_t *pgdp, unsigned long addr,
+			unsigned long end, bool sparse_vmap)
+{
+	unsigned long next;
+	struct page *page;
+	pmd_t *pmdp_base;
+	pud_t *pudp, pud;
+
+	for (; addr < end; addr = next) {
+		next = pud_addr_end(addr, end);
+		pudp = pud_offset(pgdp, addr);
+		pud = READ_ONCE(*pudp);
+
+		if (pud_none(pud))
+			continue;
+
+		WARN_ON(!pud_present(pud));
+		if (pud_sect(pud)) {
+			if (sparse_vmap) {
+				page = pud_page(pud);
+				free_hotplug_page_range(page, PUD_SIZE);
+			}
+			pud_clear(pudp);
+			continue;
+		}
+		pmdp_base = pmd_offset(pudp, 0UL);
+		remove_pmd_table(pudp, addr, next, sparse_vmap);
+		free_pmd_table(pmdp_base, pudp, addr);
+	}
+}
+
+static void
+remove_pagetable(unsigned long start, unsigned long end, bool sparse_vmap)
+{
+	unsigned long addr, next;
+	pud_t *pudp_base;
+	pgd_t *pgdp, pgd;
+
+	spin_lock(&init_mm.page_table_lock);
+	for (addr = start; addr < end; addr = next) {
+		next = pgd_addr_end(addr, end);
+		pgdp = pgd_offset_k(addr);
+		pgd = READ_ONCE(*pgdp);
+
+		if (pgd_none(pgd))
+			continue;
+
+		WARN_ON(!pgd_present(pgd));
+		pudp_base = pud_offset(pgdp, 0UL);
+		remove_pud_table(pgdp, addr, next, sparse_vmap);
+		free_pud_table(pudp_base, pgdp, addr);
+	}
+	spin_unlock(&init_mm.page_table_lock);
+}
+#endif
+
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 #if !ARM64_SWAPPER_USES_SECTION_MAPS
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
@@ -746,6 +1000,9 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 void vmemmap_free(unsigned long start, unsigned long end,
 		struct vmem_altmap *altmap)
 {
+#ifdef CONFIG_MEMORY_HOTPLUG
+	remove_pagetable(start, end, true);
+#endif
 }
 #endif	/* CONFIG_SPARSEMEM_VMEMMAP */
 
@@ -1033,3 +1290,44 @@ int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
 	pmd_free(NULL, table);
 	return 1;
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+static void __remove_pgd_mapping(pgd_t *pgdir, unsigned long start, u64 size)
+{
+	WARN_ON(pgdir != init_mm.pgd);
+	remove_pagetable(start, start + size, false);
+}
+
+int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
+		    bool want_memblock)
+{
+	int ret, flags = 0;
+
+	if (debug_pagealloc_enabled())
+		flags = NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+
+	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
+			     size, PAGE_KERNEL, pgd_pgtable_alloc, flags);
+
+	ret = __add_pages(nid, start >> PAGE_SHIFT, size >> PAGE_SHIFT,
+			   altmap, want_memblock);
+	if (ret)
+		__remove_pgd_mapping(swapper_pg_dir,
+				     __phys_to_virt(start), size);
+	return ret;
+}
+
+#ifdef CONFIG_MEMORY_HOTREMOVE
+int arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+	struct zone *zone = page_zone(pfn_to_page(start_pfn));
+
+	__remove_pages(zone, start_pfn, nr_pages, altmap);
+	__remove_pgd_mapping(swapper_pg_dir, __phys_to_virt(start), size);
+
+	return 0;
+}
+#endif
+#endif

@@ -114,4 +114,12 @@ config CORESIGHT_CPU_DEBUG
 	  properly, please refer Documentation/trace/coresight-cpu-debug.txt
 	  for detailed description and the example for usage.
 
+config CORESIGHT_CPU_DEBUG_ITERATION
+	int "Number of Program Coutner information"
+	depends on CORESIGHT_CPU_DEBUG
+	range 1 10
+	default 5
+	help
+	  Print out Program Counter as iteration value.
+
 endif

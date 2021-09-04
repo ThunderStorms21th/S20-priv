@@ -2606,7 +2606,7 @@ EXPORT_SYMBOL_GPL(clk_is_match);
 
 /***        debugfs support        ***/
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) && !defined(CONFIG_ARCH_EXYNOS)
 #include <linux/debugfs.h>
 
 static struct dentry *rootdir;
@@ -2811,19 +2811,19 @@ static void clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
 	root = debugfs_create_dir(core->name, pdentry);
 	core->dentry = root;
 
-	debugfs_create_ulong("clk_rate", 0444, root, &core->rate);
-	debugfs_create_ulong("clk_accuracy", 0444, root, &core->accuracy);
-	debugfs_create_u32("clk_phase", 0444, root, &core->phase);
-	debugfs_create_file("clk_flags", 0444, root, core, &clk_flags_fops);
-	debugfs_create_u32("clk_prepare_count", 0444, root, &core->prepare_count);
-	debugfs_create_u32("clk_enable_count", 0444, root, &core->enable_count);
-	debugfs_create_u32("clk_protect_count", 0444, root, &core->protect_count);
-	debugfs_create_u32("clk_notifier_count", 0444, root, &core->notifier_count);
-	debugfs_create_file("clk_duty_cycle", 0444, root, core,
+	debugfs_create_ulong("clk_rate", 0400, root, &core->rate);
+	debugfs_create_ulong("clk_accuracy", 0400, root, &core->accuracy);
+	debugfs_create_u32("clk_phase", 0400, root, &core->phase);
+	debugfs_create_file("clk_flags", 0400, root, core, &clk_flags_fops);
+	debugfs_create_u32("clk_prepare_count", 0400, root, &core->prepare_count);
+	debugfs_create_u32("clk_enable_count", 0400, root, &core->enable_count);
+	debugfs_create_u32("clk_protect_count", 0400, root, &core->protect_count);
+	debugfs_create_u32("clk_notifier_count", 0400, root, &core->notifier_count);
+	debugfs_create_file("clk_duty_cycle", 0400, root, core,
 			    &clk_duty_cycle_fops);
 
 	if (core->num_parents > 1)
-		debugfs_create_file("clk_possible_parents", 0444, root, core,
+		debugfs_create_file("clk_possible_parents", 0400, root, core,
 				    &possible_parents_fops);
 
 	if (core->ops->debug_init)
@@ -2879,13 +2879,13 @@ static int __init clk_debug_init(void)
 
 	rootdir = debugfs_create_dir("clk", NULL);
 
-	debugfs_create_file("clk_summary", 0444, rootdir, &all_lists,
+	debugfs_create_file("clk_summary", 0400, rootdir, &all_lists,
 			    &clk_summary_fops);
-	debugfs_create_file("clk_dump", 0444, rootdir, &all_lists,
+	debugfs_create_file("clk_dump", 0400, rootdir, &all_lists,
 			    &clk_dump_fops);
-	debugfs_create_file("clk_orphan_summary", 0444, rootdir, &orphan_list,
+	debugfs_create_file("clk_orphan_summary", 0400, rootdir, &orphan_list,
 			    &clk_summary_fops);
-	debugfs_create_file("clk_orphan_dump", 0444, rootdir, &orphan_list,
+	debugfs_create_file("clk_orphan_dump", 0400, rootdir, &orphan_list,
 			    &clk_dump_fops);
 
 	mutex_lock(&clk_debug_lock);

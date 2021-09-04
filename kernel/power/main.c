@@ -53,7 +53,7 @@ EXPORT_SYMBOL_GPL(unlock_system_sleep);
 
 /* Routines for PM-transition notifications */
 
-static BLOCKING_NOTIFIER_HEAD(pm_chain_head);
+BLOCKING_NOTIFIER_HEAD(pm_chain_head);
 
 int register_pm_notifier(struct notifier_block *nb)
 {
@@ -80,6 +80,27 @@ int pm_notifier_call_chain(unsigned long val)
 {
 	return __pm_notifier_call_chain(val, -1, NULL);
 }
+
+#ifdef CONFIG_SEC_PM_DEBUG
+void *pm_notifier_call_chain_get_callback(int nr_calls)
+{
+	struct notifier_block *nb, *next_nb;
+	int nr_to_call = nr_calls;
+
+	nb = rcu_dereference_raw(pm_chain_head.head);
+
+	while (nb && nr_to_call) {
+		next_nb = rcu_dereference_raw(nb->next);
+		nb = next_nb;
+		nr_to_call--;
+	}
+
+	if (nb)
+		return (void *)nb->notifier_call;
+	else
+		return ERR_PTR(-ENODATA);
+}
+#endif /* CONFIG_SEC_PM_DEBUG */
 
 /* If set, devices may be suspended and resumed asynchronously. */
 int pm_async_enabled = 1;
@@ -390,7 +411,7 @@ static ssize_t pm_wakeup_irq_show(struct kobject *kobj,
 
 power_attr_ro(pm_wakeup_irq);
 
-bool pm_debug_messages_on __read_mostly;
+bool pm_debug_messages_on __read_mostly = true;
 
 static ssize_t pm_debug_messages_show(struct kobject *kobj,
 				      struct kobj_attribute *attr, char *buf)
@@ -757,6 +778,35 @@ power_attr(pm_freeze_timeout);
 
 #endif	/* CONFIG_FREEZER*/
 
+#ifdef CONFIG_FOTA_LIMIT
+static char fota_limit_str[] =
+#ifdef CONFIG_ARCH_EXYNOS9
+	"[START]\n"
+	"/sys/power/cpufreq_max_limit 1791562\n"
+	"[STOP]\n"
+	"/sys/power/cpufreq_max_limit -1\n"
+	"[END]\n";
+#else
+	"[NOT_SUPPORT]\n";
+#endif
+
+static ssize_t fota_limit_show(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					char *buf)
+{
+	pr_info("%s\n", __func__);
+	return sprintf(buf, "%s", fota_limit_str);
+}
+
+static struct kobj_attribute fota_limit_attr = {
+	.attr	= {
+		.name = __stringify(fota_limit),
+		.mode = 0440,
+	},
+	.show	= fota_limit_show,
+};
+#endif /* CONFIG_FOTA_LIMIT */
+
 static struct attribute * g[] = {
 	&state_attr.attr,
 #ifdef CONFIG_PM_TRACE
@@ -785,6 +835,9 @@ static struct attribute * g[] = {
 #endif
 #ifdef CONFIG_FREEZER
 	&pm_freeze_timeout_attr.attr,
+#endif
+#ifdef CONFIG_FOTA_LIMIT
+	&fota_limit_attr.attr,
 #endif
 	NULL,
 };

@@ -18,8 +18,10 @@ arm64-obj-y		:= debug-monitors.o entry.o irq.o fpsimd.o		\
 			   hyp-stub.o psci.o cpu_ops.o insn.o	\
 			   return_address.o cpuinfo.o cpu_errata.o		\
 			   cpufeature.o alternative.o cacheinfo.o		\
-			   smp.o smp_spin_table.o topology.o smccc-call.o	\
+			   smp.o smp_spin_table.o smccc-call.o			\
 			   syscall.o
+
+arm64-obj-y				+= topology.o
 
 extra-$(CONFIG_EFI)			:= efi-entry.o
 
@@ -39,6 +41,7 @@ arm64-obj-$(CONFIG_CPU_PM)		+= sleep.o suspend.o
 arm64-obj-$(CONFIG_CPU_IDLE)		+= cpuidle.o
 arm64-obj-$(CONFIG_JUMP_LABEL)		+= jump_label.o
 arm64-obj-$(CONFIG_KGDB)		+= kgdb.o
+arm64-obj-$(CONFIG_ARCH_EXYNOS)         += exynos-smc.o exynos-hvc.o
 arm64-obj-$(CONFIG_EFI)			+= efi.o efi-entry.stub.o		\
 					   efi-rt-wrapper.o
 arm64-obj-$(CONFIG_PCI)			+= pci.o
@@ -57,6 +60,8 @@ arm64-obj-$(CONFIG_CRASH_DUMP)		+= crash_dump.o
 arm64-obj-$(CONFIG_CRASH_CORE)		+= crash_core.o
 arm64-obj-$(CONFIG_ARM_SDE_INTERFACE)	+= sdei.o
 arm64-obj-$(CONFIG_ARM64_SSBD)		+= ssbd.o
+
+arm64-obj-$(CONFIG_UH)		+= uh_entry.o
 
 obj-y					+= $(arm64-obj-y) vdso/ probes/
 obj-m					+= $(arm64-obj-m)

@@ -191,6 +191,11 @@ struct tmc_drvdata {
 	u32			trigger_cntr;
 	u32			etr_caps;
 	struct etr_buf		*sysfs_buf;
+
+	/* samsung coresight sfr */
+	bool			hwacg;
+	void __iomem		*sfr_base;
+	u32			q_offset;
 };
 
 struct etr_buf_operations {

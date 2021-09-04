@@ -35,6 +35,8 @@
 #include <linux/sizes.h>
 #include <linux/syscalls.h>
 #include <linux/mm_types.h>
+#include <linux/debug-snapshot.h>
+#include <linux/sec_debug.h>
 
 #include <asm/atomic.h>
 #include <asm/bug.h>
@@ -51,6 +53,14 @@
 #include <asm/system_misc.h>
 #include <asm/sysreg.h>
 
+#include <soc/samsung/exynos-adv-tracer.h>
+
+
+#if (defined CONFIG_UH_PDBT) || (defined CONFIG_UH_PDBT_STATIC)
+#include <linux/cpumask.h>
+#include <linux/harsh.h>
+#endif
+
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -64,6 +74,16 @@ static void dump_backtrace_entry(unsigned long where)
 {
 	printk(" %pS\n", (void *)where);
 }
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+static void dump_backtrace_entry_auto_summary(unsigned long where)
+{
+	/*
+	 * Note that 'where' can have a physical address, but it's not handled.
+	 */
+	pr_auto(ASL2, "%pS\n", (void *) where);
+}
+#endif
 
 static void __dump_instr(const char *lvl, struct pt_regs *regs)
 {
@@ -98,10 +118,15 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 	}
 }
 
+#ifdef CONFIG_SEC_DEBUG_LIMIT_BACKTRACE
+#define MAX_UNWINDING_LOOP 256 /* maximum number of unwind frame */
+#endif
+
 void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 {
 	struct stackframe frame;
 	int skip = 0;
+	int cnt = 0;
 
 	pr_debug("%s(regs = %p tsk = %p)\n", __func__, regs, tsk);
 
@@ -133,9 +158,17 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 
 	printk("Call trace:\n");
 	do {
+#ifdef CONFIG_SEC_DEBUG_LIMIT_BACKTRACE
+		if (MAX_UNWINDING_LOOP < cnt) {
+			pr_info("%s: Forcely break dump_backtrace to avoid infinity backtrace\n", __func__);
+			break;
+		}
+#endif
+
 		/* skip until specified stack frame */
 		if (!skip) {
 			dump_backtrace_entry(frame.pc);
+			dbg_snapshot_save_log(raw_smp_processor_id(), frame.pc);
 		} else if (frame.fp == regs->regs[29]) {
 			skip = 0;
 			/*
@@ -146,17 +179,95 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 			 * instead.
 			 */
 			dump_backtrace_entry(regs->pc);
+			dbg_snapshot_save_log(raw_smp_processor_id(), regs->pc);
 		}
+		cnt++;
 	} while (!unwind_frame(tsk, &frame));
 
 	put_task_stack(tsk);
 }
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct *tsk)
+{
+	struct stackframe frame;
+	int skip = 0;
+	int cnt = 0;
+
+	pr_debug("%s(regs = %p tsk = %p)\n", __func__, regs, tsk);
+
+	if (regs) {
+		if (user_mode(regs))
+			return;
+		skip = 1;
+	}
+
+	if (!tsk)
+		tsk = current;
+
+	if (!try_get_task_stack(tsk))
+		return;
+
+	if (tsk == current) {
+		frame.fp = (unsigned long)__builtin_frame_address(0);
+		frame.pc = (unsigned long)dump_backtrace_auto_summary;
+	} else {
+		/*
+		 * task blocked in __switch_to
+		 */
+		frame.fp = thread_saved_fp(tsk);
+		frame.pc = thread_saved_pc(tsk);
+	}
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+	frame.graph = tsk->curr_ret_stack;
+#endif
+
+	pr_auto_once(2);
+	pr_auto(ASL2, "Call trace:\n");
+	do {
+#ifdef CONFIG_SEC_DEBUG_LIMIT_BACKTRACE
+		if (MAX_UNWINDING_LOOP < cnt) {
+			pr_info("%s: Forcely break dump_backtrace to avoid infinity backtrace\n", __func__);
+			break;
+		}
+#endif
+
+		/* skip until specified stack frame */
+		if (!skip) {
+			dump_backtrace_entry_auto_summary(frame.pc);
+			dbg_snapshot_save_log(raw_smp_processor_id(), frame.pc);
+		} else if (frame.fp == regs->regs[29]) {
+			skip = 0;
+			/*
+			 * Mostly, this is the case where this function is
+			 * called in panic/abort. As exception handler's
+			 * stack frame does not contain the corresponding pc
+			 * at which an exception has taken place, use regs->pc
+			 * instead.
+			 */
+			dump_backtrace_entry_auto_summary(regs->pc);
+			dbg_snapshot_save_log(raw_smp_processor_id(), regs->pc);
+		}
+		cnt++;
+	} while (!unwind_frame(tsk, &frame));
+
+	put_task_stack(tsk);
+}
+#endif
 
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {
 	dump_backtrace(NULL, tsk);
 	barrier();
 }
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+void show_stack_auto_comment(struct task_struct *tsk, unsigned long *sp)
+{
+	dump_backtrace_auto_summary(NULL, tsk);
+	barrier();
+}
+#endif /* CONFIG_SEC_DEBUG_AUTO_COMMENT */
 
 #ifdef CONFIG_PREEMPT
 #define S_PREEMPT " PREEMPT"
@@ -183,7 +294,12 @@ static int __die(const char *str, int err, struct pt_regs *regs)
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
 		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk),
 		 end_of_stack(tsk));
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+	__show_regs(regs);
+	dump_backtrace_auto_summary(regs, NULL);
+#else
 	show_regs(regs);
+#endif
 
 	if (!user_mode(regs))
 		dump_instr(KERN_EMERG, regs);
@@ -201,9 +317,15 @@ void die(const char *str, struct pt_regs *regs, int err)
 	int ret;
 	unsigned long flags;
 
-	raw_spin_lock_irqsave(&die_lock, flags);
+	if (IS_ENABLED(CONFIG_SEC_DEBUG_DISABLE_IRQ_IN_DIE))
+		local_irq_save(flags);
 
 	oops_enter();
+
+	if (IS_ENABLED(CONFIG_SEC_DEBUG_DISABLE_IRQ_IN_DIE))
+		raw_spin_lock(&die_lock);
+	else
+		raw_spin_lock_irq(&die_lock);
 
 	console_verbose();
 	bust_spinlocks(1);
@@ -214,14 +336,43 @@ void die(const char *str, struct pt_regs *regs, int err)
 
 	bust_spinlocks(0);
 	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
+	if (IS_ENABLED(CONFIG_SEC_DEBUG_DISABLE_IRQ_IN_DIE))
+		raw_spin_unlock(&die_lock);
+	else
+		raw_spin_unlock_irq(&die_lock);
+
 	oops_exit();
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (regs && (!user_mode(regs)))
+		secdbg_exin_set_backtrace(regs);
+#endif
+#if defined(CONFIG_SEC_DEBUG_PRINT_PCLR)
+	if (in_interrupt()) {
+		if (regs)
+			panic("%s\nPC is at %pS\nLR is at %pS",
+			      "Fatal exception in interrupt", (void *)(regs)->pc,
+			      (compat_user_mode(regs)) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
+		else
+			panic("Fatal exception in interrupt");
+	}
+	if (panic_on_oops) {
+		if (regs)
+			panic("%s\nPC is at %pS\nLR is at %pS",
+			      "Fatal exception", (void *)(regs)->pc,
+			      (compat_user_mode(regs)) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
+		else
+			panic("Fatal exception");
+	}
+#else
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 	if (panic_on_oops)
 		panic("Fatal exception");
+#endif
 
-	raw_spin_unlock_irqrestore(&die_lock, flags);
+	if (IS_ENABLED(CONFIG_SEC_DEBUG_DISABLE_IRQ_IN_DIE))
+		local_irq_restore(flags);
 
 	if (ret != NOTIFY_STOP)
 		do_exit(SIGSEGV);
@@ -402,7 +553,62 @@ void arm64_notify_segfault(unsigned long addr)
 	force_signal_inject(SIGSEGV, code, addr);
 }
 
+#if (defined CONFIG_UH_PDBT) || (defined CONFIG_UH_PDBT_STATIC)
+int harsh_handle_inst(struct pt_regs *regs){
+	struct task_struct *tsk;
+	unsigned int core;
+	pid_t pid;
+
+	harsh_req_t req;
+	cpumask_t cpu_mask;
+
+	unsigned long addr = instruction_pointer(regs);
+	char str[sizeof("00000000 ") * 5 + 2 + 1], *p = str;
+	unsigned int instruction, bad;
+	bad = get_user(instruction, &((u32 *)addr)[0]);
+
+	if (!bad) {
+		p += sprintf(p, "(%08x) " , instruction);
+	} else {
+		p += sprintf(p, "bad PC value");
+		return 1;
+	}
+
+	tsk  = get_current();
+	core = tsk->cpu;
+	pid  = tsk->pid;
+
+	req.instruction = instruction;
+	req.core        = core;
+	req.pid         = pid;
+	strncpy(req.comm, tsk->comm, TASK_COMM_LEN);
+
+	cpumask_clear(&cpu_mask);
+#ifdef CONFIG_UH_PDBT
+	uh_call(UH_APP_HARSH, HARSH_EVENT_UNDEF_INST, (u64)&req, (u64)&cpu_mask, 0, 0);
+#else
+	uh_call(UH_APP_HARSH, HARSH_EVENT_UNDEF_INST_STATIC, (u64)&req, (u64)&cpu_mask, 0, 0);
+#endif
+	/* cpu_mask has cores that EL2 expects to be capable of running this instruction.
+	 * If there is no possible cores to run this instruction. SIGILL will be injected to pc at EL0.
+	 * Otherwise either emulated at EL2 or EL1 is asked to migrate the task to other cluster of cpus.
+	 */
+	if(cpumask_empty(&cpu_mask)){
+		return 1;
+	} else if (cpumask_test_cpu(core, &cpu_mask)){
+		return 0;
+	} else {
+		sched_setaffinity(pid, &cpu_mask);
+		return 0;
+    }
+}
+#endif
+
+#if defined(CONFIG_SEC_DEBUG_FAULT_MSG_ADV)
+asmlinkage void __exception do_undefinstr(struct pt_regs *regs, unsigned int esr)
+#else
 asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
+#endif
 {
 	/* check for AArch32 breakpoint instructions */
 	if (!aarch32_break_handler(regs))
@@ -411,6 +617,27 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 	if (call_undef_hook(regs) == 0)
 		return;
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (!user_mode(regs)) {
+		secdbg_exin_set_fault(UNDEF_FAULT, (unsigned long)regs->pc, regs);
+#if defined(CONFIG_SEC_DEBUG_FAULT_MSG_ADV)
+		secdbg_exin_set_esr(esr);
+#endif
+	}
+#endif /* CONFIG_SEC_DEBUG_EXTRA_INFO */
+
+#if defined(CONFIG_SEC_DEBUG_FAULT_MSG_ADV)
+	if (!user_mode(regs)) {
+		pr_auto(ASL1, "%s: pc=0x%016llx (esr=0x%08x)\n",
+			"undefined instruction", regs->pc, esr);
+		dump_instr(KERN_INFO, regs);
+		die("undefined instruction", regs, esr);
+	}
+#endif
+
+#if (defined CONFIG_UH_PDBT) || (defined CONFIG_UH_PDBT_STATIC)
+	if(harsh_handle_inst(regs))
+#endif
 	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc);
 	BUG_ON(!user_mode(regs));
 }
@@ -550,7 +777,11 @@ asmlinkage void __exception do_sysinstr(unsigned int esr, struct pt_regs *regs)
 	 * back to our usual undefined instruction handler so that we handle
 	 * these consistently.
 	 */
+#if defined(CONFIG_SEC_DEBUG_FAULT_MSG_ADV)
+	do_undefinstr(regs, esr);
+#else
 	do_undefinstr(regs);
+#endif
 }
 
 static const char *esr_class_str[] = {
@@ -607,9 +838,17 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, unsigned int esr)
 {
 	console_verbose();
 
-	pr_crit("Bad mode in %s handler detected on CPU%d, code 0x%08x -- %s\n",
+	pr_auto(ASL1,
+		"Bad mode in %s handler detected on CPU%d, code 0x%08x -- %s\n",
 		handler[reason], smp_processor_id(), esr,
 		esr_get_class_string(esr));
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (!user_mode(regs)) {
+		secdbg_exin_set_fault(BAD_MODE_FAULT, (unsigned long)regs->pc, regs);
+		secdbg_exin_set_esr(esr);
+	}
+#endif
 
 	local_daif_mask();
 	panic("bad mode");
@@ -641,48 +880,75 @@ asmlinkage void bad_el0_sync(struct pt_regs *regs, int reason, unsigned int esr)
 DEFINE_PER_CPU(unsigned long [OVERFLOW_STACK_SIZE/sizeof(long)], overflow_stack)
 	__aligned(16);
 
+#ifdef CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY
+#define thread_virt_addr_valid(xaddr)   pfn_valid(__pa(xaddr) >> PAGE_SHIFT)
+
+extern int __do_kernel_fault_safe(struct mm_struct *mm, unsigned long addr,
+		unsigned int esr, struct pt_regs *regs);
+#endif /* CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY */
+
 asmlinkage void handle_bad_stack(struct pt_regs *regs)
 {
-	unsigned long tsk_stk = (unsigned long)current->stack;
-	unsigned long irq_stk = (unsigned long)this_cpu_read(irq_stack_ptr);
-	unsigned long ovf_stk = (unsigned long)this_cpu_ptr(overflow_stack);
-	unsigned int esr = read_sysreg(esr_el1);
-	unsigned long far = read_sysreg(far_el1);
+	if (IS_ENABLED(CONFIG_SEC_DEBUG_BAD_STACK_INFO))
+		secdbg_base_set_bs_info_phase(1);
 
-	console_verbose();
-	pr_emerg("Insufficient stack space to handle exception!");
+#ifdef CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY
+	/* check sp_el0 address*/
+	if (!thread_virt_addr_valid(current_thread_info()))
+		__do_kernel_fault_safe(NULL, 0, 0, regs);
+#endif /* CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY */
+	{
+		unsigned long tsk_stk = (unsigned long)current->stack;
+		unsigned long irq_stk = (unsigned long)this_cpu_read(irq_stack_ptr);
+		unsigned long ovf_stk = (unsigned long)this_cpu_ptr(overflow_stack);
+		unsigned int esr = read_sysreg(esr_el1);
+		unsigned long far = read_sysreg(far_el1);
 
-	pr_emerg("ESR: 0x%08x -- %s\n", esr, esr_get_class_string(esr));
-	pr_emerg("FAR: 0x%016lx\n", far);
+		if (IS_ENABLED(CONFIG_SEC_DEBUG_BAD_STACK_INFO))
+			secdbg_base_set_bs_info_phase(2);
 
-	pr_emerg("Task stack:     [0x%016lx..0x%016lx]\n",
-		 tsk_stk, tsk_stk + THREAD_SIZE);
-	pr_emerg("IRQ stack:      [0x%016lx..0x%016lx]\n",
-		 irq_stk, irq_stk + THREAD_SIZE);
-	pr_emerg("Overflow stack: [0x%016lx..0x%016lx]\n",
-		 ovf_stk, ovf_stk + OVERFLOW_STACK_SIZE);
+		console_verbose();
+		pr_emerg("Insufficient stack space to handle exception!");
 
-	__show_regs(regs);
+		pr_emerg("ESR: 0x%08x -- %s\n", esr, esr_get_class_string(esr));
+		pr_emerg("FAR: 0x%016lx\n", far);
 
-	/*
-	 * We use nmi_panic to limit the potential for recusive overflows, and
-	 * to get a better stack trace.
-	 */
-	nmi_panic(NULL, "kernel stack overflow");
-	cpu_park_loop();
+		pr_emerg("Task stack:     [0x%016lx..0x%016lx]\n",
+			 tsk_stk, tsk_stk + THREAD_SIZE);
+		pr_emerg("IRQ stack:      [0x%016lx..0x%016lx]\n",
+			 irq_stk, irq_stk + THREAD_SIZE);
+		pr_emerg("Overflow stack: [0x%016lx..0x%016lx]\n",
+			 ovf_stk, ovf_stk + OVERFLOW_STACK_SIZE);
+
+		__show_regs(regs);
+
+		/*
+		 * We use nmi_panic to limit the potential for recusive overflows, and
+		 * to get a better stack trace.
+		 */
+		panic("kernel stack overflow");
+		cpu_park_loop();
+	}
 }
 #endif
 
 void __noreturn arm64_serror_panic(struct pt_regs *regs, u32 esr)
 {
 	console_verbose();
+	printk_nmi_exit();
 
-	pr_crit("SError Interrupt on CPU%d, code 0x%08x -- %s\n",
+	pr_auto(ASL1, "SError Interrupt on CPU%d, code 0x%08x -- %s\n",
 		smp_processor_id(), esr, esr_get_class_string(esr));
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (regs && !user_mode(regs)) {
+		secdbg_exin_set_fault(SERROR_FAULT, (unsigned long)regs->pc, regs);
+		secdbg_exin_set_esr(esr);
+	}
+#endif
 	if (regs)
 		__show_regs(regs);
 
-	nmi_panic(regs, "Asynchronous SError Interrupt");
+	panic("Asynchronous SError Interrupt");
 
 	cpu_park_loop();
 	unreachable();
@@ -766,8 +1032,18 @@ static int bug_handler(struct pt_regs *regs, unsigned int esr)
 	if (user_mode(regs))
 		return DBG_HOOK_ERROR;
 
+	/*
+	 * If recalling hardlockup core has been run before,
+	 * PC value must be replaced to real PC value.
+	 */
+	dbg_snapshot_hook_hardlockup_entry((void *)regs);
+
 	switch (report_bug(regs->pc, regs)) {
 	case BUG_TRAP_TYPE_BUG:
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+		secdbg_exin_set_fault(BUG_FAULT, (unsigned long)regs->pc, regs);
+		secdbg_exin_set_esr(esr);
+#endif
 		die("Oops - BUG", regs, 0);
 		break;
 

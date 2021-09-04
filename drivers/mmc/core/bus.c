@@ -28,6 +28,12 @@
 #include "sdio_cis.h"
 #include "bus.h"
 
+#ifdef CONFIG_MMC_SUPPORT_STLOG
+#include <linux/fslog.h>
+#else
+#define ST_LOG(fmt, ...)
+#endif
+
 #define to_mmc_driver(d)	container_of(d, struct mmc_driver, drv)
 
 static ssize_t type_show(struct device *dev,
@@ -134,6 +140,19 @@ static void mmc_bus_shutdown(struct device *dev)
 	struct mmc_host *host = card->host;
 	int ret;
 
+	if (!drv) {
+		pr_debug("%s: %s: drv is NULL\n", dev_name(dev), __func__);
+		return;
+	}
+
+	if (!card) {
+		pr_debug("%s: %s: card is NULL\n", dev_name(dev), __func__);
+		return;
+	}
+
+	/* disable rescan in shutdown sequence */
+	host->rescan_disable = 1;
+
 	if (dev->driver && drv->shutdown)
 		drv->shutdown(card);
 
@@ -156,6 +175,9 @@ static int mmc_bus_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
+	if (mmc_bus_needs_resume(host))
+		return 0;
+
 	ret = host->bus_ops->suspend(host);
 	if (ret)
 		pm_generic_resume(dev);
@@ -169,10 +191,14 @@ static int mmc_bus_resume(struct device *dev)
 	struct mmc_host *host = card->host;
 	int ret;
 
-	ret = host->bus_ops->resume(host);
-	if (ret)
-		pr_warn("%s: error %d during resume (card was removed?)\n",
-			mmc_hostname(host), ret);
+	if (mmc_bus_manual_resume(host))
+		host->bus_resume_flags |= MMC_BUSRESUME_NEEDS_RESUME;
+	else {
+		ret = host->bus_ops->resume(host);
+		if (ret)
+			pr_warn("%s: error %d during resume (card was removed?)\n",
+					mmc_hostname(host), ret);
+	}
 
 	ret = pm_generic_resume(dev);
 	return ret;
@@ -346,6 +372,14 @@ int mmc_add_card(struct mmc_card *card)
 			mmc_card_hs400es(card) ? "Enhanced strobe " : "",
 			mmc_card_ddr52(card) ? "DDR " : "",
 			uhs_bus_speed_mode, type, card->rca);
+		ST_LOG("%s: new %s%s%s%s%s card at address %04x\n",
+			mmc_hostname(card->host),
+			mmc_card_uhs(card) ? "ultra high speed " :
+			(mmc_card_hs(card) ? "high speed " : ""),
+			mmc_card_hs400(card) ? "HS400 " :
+			(mmc_card_hs200(card) ? "HS200 " : ""),
+			mmc_card_ddr52(card) ? "DDR " : "",
+			uhs_bus_speed_mode, type, card->rca);
 	}
 
 #ifdef CONFIG_DEBUG_FS
@@ -387,6 +421,8 @@ void mmc_remove_card(struct mmc_card *card)
 				mmc_hostname(card->host));
 		} else {
 			pr_info("%s: card %04x removed\n",
+				mmc_hostname(card->host), card->rca);
+			ST_LOG("%s: card %04x removed\n",
 				mmc_hostname(card->host), card->rca);
 		}
 		device_del(&card->dev);

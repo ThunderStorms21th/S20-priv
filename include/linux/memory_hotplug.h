@@ -21,14 +21,16 @@ struct vmem_altmap;
  * walkers which rely on the fully initialized page->flags and others
  * should use this rather than pfn_valid && pfn_to_page
  */
-#define pfn_to_online_page(pfn)				\
-({							\
-	struct page *___page = NULL;			\
-	unsigned long ___nr = pfn_to_section_nr(pfn);	\
-							\
-	if (___nr < NR_MEM_SECTIONS && online_section_nr(___nr))\
-		___page = pfn_to_page(pfn);		\
-	___page;					\
+#define pfn_to_online_page(pfn)					   \
+({								   \
+	struct page *___page = NULL;				   \
+	unsigned long ___pfn = pfn;				   \
+	unsigned long ___nr = pfn_to_section_nr(___pfn);	   \
+								   \
+	if (___nr < NR_MEM_SECTIONS && online_section_nr(___nr) && \
+	    pfn_valid_within(___pfn))				   \
+		___page = pfn_to_page(___pfn);			   \
+	___page;						   \
 })
 
 /*
@@ -302,6 +304,8 @@ extern void try_offline_node(int nid);
 extern int offline_pages(unsigned long start_pfn, unsigned long nr_pages);
 extern void remove_memory(int nid, u64 start, u64 size);
 
+extern void mem_stop_offline(void);
+
 #else
 static inline bool is_mem_section_removable(unsigned long pfn,
 					unsigned long nr_pages)
@@ -317,8 +321,14 @@ static inline int offline_pages(unsigned long start_pfn, unsigned long nr_pages)
 }
 
 static inline void remove_memory(int nid, u64 start, u64 size) {}
+
+static inline void mem_stop_offline(void) {}
+
 #endif /* CONFIG_MEMORY_HOTREMOVE */
 
+extern int memory_block_online(struct memory_block *mem);
+extern int memory_block_offline(struct memory_block *mem);
+extern int mem_onoff_operation(struct memory_block *mem, bool online);
 extern void __ref free_area_init_core_hotplug(int nid);
 extern int walk_memory_range(unsigned long start_pfn, unsigned long end_pfn,
 		void *arg, int (*func)(struct memory_block *, void *));

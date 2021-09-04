@@ -38,6 +38,29 @@
 
 #include "internal.h"
 
+atomic_long_t nr_vmalloc_pages;
+
+static int vmalloc_size_notifier(struct notifier_block *nb,
+					unsigned long action, void *data)
+{
+	struct seq_file *s;
+
+	s = (struct seq_file *)data;
+	if (s != NULL)
+		seq_printf(s, "VmallocAPIsize: %8lu kB\n",
+			   atomic_long_read(&nr_vmalloc_pages)
+				 << (PAGE_SHIFT - 10));
+	else
+		pr_cont("VmallocAPIsize:%lukB ",
+			atomic_long_read(&nr_vmalloc_pages)
+				<< (PAGE_SHIFT - 10));
+	return 0;
+}
+
+static struct notifier_block vmalloc_size_nb = {
+	.notifier_call = vmalloc_size_notifier,
+};
+
 struct vfree_deferred {
 	struct llist_head list;
 	struct work_struct wq;
@@ -141,7 +164,14 @@ static int vmap_pte_range(pmd_t *pmd, unsigned long addr,
 	 * callers keep track of where we're up to.
 	 */
 
+#ifdef CONFIG_UH_RKP
+     unsigned long paddr = addr;
+     if(pgprot_rkp_ro(prot))
+         paddr &= (~PTE_RKP_RO);
+     pte = pte_alloc_kernel(pmd, paddr);
+#else
 	pte = pte_alloc_kernel(pmd, addr);
+#endif
 	if (!pte)
 		return -ENOMEM;
 	do {
@@ -1529,6 +1559,7 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			BUG_ON(!page);
 			__free_pages(page, 0);
 		}
+		atomic_long_sub(area->nr_pages, &nr_vmalloc_pages);
 
 		kvfree(area->pages);
 	}
@@ -1701,6 +1732,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			cond_resched();
 	}
 
+	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
 	if (map_vm_area(area, prot, pages))
 		goto fail;
 	return area->addr;
@@ -2755,6 +2787,9 @@ static int __init proc_vmalloc_init(void)
 				nr_node_ids * sizeof(unsigned int), NULL);
 	else
 		proc_create_seq("vmallocinfo", 0400, NULL, &vmalloc_op);
+
+	atomic_long_set(&nr_vmalloc_pages, 0);
+	show_mem_extra_notifier_register(&vmalloc_size_nb);
 	return 0;
 }
 module_init(proc_vmalloc_init);

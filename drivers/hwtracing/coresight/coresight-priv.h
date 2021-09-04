@@ -114,6 +114,7 @@ static inline void CS_UNLOCK(void __iomem *addr)
 		writel_relaxed(CORESIGHT_UNLOCK, addr + CORESIGHT_LAR);
 		/* Make sure everyone has seen this */
 		mb();
+		isb();
 	} while (0);
 }
 

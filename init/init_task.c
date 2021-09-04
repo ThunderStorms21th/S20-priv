@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/audit.h>
+#include <linux/task_integrity.h>
 
 #include <asm/pgtable.h>
 #include <linux/uaccess.h>
@@ -49,6 +50,11 @@ static struct sighand_struct init_sighand = {
 	.siglock	= __SPIN_LOCK_UNLOCKED(init_sighand.siglock),
 	.signalfd_wqh	= __WAIT_QUEUE_HEAD_INITIALIZER(init_sighand.signalfd_wqh),
 };
+
+#ifdef CONFIG_FIVE
+static struct task_integrity init_integrity =
+					INIT_TASK_INTEGRITY(init_integrity);
+#endif
 
 /*
  * Set up the first task table, touch at your own risk!. Base=0,
@@ -179,6 +185,7 @@ struct task_struct init_task
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
 #endif
+	INIT_INTEGRITY(init_task)
 };
 EXPORT_SYMBOL(init_task);
 

@@ -568,7 +568,7 @@ static int gs_start_io(struct gs_port *port)
 	started = gs_start_rx(port);
 
 	/* unblock any pending writes into our circular buffer */
-	if (started) {
+	if (started && port->port.tty) {
 		tty_wakeup(port->port.tty);
 	} else {
 		gs_free_requests(ep, head, &port->read_allocated);
@@ -1225,7 +1225,12 @@ int gserial_alloc_line(unsigned char *line_num)
 	coding.bParityType = USB_CDC_NO_PARITY;
 	coding.bDataBits = USB_CDC_1_STOP_BITS;
 
-	for (port_num = 0; port_num < MAX_U_SERIAL_PORTS; port_num++) {
+	if (*line_num)
+		port_num =  *line_num;
+	else
+		port_num = 0;
+
+	for (; port_num < MAX_U_SERIAL_PORTS; port_num++) {
 		ret = gs_port_alloc(port_num, &coding);
 		if (ret == -EBUSY)
 			continue;

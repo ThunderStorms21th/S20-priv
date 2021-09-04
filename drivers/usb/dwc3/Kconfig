@@ -11,6 +11,10 @@ config USB_DWC3
 
 if USB_DWC3
 
+config USB_PORT_POWER_OPTIMIZATION
+	default n
+	bool "USB3.0 Link port power optimization"
+
 config USB_DWC3_ULPI
 	bool "Register ULPI PHY Interface"
 	depends on USB_ULPI_BUS=y || USB_ULPI_BUS=USB_DWC3
@@ -20,9 +24,10 @@ config USB_DWC3_ULPI
 
 choice
 	bool "DWC3 Mode Selection"
-	default USB_DWC3_DUAL_ROLE if (USB && USB_GADGET)
-	default USB_DWC3_HOST if (USB && !USB_GADGET)
-	default USB_DWC3_GADGET if (!USB && USB_GADGET)
+	#default USB_DWC3_DUAL_ROLE if (USB && USB_GADGET)
+	#default USB_DWC3_HOST if (USB && !USB_GADGET)
+	#default USB_DWC3_GADGET if (!USB && USB_GADGET)
+	default USB_DWC3_GADGET
 
 config USB_DWC3_HOST
 	bool "Host only mode"
@@ -41,7 +46,6 @@ config USB_DWC3_GADGET
 config USB_DWC3_DUAL_ROLE
 	bool "Dual Role mode"
 	depends on ((USB=y || USB=USB_DWC3) && (USB_GADGET=y || USB_GADGET=USB_DWC3))
-	depends on (EXTCON=y || EXTCON=USB_DWC3)
 	help
 	  This is the default mode of working of DWC3 controller where
 	  both host and gadget features are enabled.
@@ -65,9 +69,17 @@ config USB_DWC3_EXYNOS
 	tristate "Samsung Exynos Platform"
 	depends on (ARCH_EXYNOS || COMPILE_TEST) && OF
 	default USB_DWC3
+	select TYPEC
 	help
 	  Recent Exynos5 SoCs ship with one DesignWare Core USB3 IP inside,
 	  say 'Y' or 'M' if you have one such device.
+
+config TYPEC_DEFAULT
+	bool "Set default TYPEC configuration"
+	depends on USB_DWC3_EXYNOS
+	help
+	  Set default TYPEC configuration. If CCIC/MUIC driver doesn't set
+	  TYPEC configuration, please say 'Y'.
 
 config USB_DWC3_PCI
 	tristate "PCIe-based Platforms"
@@ -110,6 +122,12 @@ config USB_DWC3_ST
 	  STMicroelectronics SoCs with one DesignWare Core USB3 IP
 	  inside (i.e. STiH407).
 	  Say 'Y' or 'M' if you have one such device.
+
+config ENABLE_USB_SUSPEND_STATE
+	bool "Enable USB suspend current state"
+	default n
+	help
+	  Say Y to enable USB supend current state.
 
 config USB_DWC3_QCOM
 	tristate "Qualcomm Platform"

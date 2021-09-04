@@ -59,6 +59,20 @@
 	msr	daifclr, #(8 | 4 | 1)
 	.endm
 
+#ifdef CONFIG_RKP_CFP_JOPP
+/*
+ * Stack pushing/popping (register pairs only). Equivalent to store decrement
+ * before, load increment after.
+ */
+	.macro	push, xreg1, xreg2
+	stp	\xreg1, \xreg2, [sp, # -16] !
+	.endm
+
+	.macro	pop, xreg1, xreg2
+	ldp	\xreg1, \xreg2, [sp], #16
+	.endm
+#endif
+
 /*
  * Enable and disable interrupts.
  */
@@ -77,6 +91,18 @@
 
 	.macro	restore_irq, flags
 	msr	daif, \flags
+	.endm
+
+/*
+ * Save/disable and restore interrupts.
+ */
+	.macro	save_and_disable_irqs, olddaif
+	mrs	\olddaif, daif
+	disable_irq
+	.endm
+
+	.macro	restore_irqs, olddaif
+	msr	daif, \olddaif
 	.endm
 
 	.macro	enable_dbg

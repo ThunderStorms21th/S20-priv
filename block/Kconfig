@@ -128,6 +128,20 @@ config BLK_DEV_THROTTLING_LOW
 
 	Note, this is an experimental interface and could be changed someday.
 
+config BLK_IO_VOLUME
+	bool "Support for updating block IO volume"
+	default n
+	help
+	  Say Y here if you want to be able to update the block IO volume.
+
+config BLK_TURBO_WRITE
+	bool "Support turbo write"
+	depends on BLK_IO_VOLUME
+	default n
+	---help---
+	  This feature support for turbo write.
+	  Select this option if this feature is needed on working.
+
 config BLK_CMDLINE_PARSER
 	bool "Block device command line partition parser"
 	default n
@@ -218,6 +232,11 @@ config BLK_MQ_PCI
 	depends on BLOCK && PCI
 	default y
 
+config BLOCK_SUPPORT_STLOG
+	bool "Enable storage log"
+	depends on BLOCK && PROC_STLOG
+	default y
+
 config BLK_MQ_VIRTIO
 	bool
 	depends on BLOCK && VIRTIO
@@ -229,3 +248,13 @@ config BLK_MQ_RDMA
 	default y
 
 source block/Kconfig.iosched
+
+config BLK_WRITE_BOOSTER_TEST
+	bool "KUnit test for UFS Write Booster test in UML"
+	default n
+	depends on KUNIT && UML
+	select BLK_IO_VOLUME
+	select BLK_TURBO_WRITE
+	help
+	  kunit test for UFS Write Booster funtionality check in UML.
+

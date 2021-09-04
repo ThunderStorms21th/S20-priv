@@ -1042,8 +1042,8 @@ static bool suitable_migration_target(struct compact_control *cc,
 	if (cc->ignore_block_suitable)
 		return true;
 
-	/* If the block is MIGRATE_MOVABLE or MIGRATE_CMA, allow migration */
-	if (is_migrate_movable(get_pageblock_migratetype(page)))
+	/* If the block is MIGRATE_MOVABLE, allow migration */
+	if (get_pageblock_migratetype(page) == MIGRATE_MOVABLE)
 		return true;
 
 	/* Otherwise skip the block */
@@ -1362,12 +1362,6 @@ static enum compact_result __compact_finished(struct zone *zone,
 		if (!list_empty(&area->free_list[migratetype]))
 			return COMPACT_SUCCESS;
 
-#ifdef CONFIG_CMA
-		/* MIGRATE_MOVABLE can fallback on MIGRATE_CMA */
-		if (migratetype == MIGRATE_MOVABLE &&
-			!list_empty(&area->free_list[MIGRATE_CMA]))
-			return COMPACT_SUCCESS;
-#endif
 		/*
 		 * Job done if allocation would steal freepages from
 		 * other migratetype buddy lists.
@@ -1451,14 +1445,12 @@ static enum compact_result __compaction_suitable(struct zone *zone, int order,
 	 * if compaction succeeds.
 	 * For costly orders, we require low watermark instead of min for
 	 * compaction to proceed to increase its chances.
-	 * ALLOC_CMA is used, as pages in CMA pageblocks are considered
-	 * suitable migration targets
 	 */
 	watermark = (order > PAGE_ALLOC_COSTLY_ORDER) ?
 				low_wmark_pages(zone) : min_wmark_pages(zone);
 	watermark += compact_gap(order);
 	if (!__zone_watermark_ok(zone, 0, watermark, classzone_idx,
-						ALLOC_CMA, wmark_target))
+						0, wmark_target))
 		return COMPACT_SKIPPED;
 
 	return COMPACT_CONTINUE;
@@ -1816,16 +1808,14 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 	return rc;
 }
 
-
-/* Compact all zones within a node */
-static void compact_node(int nid)
+static void __compact_node(int nid, bool sync)
 {
 	pg_data_t *pgdat = NODE_DATA(nid);
 	int zoneid;
 	struct zone *zone;
 	struct compact_control cc = {
 		.order = -1,
-		.mode = MIGRATE_SYNC,
+		.mode = sync ? MIGRATE_SYNC : MIGRATE_ASYNC,
 		.ignore_skip_hint = true,
 		.whole_zone = true,
 		.gfp_mask = GFP_KERNEL,
@@ -1847,8 +1837,26 @@ static void compact_node(int nid)
 	}
 }
 
+#ifdef CONFIG_HUGEPAGE_POOL
+void compact_node_async(void)
+{
+	/* hugepage pool and kzerod assumes there is only one node */
+	__compact_node(0, false);
+}
+#endif
+
+/* Compact all zones within a node */
+static void compact_node(int nid)
+{
+	__compact_node(nid, true);
+}
+
 /* Compact all nodes in the system */
+#ifdef CONFIG_HUGEPAGE_POOL
+void compact_nodes(void)
+#else
 static void compact_nodes(void)
+#endif
 {
 	int nid;
 

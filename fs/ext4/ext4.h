@@ -40,6 +40,10 @@
 #include <linux/compat.h>
 #endif
 
+#ifdef CONFIG_FS_HPB
+#include <linux/fs_hpb.h>
+#endif
+
 #define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_EXT4_FS_ENCRYPTION)
 #include <linux/fscrypt.h>
 
@@ -1556,6 +1560,10 @@ enum {
 	EXT4_STATE_MAY_INLINE_DATA,	/* may have in-inode data */
 	EXT4_STATE_EXT_PRECACHED,	/* extents have been precached */
 	EXT4_STATE_LUSTRE_EA_INODE,	/* Lustre-style ea_inode */
+
+#ifdef CONFIG_FS_HPB
+	EXT4_STATE_HPB,			/* HPB I/O */
+#endif
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
@@ -2448,6 +2456,7 @@ extern int ext4_group_add_blocks(handle_t *handle, struct super_block *sb,
 				ext4_fsblk_t block, unsigned long count);
 extern int ext4_trim_fs(struct super_block *, struct fstrim_range *);
 extern void ext4_process_freed_data(struct super_block *sb, tid_t commit_tid);
+extern ssize_t ext4_mb_freefrag_show(struct ext4_sb_info *sbi, char *buf);
 
 /* inode.c */
 int ext4_inode_is_fast_symlink(struct inode *inode);
@@ -2742,6 +2751,12 @@ static inline int ext4_has_metadata_csum(struct super_block *sb)
 	return ext4_has_feature_metadata_csum(sb) &&
 	       (EXT4_SB(sb)->s_chksum_driver != NULL);
 }
+
+extern void print_iloc_info(struct super_block *sb, struct ext4_iloc iloc);
+extern void print_bh(struct super_block *sb,
+		struct buffer_head *bh, int start, int len);
+extern void print_block_data(struct super_block *sb, sector_t blocknr,
+		unsigned char *data_to_dump, int start, int len);
 
 static inline int ext4_has_group_desc_csum(struct super_block *sb)
 {
@@ -3206,6 +3221,15 @@ extern void ext4_io_submit_init(struct ext4_io_submit *io,
 				struct writeback_control *wbc);
 extern void ext4_end_io_rsv_work(struct work_struct *work);
 extern void ext4_io_submit(struct ext4_io_submit *io);
+#ifdef CONFIG_DDAR
+#define	EXT4_IOC_GET_DD_POLICY		FS_IOC_GET_DD_POLICY
+#define	EXT4_IOC_SET_DD_POLICY		FS_IOC_SET_DD_POLICY
+
+int ext4_io_submit_to_dd(struct inode *inode, struct ext4_io_submit *io);
+#else
+static inline int ext4_io_submit_to_dd(struct inode *inode, struct ext4_io_submit *io) { return -EOPNOTSUPP; }
+#endif
+
 extern int ext4_bio_write_page(struct ext4_io_submit *io,
 			       struct page *page,
 			       int len,

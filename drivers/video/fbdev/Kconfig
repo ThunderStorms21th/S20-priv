@@ -276,6 +276,7 @@ config FB_PM2
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	help
+
 	  This is the frame buffer device driver for cards based on
 	  the 3D Labs Permedia, Permedia 2 and Permedia 2V chips.
 	  The driver was tested on the following cards:
@@ -2306,6 +2307,11 @@ config FB_SIMPLE
 	  Configuration re: surface address, size, and format must be provided
 	  through device tree, or plain old platform data.
 
+source "drivers/video/fbdev/omap/Kconfig"
+source "drivers/video/fbdev/omap2/Kconfig"
+source "drivers/video/fbdev/exynos/Kconfig"
+source "drivers/video/fbdev/mmp/Kconfig"
+
 config FB_SSD1307
 	tristate "Solomon SSD1307 framebuffer support"
 	depends on FB && I2C
@@ -2335,7 +2341,3 @@ config FB_SM712
 	  This driver is also available as a module. The module will be
 	  called sm712fb. If you want to compile it as a module, say M
 	  here and read <file:Documentation/kbuild/modules.txt>.
-
-source "drivers/video/fbdev/omap/Kconfig"
-source "drivers/video/fbdev/omap2/Kconfig"
-source "drivers/video/fbdev/mmp/Kconfig"

@@ -99,7 +99,7 @@ static void gic_do_wait_for_rwp(void __iomem *base)
 {
 	u32 count = 1000000;	/* 1s! */
 
-	while (readl_relaxed(base + GICD_CTLR) & GICD_CTLR_RWP) {
+	while (readl_relaxed_no_log(base + GICD_CTLR) & GICD_CTLR_RWP) {
 		count--;
 		if (!count) {
 			pr_err_ratelimited("RWP timeout, gone fishing\n");
@@ -141,22 +141,22 @@ static void gic_enable_redist(bool enable)
 
 	rbase = gic_data_rdist_rd_base();
 
-	val = readl_relaxed(rbase + GICR_WAKER);
+	val = readl_relaxed_no_log(rbase + GICR_WAKER);
 	if (enable)
 		/* Wake up this CPU redistributor */
 		val &= ~GICR_WAKER_ProcessorSleep;
 	else
 		val |= GICR_WAKER_ProcessorSleep;
-	writel_relaxed(val, rbase + GICR_WAKER);
+	writel_relaxed_no_log(val, rbase + GICR_WAKER);
 
 	if (!enable) {		/* Check that GICR_WAKER is writeable */
-		val = readl_relaxed(rbase + GICR_WAKER);
+		val = readl_relaxed_no_log(rbase + GICR_WAKER);
 		if (!(val & GICR_WAKER_ProcessorSleep))
 			return;	/* No PM support in this redistributor */
 	}
 
 	while (--count) {
-		val = readl_relaxed(rbase + GICR_WAKER);
+		val = readl_relaxed_no_log(rbase + GICR_WAKER);
 		if (enable ^ (bool)(val & GICR_WAKER_ChildrenAsleep))
 			break;
 		cpu_relax();
@@ -180,7 +180,7 @@ static int gic_peek_irq(struct irq_data *d, u32 offset)
 	else
 		base = gic_data.dist_base;
 
-	return !!(readl_relaxed(base + offset + (gic_irq(d) / 32) * 4) & mask);
+	return !!(readl_relaxed_no_log(base + offset + (gic_irq(d) / 32) * 4) & mask);
 }
 
 static void gic_poke_irq(struct irq_data *d, u32 offset)
@@ -197,7 +197,7 @@ static void gic_poke_irq(struct irq_data *d, u32 offset)
 		rwp_wait = gic_dist_wait_for_rwp;
 	}
 
-	writel_relaxed(mask, base + offset + (gic_irq(d) / 32) * 4);
+	writel_relaxed_no_log(mask, base + offset + (gic_irq(d) / 32) * 4);
 	rwp_wait();
 }
 
@@ -399,7 +399,7 @@ static void __init gic_dist_init(void)
 	void __iomem *base = gic_data.dist_base;
 
 	/* Disable the distributor */
-	writel_relaxed(0, base + GICD_CTLR);
+	writel_relaxed_no_log(0, base + GICD_CTLR);
 	gic_dist_wait_for_rwp();
 
 	/*
@@ -409,12 +409,12 @@ static void __init gic_dist_init(void)
 	 * but that's not the intended use case anyway.
 	 */
 	for (i = 32; i < gic_data.irq_nr; i += 32)
-		writel_relaxed(~0, base + GICD_IGROUPR + i / 8);
+		writel_relaxed_no_log(~0, base + GICD_IGROUPR + i / 8);
 
 	gic_dist_config(base, gic_data.irq_nr, gic_dist_wait_for_rwp);
 
 	/* Enable distributor with ARE, Group1 */
-	writel_relaxed(GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1A | GICD_CTLR_ENABLE_G1,
+	writel_relaxed_no_log(GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1A | GICD_CTLR_ENABLE_G1,
 		       base + GICD_CTLR);
 
 	/*
@@ -436,7 +436,7 @@ static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 		u64 typer;
 		u32 reg;
 
-		reg = readl_relaxed(ptr + GICR_PIDR2) & GIC_PIDR2_ARCH_MASK;
+		reg = readl_relaxed_no_log(ptr + GICR_PIDR2) & GIC_PIDR2_ARCH_MASK;
 		if (reg != GIC_PIDR2_ARCH_GICv3 &&
 		    reg != GIC_PIDR2_ARCH_GICv4) { /* We're in trouble... */
 			pr_warn("No redistributor present @%p\n", ptr);
@@ -653,7 +653,7 @@ early_param("irqchip.gicv3_nolpi", gicv3_nolpi_cfg);
 
 static int gic_dist_supports_lpis(void)
 {
-	return !!(readl_relaxed(gic_data.dist_base + GICD_TYPER) & GICD_TYPER_LPIS) && !gicv3_nolpi;
+	return !!(readl_relaxed_no_log(gic_data.dist_base + GICD_TYPER) & GICD_TYPER_LPIS) && !gicv3_nolpi;
 }
 
 static void gic_cpu_init(void)
@@ -669,7 +669,7 @@ static void gic_cpu_init(void)
 	rbase = gic_data_rdist_sgi_base();
 
 	/* Configure SGIs/PPIs as non-secure Group-1 */
-	writel_relaxed(~0, rbase + GICR_IGROUPR0);
+	writel_relaxed_no_log(~0, rbase + GICR_IGROUPR0);
 
 	gic_cpu_config(rbase, gic_redist_wait_for_rwp);
 
@@ -822,7 +822,7 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 /* Check whether it's single security state view */
 static bool gic_dist_security_disabled(void)
 {
-	return readl_relaxed(gic_data.dist_base + GICD_CTLR) & GICD_CTLR_DS;
+	return readl_relaxed_no_log(gic_data.dist_base + GICD_CTLR) & GICD_CTLR_DS;
 }
 
 static int gic_cpu_pm_notifier(struct notifier_block *self,
@@ -1094,7 +1094,7 @@ static int __init gic_init_bases(void __iomem *dist_base,
 	 * Find out how many interrupts are supported.
 	 * The GIC only supports up to 1020 interrupt sources (SGI+PPI+SPI)
 	 */
-	typer = readl_relaxed(gic_data.dist_base + GICD_TYPER);
+	typer = readl_relaxed_no_log(gic_data.dist_base + GICD_TYPER);
 	gic_data.rdists.gicd_typer = typer;
 	gic_irqs = GICD_TYPER_IRQS(typer);
 	if (gic_irqs > 1020)
@@ -1146,7 +1146,7 @@ out_free:
 
 static int __init gic_validate_dist_version(void __iomem *dist_base)
 {
-	u32 reg = readl_relaxed(dist_base + GICD_PIDR2) & GIC_PIDR2_ARCH_MASK;
+	u32 reg = readl_relaxed_no_log(dist_base + GICD_PIDR2) & GIC_PIDR2_ARCH_MASK;
 
 	if (reg != GIC_PIDR2_ARCH_GICv3 && reg != GIC_PIDR2_ARCH_GICv4)
 		return -ENODEV;
@@ -1387,7 +1387,7 @@ gic_acpi_parse_madt_gicc(struct acpi_subtable_header *header,
 {
 	struct acpi_madt_generic_interrupt *gicc =
 				(struct acpi_madt_generic_interrupt *)header;
-	u32 reg = readl_relaxed(acpi_data.dist_base + GICD_PIDR2) & GIC_PIDR2_ARCH_MASK;
+	u32 reg = readl_relaxed_no_log(acpi_data.dist_base + GICD_PIDR2) & GIC_PIDR2_ARCH_MASK;
 	u32 size = reg == GIC_PIDR2_ARCH_GICv4 ? SZ_64K * 4 : SZ_64K * 2;
 	void __iomem *redist_base;
 

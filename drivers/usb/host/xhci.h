@@ -17,6 +17,8 @@
 #include <linux/kernel.h>
 #include <linux/usb/hcd.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/wakelock.h>
+#include <linux/phy/phy.h>
 
 /* Code sharing between pci-quirks and xhci hcd */
 #include	"xhci-ext-caps.h"
@@ -26,7 +28,25 @@
 #define XHCI_SBRN_OFFSET	(0x60)
 
 /* Max number of USB devices for any host controller - limit in section 6.1 */
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+#define MAX_HC_SLOTS		127
+
+#if defined(CONFIG_SOC_EXYNOS9830)
+/* EXYNOS9830 uram memory map */
+#define EXYNOS_URAM_DCBAA_ADDR		0x10ff2840
+#define EXYNOS_URAM_ABOX_ERST_SEG_ADDR	0x10ff2c40
+#define EXYNOS_URAM_ABOX_EVT_RING_ADDR	0x10ff0000
+#define EXYNOS_URAM_DEVICE_CTX_ADDR	0x10ff2000
+#define EXYNOS_URAM_ISOC_OUT_RING_ADDR	0x10ff1000
+/* 9830 doesn't support URAM for ISOC IN */
+#define EXYNOS_URAM_ISOC_IN_RING_ADDR	0x0
+#else
+#error "If USB audio is enabled, URAM address must be defined!"
+#endif
+
+#else
 #define MAX_HC_SLOTS		256
+#endif
 /* Section 5.3.3 - MaxPorts */
 #define MAX_HC_PORTS		127
 
@@ -1513,6 +1533,7 @@ static inline const char *xhci_trb_type_string(u8 type)
 /* How much data is left before the 64KB boundary? */
 #define TRB_BUFF_LEN_UP_TO_BOUNDARY(addr)	(TRB_MAX_BUFF_SIZE - \
 					(addr & (TRB_MAX_BUFF_SIZE - 1)))
+#define MAX_SOFT_RETRY		3
 
 struct xhci_segment {
 	union xhci_trb		*trbs;
@@ -1600,6 +1621,7 @@ struct xhci_ring {
 	 * if we own the TRB (if we are the consumer).  See section 4.9.1.
 	 */
 	u32			cycle_state;
+	unsigned int            err_count;
 	unsigned int		stream_id;
 	unsigned int		num_segs;
 	unsigned int		num_trbs_free;
@@ -1723,6 +1745,13 @@ struct xhci_hub {
 	u8			psi_uid_count;
 };
 
+/*
+ * Sometimes deadlock occurred between hub_event and remove_hcd.
+ * In order to prevent it, waiting for completion of hub_event was added.
+ * This is a timeout (300msec) value for the waiting.
+ */
+#define XHCI_HUB_EVENT_TIMEOUT	(300)
+
 /* There is one xhci_hcd structure per controller */
 struct xhci_hcd {
 	struct usb_hcd *main_hcd;
@@ -1734,6 +1763,9 @@ struct xhci_hcd {
 	struct xhci_doorbell_array __iomem *dba;
 	/* Our HCD's current interrupter register set */
 	struct	xhci_intr_reg __iomem *ir_set;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	struct	xhci_intr_reg __iomem *ir_set_audio;
+#endif
 
 	/* Cached register copies of read-only HC data */
 	__u32		hcs_params1;
@@ -1777,6 +1809,18 @@ struct xhci_hcd {
 	struct xhci_command	*current_cmd;
 	struct xhci_ring	*event_ring;
 	struct xhci_erst	erst;
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	struct xhci_ring	*event_ring_audio;
+	struct xhci_erst	erst_audio;
+	dma_addr_t save_dma;
+	void *save_addr;
+	dma_addr_t out_dma;
+	void *out_addr;
+	dma_addr_t in_dma;
+	void *in_addr;
+#endif
+
 	/* Scratchpad */
 	struct xhci_scratchpad  *scratchpad;
 	/* Store LPM test failed devices' information */
@@ -1797,6 +1841,9 @@ struct xhci_hcd {
 	struct dma_pool	*segment_pool;
 	struct dma_pool	*small_streams_pool;
 	struct dma_pool	*medium_streams_pool;
+
+	struct wake_lock *main_wakelock; /* Wakelock for HS HCD */
+	struct wake_lock *shared_wakelock; /* Wakelock for SS HCD */
 
 	/* Host controller watchdog timer structures */
 	unsigned int		xhc_state;
@@ -1865,6 +1912,8 @@ struct xhci_hcd {
 #define XHCI_ZERO_64B_REGS	BIT_ULL(32)
 #define XHCI_RESET_PLL_ON_DISCONNECT	BIT_ULL(34)
 #define XHCI_SNPS_BROKEN_SUSPEND    BIT_ULL(35)
+#define XHCI_USE_URAM_FOR_EXYNOS_AUDIO	BIT_ULL(62)
+#define XHCI_L2_SUPPORT			BIT_ULL(63)
 
 	unsigned int		num_active_eps;
 	unsigned int		limit_active_eps;
@@ -1894,6 +1943,16 @@ struct xhci_hcd {
 	struct list_head	regset_list;
 
 	void			*dbc;
+	struct usb_xhci_pre_alloc	*xhci_alloc;
+
+	/* This flag is used to check first allocation for URAM */
+	bool			exynos_uram_ctx_alloc;
+	bool			exynos_uram_isoc_out_alloc;
+	bool			exynos_uram_isoc_in_alloc;
+	u8			*usb_audio_ctx_addr;
+	u8			*usb_audio_isoc_out_addr;
+	u8			*usb_audio_isoc_in_addr;
+
 	/* platform-specific data -- must come last */
 	unsigned long		priv[0] __aligned(sizeof(s64));
 };
@@ -2063,6 +2122,9 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated);
 irqreturn_t xhci_irq(struct usb_hcd *hcd);
 irqreturn_t xhci_msi_irq(int irq, void *hcd);
 int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev);
+int xhci_store_hw_info(struct usb_hcd *hcd, struct usb_device *udev);
+int xhci_set_deq(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx,
+		unsigned int last_ep, struct usb_device *udev);
 int xhci_alloc_tt_info(struct xhci_hcd *xhci,
 		struct xhci_virt_device *virt_dev,
 		struct usb_device *hdev,
@@ -2131,6 +2193,8 @@ int xhci_find_raw_port_number(struct usb_hcd *hcd, int port1);
 struct xhci_hub *xhci_get_rhub(struct usb_hcd *hcd);
 
 void xhci_hc_died(struct xhci_hcd *xhci);
+int xhci_hub_check_speed(struct usb_hcd *hcd);
+int xhci_check_usbl2_support(struct usb_hcd *hcd);
 
 #ifdef CONFIG_PM
 int xhci_bus_suspend(struct usb_hcd *hcd);

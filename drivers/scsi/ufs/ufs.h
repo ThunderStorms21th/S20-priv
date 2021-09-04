@@ -73,6 +73,8 @@ enum {
 	UFS_UPIU_RPMB_WLUN		= 0xC4,
 };
 
+
+
 /*
  * UFS Protocol Information Unit related definitions
  */
@@ -114,6 +116,12 @@ enum {
 	UPIU_CMD_FLAGS_READ	= 0x40,
 };
 
+/* UPIU Command Priority flags */
+enum {
+	UPIU_CMD_PRIO_NONE	= 0x00,
+	UPIU_CMD_PRIO_HIGH	= 0x04,
+};
+
 /* UPIU Task Attributes */
 enum {
 	UPIU_TASK_ATTR_SIMPLE	= 0x00,
@@ -126,6 +134,10 @@ enum {
 enum {
 	UPIU_QUERY_FUNC_STANDARD_READ_REQUEST           = 0x01,
 	UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST          = 0x81,
+};
+
+enum {
+	UPIU_QUERY_FUNC_VENDOR_TOSHIBA_FATALMODE        = 0xC2,
 };
 
 /* Flag idn for Query Requests*/
@@ -141,6 +153,12 @@ enum flag_idn {
 	QUERY_FLAG_IDN_BUSY_RTC				= 0x09,
 	QUERY_FLAG_IDN_RESERVED3			= 0x0A,
 	QUERY_FLAG_IDN_PERMANENTLY_DISABLE_FW_UPDATE	= 0x0B,
+	QUERY_FLAG_IDN_TW_EN		 		= 0x0E,
+	QUERY_FLAG_IDN_TW_BUF_FLUSH		= 0x0F,
+	QUERY_FLAG_IDN_TW_FLUSH_HIBERN		= 0x10,
+#if defined(CONFIG_UFSHPB)
+	QUERY_FLAG_IDN_HPB_EN				= 0x13,
+#endif
 };
 
 /* Attribute idn for Query requests */
@@ -168,6 +186,7 @@ enum attr_idn {
 	QUERY_ATTR_IDN_FFU_STATUS		= 0x14,
 	QUERY_ATTR_IDN_PSA_STATE		= 0x15,
 	QUERY_ATTR_IDN_PSA_DATA_SIZE		= 0x16,
+	QUERY_ATTR_IDN_AVL_TW_BUF_SIZE	= 0x1D,
 };
 
 /* Descriptor idn for Query requests */
@@ -182,6 +201,7 @@ enum desc_idn {
 	QUERY_DESC_IDN_GEOMETRY		= 0x7,
 	QUERY_DESC_IDN_POWER		= 0x8,
 	QUERY_DESC_IDN_HEALTH           = 0x9,
+	QUERY_DESC_IDN_RFU_2            = 0xA,
 	QUERY_DESC_IDN_MAX,
 };
 
@@ -191,13 +211,18 @@ enum desc_header_offset {
 };
 
 enum ufs_desc_def_size {
-	QUERY_DESC_DEVICE_DEF_SIZE		= 0x40,
-	QUERY_DESC_CONFIGURATION_DEF_SIZE	= 0x90,
-	QUERY_DESC_UNIT_DEF_SIZE		= 0x23,
+	QUERY_DESC_DEVICE_DEF_SIZE		= 0x57,
+	QUERY_DESC_CONFIGURATION_DEF_SIZE	= 0xE2,
+	QUERY_DESC_UNIT_DEF_SIZE		= 0x2D,
 	QUERY_DESC_INTERCONNECT_DEF_SIZE	= 0x06,
-	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x48,
+	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x58,
 	QUERY_DESC_POWER_DEF_SIZE		= 0x62,
 	QUERY_DESC_HEALTH_DEF_SIZE		= 0x25,
+	/*
+	 * Max. 126 UNICODE characters (2 bytes per character) plus 2 bytes
+	 * of descriptor header.
+	 */
+	QUERY_DESC_STRING_DEF_SIZE		= 0xFE,
 };
 
 /* Unit descriptor parameters offsets in bytes*/
@@ -219,6 +244,12 @@ enum unit_desc_param {
 	UNIT_DESC_PARAM_PHY_MEM_RSRC_CNT	= 0x18,
 	UNIT_DESC_PARAM_CTX_CAPABILITIES	= 0x20,
 	UNIT_DESC_PARAM_LARGE_UNIT_SIZE_M1	= 0x22,
+	UNIT_DESC_PARAM_TW_BUF_ALLOC_UNIT	= 0x29,
+#if defined(CONFIG_UFSHPB)
+	UNIT_DESC_HPB_LU_MAX_ACTIVE_REGIONS		= 0x23,
+	UNIT_DESC_HPB_LU_PIN_REGION_START_OFFSET	= 0x25,
+	UNIT_DESC_HPB_LU_NUM_PIN_REGIONS		= 0x27,
+#endif
 };
 
 /* Device descriptor parameters offsets in bytes*/
@@ -257,7 +288,14 @@ enum device_desc_param {
 	DEVICE_DESC_PARAM_NUM_SEC_WPA		= 0x24,
 	DEVICE_DESC_PARAM_PSA_MAX_DATA		= 0x25,
 	DEVICE_DESC_PARAM_PSA_TMT		= 0x29,
-	DEVICE_DESC_PARAM_PRDCT_REV		= 0x2A,
+	DEVICE_DESC_PARAM_PRDCT_REV		= 0x2A,	
+	DEVICE_DESC_PARAM_EXT_FEAT_SUPPORT				= 0x4F,
+#if defined(CONFIG_UFSHPB)
+	DEVICE_DESC_PARAM_HPB_VER		= 0x40,
+#endif
+#if defined(CONFIG_UFSFEATURE)
+	DEVICE_DESC_PARAM_EX_FEAT_SUP		= 0x4F,
+#endif
 };
 
 /* Interconnect descriptor parameters offsets in bytes*/
@@ -302,6 +340,12 @@ enum geometry_desc_param {
 	GEOMETRY_DESC_PARAM_ENM4_MAX_NUM_UNITS	= 0x3E,
 	GEOMETRY_DESC_PARAM_ENM4_CAP_ADJ_FCTR	= 0x42,
 	GEOMETRY_DESC_PARAM_OPT_LOG_BLK_SIZE	= 0x44,
+#if defined(CONFIG_UFSHPB)
+	GEOMETRY_DESC_HPB_REGION_SIZE			= 0x48,
+	GEOMETRY_DESC_HPB_NUMBER_LU 			= 0x49,
+	GEOMETRY_DESC_HPB_SUBREGION_SIZE 		= 0x4A,
+	GEOMETRY_DESC_HPB_DEVICE_MAX_ACTIVE_REGIONS	= 0x4B,
+#endif
 };
 
 /* Health descriptor parameters offsets in bytes*/
@@ -352,7 +396,8 @@ enum power_desc_param_offset {
 
 /* Exception event mask values */
 enum {
-	MASK_EE_STATUS		= 0xFFFF,
+	/* disable tw event [bit 5] as default */
+	MASK_EE_STATUS		= 0xFFDF,
 	MASK_EE_URGENT_BKOPS	= (1 << 2),
 };
 
@@ -376,6 +421,7 @@ enum query_opcode {
 	UPIU_QUERY_OPCODE_SET_FLAG	= 0x6,
 	UPIU_QUERY_OPCODE_CLEAR_FLAG	= 0x7,
 	UPIU_QUERY_OPCODE_TOGGLE_FLAG	= 0x8,
+	UPIU_QUERY_OPCODE_MAX,
 };
 
 /* Query response result code */
@@ -391,6 +437,15 @@ enum {
 	QUERY_RESULT_INVALID_IDN                = 0xFD,
 	QUERY_RESULT_INVALID_OPCODE             = 0xFE,
 	QUERY_RESULT_GENERAL_FAILURE            = 0xFF,
+};
+
+enum health_device_desc_param {
+	HEALTH_DEVICE_DESC_PARAM_LEN	= 0x0,
+	HEALTH_DEVICE_DESC_PARAM_IDN	=0x1,
+	HEALTH_DEVICE_DESC_PARAM_INFO	=0x2,
+	HEALTH_DEVICE_DESC_PARAM_LIFETIMEA	=0x3,
+	HEALTH_DEVICE_DESC_PARAM_LIFETIMEB	=0x4,
+	HEALTH_DEVICE_DESC_PARAM_RESERVED	=0x5,
 };
 
 /* UTP Transfer Request Command Type (CT) */
@@ -617,7 +672,9 @@ struct ufs_dev_info {
  */
 struct ufs_dev_desc {
 	u16 wmanufacturerid;
-	char model[MAX_MODEL_LEN + 1];
+	u8 lifetime;
+	char model[MAX_MODEL_LEN + 1];	
+	u32 dextfeatsupport;
 };
 
 /**

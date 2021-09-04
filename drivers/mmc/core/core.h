@@ -126,6 +126,7 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
 void mmc_release_host(struct mmc_host *host);
 void mmc_get_card(struct mmc_card *card, struct mmc_ctx *ctx);
 void mmc_put_card(struct mmc_card *card, struct mmc_ctx *ctx);
+int __mmc_try_claim_host(struct mmc_host *host, struct mmc_ctx *ctx, unsigned int delay);
 
 /**
  *	mmc_claim_host - exclusively claim a host
@@ -137,6 +138,15 @@ static inline void mmc_claim_host(struct mmc_host *host)
 {
 	__mmc_claim_host(host, NULL, NULL);
 }
+
+static inline int mmc_try_claim_host(struct mmc_host *host, unsigned int delay)
+{
+
+	int ret;
+	ret = __mmc_try_claim_host(host, NULL, delay);
+	return ret;
+}
+
 
 int mmc_cqe_start_req(struct mmc_host *host, struct mmc_request *mrq);
 void mmc_cqe_post_req(struct mmc_host *host, struct mmc_request *mrq);

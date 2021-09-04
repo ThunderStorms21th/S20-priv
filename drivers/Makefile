@@ -63,10 +63,15 @@ obj-y				+= gpu/
 
 obj-$(CONFIG_CONNECTOR)		+= connector/
 
+# mcps module.
+obj-$(CONFIG_MCPS)		+= mcps/
+
 # i810fb and intelfb depend on char/agp/
 obj-$(CONFIG_FB_I810)           += video/fbdev/i810/
 obj-$(CONFIG_FB_INTEL)          += video/fbdev/intelfb/
 
+obj-$(CONFIG_USE_MUIC)		+= muic/
+obj-$(CONFIG_IFCONN_MANAGER)    += ifconn/
 obj-$(CONFIG_PARPORT)		+= parport/
 obj-$(CONFIG_NVM)		+= lightnvm/
 obj-y				+= base/ block/ misc/ mfd/ nfc/
@@ -101,6 +106,7 @@ obj-$(CONFIG_ATA_OVER_ETH)	+= block/aoe/
 obj-$(CONFIG_PARIDE) 		+= block/paride/
 obj-$(CONFIG_TC)		+= tc/
 obj-$(CONFIG_UWB)		+= uwb/
+obj-$(CONFIG_SAMSUNG_UWB)	+= uwb/
 obj-$(CONFIG_USB_PHY)		+= usb/
 obj-$(CONFIG_USB)		+= usb/
 obj-$(CONFIG_USB_SUPPORT)	+= usb/
@@ -188,3 +194,52 @@ obj-$(CONFIG_MULTIPLEXER)	+= mux/
 obj-$(CONFIG_UNISYS_VISORBUS)	+= visorbus/
 obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
+obj-$(CONFIG_EXYNOS_BTS)        += bts/
+
+ifeq ($(CONFIG_BATTERY_SAMSUNG_V2), y)
+	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_v2/
+else
+	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
+endif
+
+# FIVE TEE driver
+obj-$(CONFIG_FIVE_TEE_DRIVER)	+= security/samsung/five_tee_driver/
+obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
+
+# vision driver
+obj-$(CONFIG_VISION_SUPPORT)	+= vision/
+
+#Fingerprint
+obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
+
+# Samsung Features
+obj-y				+= samsung/
+
+# Sensorhub driver
+obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
+
+# optics sensor driver
+obj-$(CONFIG_SENSORS_TCS3407)	+= optics/
+
+# Motor
+obj-y                           += motor/
+
+# uH
+obj-$(CONFIG_UH)        += uh/
+
+# OLOG
+obj-y				+= kperfmon/
+
+# streamline
+ifeq ($(CONFIG_GATOR), y)
+	obj-$(CONFIG_GATOR)				+= gator/
+endif
+
+#TZIC
+obj-y  += security/samsung/tzic/
+
+# KUnit
+obj-y				+= kunit/
+
+# SPU signature verify
+obj-$(CONFIG_SPU_VERIFY) += spu_verify/

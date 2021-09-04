@@ -23,6 +23,10 @@ void psi_memstall_leave(unsigned long *flags);
 
 int psi_show(struct seq_file *s, struct psi_group *group, enum psi_res res);
 
+#ifdef CONFIG_SAMSUNG_LMKD_DEBUG
+extern u64 psi_full_max;
+#endif
+
 #ifdef CONFIG_CGROUPS
 int psi_cgroup_alloc(struct cgroup *cgrp);
 void psi_cgroup_free(struct cgroup *cgrp);

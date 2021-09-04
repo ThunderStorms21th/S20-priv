@@ -302,6 +302,10 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 			goto out_device_destroy;
 		}
 	}
+#ifdef CONFIG_BLK_TURBO_WRITE
+		if (shost->by_ufs)
+			scsi_alloc_tw(sdev);
+#endif
 
 	return sdev;
 

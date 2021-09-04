@@ -610,6 +610,41 @@ static inline void armv8pmu_write_counter(struct perf_event *event, u64 value)
 		armv8pmu_write_hw_counter(event, value);
 }
 
+/* Accessor macros for the pmu registers. */
+#define AARCH64_PMU_READ(N, REG, VAL) do {\
+	VAL = read_sysreg(pm##REG##N##_el0);\
+} while (0)
+
+#define AARCH64_PMU_WRITE(N, REG, VAL) do {\
+	write_sysreg(VAL, pm##REG##N##_el0);\
+} while (0)
+
+#define READ_PMU_REG_CASE(N, REG, VAL)		\
+	case (N):				\
+		AARCH64_PMU_READ(N, REG, VAL);	\
+		break
+
+#define WRITE_PMU_REG_CASE(N, REG, VAL)		\
+	case (N):				\
+		AARCH64_PMU_WRITE(N, REG, VAL);	\
+		break
+
+#define GEN_READ_PMU_REG_CASES(REG, VAL)	\
+	READ_PMU_REG_CASE(0, REG, VAL);		\
+	READ_PMU_REG_CASE(1, REG, VAL);		\
+	READ_PMU_REG_CASE(2, REG, VAL);		\
+	READ_PMU_REG_CASE(3, REG, VAL);		\
+	READ_PMU_REG_CASE(4, REG, VAL);		\
+	READ_PMU_REG_CASE(5, REG, VAL);
+
+#define GEN_WRITE_PMU_REG_CASES(REG, VAL)	\
+	WRITE_PMU_REG_CASE(0, REG, VAL);	\
+	WRITE_PMU_REG_CASE(1, REG, VAL);	\
+	WRITE_PMU_REG_CASE(2, REG, VAL);	\
+	WRITE_PMU_REG_CASE(3, REG, VAL);	\
+	WRITE_PMU_REG_CASE(4, REG, VAL);	\
+	WRITE_PMU_REG_CASE(5, REG, VAL);
+
 static inline void armv8pmu_write_evtype(int idx, u32 val)
 {
 	armv8pmu_select_counter(idx);
@@ -981,6 +1016,11 @@ static void armv8pmu_reset(void *info)
 	for (idx = ARMV8_IDX_CYCLE_COUNTER; idx < nb_cnt; ++idx) {
 		armv8pmu_disable_counter(idx);
 		armv8pmu_disable_intens(idx);
+		switch (idx) {
+		GEN_WRITE_PMU_REG_CASES(evcntr, 0);
+		default:
+			break;
+		}
 	}
 
 	/*

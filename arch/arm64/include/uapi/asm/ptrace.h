@@ -82,6 +82,24 @@ struct user_fpsimd_state {
 	__u32		__reserved[2];
 };
 
+struct fpsimd_kernel_state {
+	__uint128_t vregs[32];
+	__u32 fpsr;
+	__u32 fpcr;
+	unsigned int cpu;
+	/*
+	 * indicate the depth of using FP/SIMD registers in kernel mode.
+	 * above kernel state should be preserved at first time
+	 * before FP/SIMD registers be used by other tasks
+	 * and the state should be restored before they be used by own.
+	 *
+	 * a kernel thread which uses FP/SIMD registers have to
+	 * set this depth and it could utilize for a tasks executes
+	 * some NEON instructions without preemption disable.
+	 */
+	atomic_t depth;
+};
+
 struct user_hwdebug_state {
 	__u32		dbg_info;
 	__u32		pad;

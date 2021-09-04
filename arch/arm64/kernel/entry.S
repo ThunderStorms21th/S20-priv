@@ -51,13 +51,30 @@
 #ifdef CONFIG_CONTEXT_TRACKING
 	bl	context_tracking_user_enter
 #endif
+
+#ifdef CONFIG_SOC_EXYNOS9830
+	bl	inv_pnt
+	adr	x23, inv_pnt
+	ic	ivau, x23
+	isb
+#endif
 	.endm
+
+#ifdef CONFIG_SOC_EXYNOS9830
+	.align 8
+inv_pnt:
+	ret
+#endif
 
 	.macro	clear_gp_regs
 	.irp	n,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29
 	mov	x\n, xzr
 	.endr
 	.endm
+
+#ifdef CONFIG_SEC_DEBUG_EXCEPTION_STACK
+#define PRESERVE_STACK_SIZE	256
+#endif
 
 /*
  * Bad Abort numbers
@@ -83,7 +100,15 @@ alternative_if ARM64_UNMAP_KERNEL_AT_EL0
 alternative_else_nop_endif
 #endif
 
+#ifdef CONFIG_SEC_DEBUG_EXCEPTION_STACK
+	.if	\el == 0
 	sub	sp, sp, #S_FRAME_SIZE
+	.else
+	sub	sp, sp, #(S_FRAME_SIZE+PRESERVE_STACK_SIZE)
+	.endif /* \el == 0 */
+#else
+	sub	sp, sp, #S_FRAME_SIZE
+#endif
 #ifdef CONFIG_VMAP_STACK
 	/*
 	 * Test whether the SP has overflowed, without corrupting a GPR.
@@ -184,7 +209,14 @@ alternative_cb_end
 	apply_ssbd 1, x22, x23
 
 	.else
+#ifdef CONFIG_SEC_DEBUG_EXCEPTION_STACK
+	add	x21, sp, #(S_FRAME_SIZE+PRESERVE_STACK_SIZE)
+#else
 	add	x21, sp, #S_FRAME_SIZE
+#endif
+#ifdef CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY
+	.if \el == 1
+#endif
 	get_thread_info tsk
 	/* Save the task's original addr_limit and set USER_DS */
 	ldr	x20, [tsk, #TSK_TI_ADDR_LIMIT]
@@ -192,6 +224,9 @@ alternative_cb_end
 	mov	x20, #USER_DS
 	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 	/* No need to reset PSTATE.UAO, hardware's already set it to 0 for us */
+#ifdef CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY
+	.endif /* \el == 1 */
+#endif
 	.endif /* \el == 0 */
 	mrs	x22, elr_el1
 	mrs	x23, spsr_el1
@@ -343,7 +378,15 @@ alternative_else_nop_endif
 	ldp	x26, x27, [sp, #16 * 13]
 	ldp	x28, x29, [sp, #16 * 14]
 	ldr	lr, [sp, #S_LR]
+#ifdef CONFIG_SEC_DEBUG_EXCEPTION_STACK
+	.if	\el == 0
 	add	sp, sp, #S_FRAME_SIZE		// restore sp
+	.else
+	add	sp, sp, #(S_FRAME_SIZE+PRESERVE_STACK_SIZE)
+	.endif /* \el == 0 */
+#else
+	add	sp, sp, #S_FRAME_SIZE		// restore sp
+#endif
 	/*
 	 * ARCH_HAS_MEMBARRIER_SYNC_CORE rely on eret context synchronization
 	 * when returning from IPI handler, and when returning to user-space.
@@ -471,9 +514,17 @@ __bad_stack:
 	 * S_FRAME_SIZE) was stashed in tpidr_el0 by kernel_ventry.
 	 */
 	sub	sp, sp, #S_FRAME_SIZE
+#ifdef CONFIG_SEC_DEBUG_BAD_STACK_CAREFULLY
+	kernel_entry fake_el_bad_stack
+#else
 	kernel_entry 1
+#endif
 	mrs	x0, tpidr_el0
+#ifdef CONFIG_SEC_DEBUG_EXCEPTION_STACK
+	add	x0, x0, #(S_FRAME_SIZE+PRESERVE_STACK_SIZE)
+#else
 	add	x0, x0, #S_FRAME_SIZE
+#endif
 	str	x0, [sp, #S_SP]
 
 	/* Stash the regs for handle_bad_stack */
@@ -485,10 +536,21 @@ __bad_stack:
 #endif /* CONFIG_VMAP_STACK */
 
 /*
+ * DPM handlers
+ */
+	.macro dpm_entry, el
+#ifdef CONFIG_DEBUG_SNAPSHOT
+	mov	x0, sp
+	bl	dbg_snapshot_do_dpm
+#endif
+	.endm
+
+/*
  * Invalid mode handlers
  */
 	.macro	inv_entry, el, reason, regsize = 64
 	kernel_entry \el, \regsize
+	dpm_entry
 	mov	x0, sp
 	mov	x1, #\reason
 	mrs	x2, esr_el1
@@ -540,6 +602,7 @@ ENDPROC(el1_error_invalid)
 	.align	6
 el1_sync:
 	kernel_entry 1
+	dpm_entry
 	mrs	x1, esr_el1			// read the syndrome register
 	lsr	x24, x1, #ESR_ELx_EC_SHIFT	// exception class
 	cmp	x24, #ESR_ELx_EC_DABT_CUR	// data abort in EL1
@@ -803,6 +866,9 @@ el0_undef:
 	enable_daif
 	ct_user_exit
 	mov	x0, sp
+#if defined(CONFIG_SEC_DEBUG_FAULT_MSG_ADV)
+	mrs	x1, esr_el1			// read the syndrome register
+#endif
 	bl	do_undefinstr
 	b	ret_to_user
 el0_sys:
@@ -947,9 +1013,20 @@ alternative_else_nop_endif
 
 	.macro tramp_unmap_kernel, tmp
 	mrs	\tmp, ttbr1_el1
-	sub	\tmp, \tmp, #(PAGE_SIZE + RESERVED_TTBR0_SIZE)
+#ifdef CONFIG_SOC_EXYNOS9830_EVT0
+	/*
+	 * Apply workaround to avoid errata of Lion evt0. (Lion-7071)
+	 * This workaroud will be removed when evt1 comes
+	 */
 	orr	\tmp, \tmp, #USER_ASID_FLAG
 	msr	ttbr1_el1, \tmp
+	sub	\tmp, \tmp, #(PAGE_SIZE + RESERVED_TTBR0_SIZE)
+#else
+	sub     \tmp, \tmp, #(PAGE_SIZE + RESERVED_TTBR0_SIZE)
+	orr     \tmp, \tmp, #USER_ASID_FLAG
+#endif
+	msr	ttbr1_el1, \tmp
+
 	/*
 	 * We avoid running the post_ttbr_update_workaround here because
 	 * it's only needed by Cavium ThunderX, which requires KPTI to be
@@ -998,8 +1075,10 @@ alternative_insn isb, nop, ARM64_WORKAROUND_QCOM_FALKOR_E1003
 
 	.align	11
 ENTRY(tramp_vectors)
-	.space	0x400
+	.space	0x200
+	b	.
 
+	.space	0x19c
 	tramp_ventry
 	tramp_ventry
 	tramp_ventry

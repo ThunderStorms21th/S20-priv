@@ -61,3 +61,9 @@ obj-$(CONFIG_MTK_THERMAL)	+= mtk_thermal.o
 obj-$(CONFIG_GENERIC_ADC_THERMAL)	+= thermal-generic-adc.o
 obj-$(CONFIG_ZX2967_THERMAL)	+= zx2967_thermal.o
 obj-$(CONFIG_UNIPHIER_THERMAL)	+= uniphier_thermal.o
+
+obj-$(CONFIG_GPU_THERMAL)	+= gpu_cooling.o
+obj-$(CONFIG_ISP_THERMAL)	+= isp_cooling.o
+obj-$(CONFIG_DEV_THERMAL)	+= dev_cooling.o
+
+subdir-ccflags-y := -Wformat

@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/device.h>
 #include <linux/fault-inject.h>
+#include <linux/wakelock.h>
 
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
@@ -63,6 +64,7 @@ struct mmc_ios {
 #define MMC_TIMING_MMC_DDR52	8
 #define MMC_TIMING_MMC_HS200	9
 #define MMC_TIMING_MMC_HS400	10
+#define MMC_TIMING_MMC_HS400_ES	11
 
 	unsigned char	signal_voltage;		/* signalling voltage (1.8V or 3.3V) */
 
@@ -83,6 +85,13 @@ struct mmc_ios {
 struct mmc_host;
 
 struct mmc_host_ops {
+	int (*init)(struct mmc_host *host);
+	/*
+	 * 'enable' is called when the host is claimed and 'disable' is called
+	 * when the host is released. 'enable' and 'disable' are deprecated.
+	 */
+	int (*enable)(struct mmc_host *host);
+	int (*disable)(struct mmc_host *host);
 	/*
 	 * It is optional for the host to implement pre_req and post_req in
 	 * order to support double buffering of requests (prepare one
@@ -168,6 +177,9 @@ struct mmc_host_ops {
 	 */
 	int	(*multi_io_quirk)(struct mmc_card *card,
 				  unsigned int direction, int blk_size);
+	void    (*ssclk_control)(struct mmc_host *host, int enable);
+
+	void	(*restore_host)(struct mmc_host *mmc);
 };
 
 struct mmc_cqe_ops {
@@ -332,6 +344,7 @@ struct mmc_host {
 				 MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_SDR104 | \
 				 MMC_CAP_UHS_DDR50)
 /* (1 << 21) is free for reuse */
+#define MMC_CAP_RUNTIME_RESUME  (1 << 22)
 #define MMC_CAP_DRIVER_TYPE_A	(1 << 23)	/* Host supports Driver Type A */
 #define MMC_CAP_DRIVER_TYPE_C	(1 << 24)	/* Host supports Driver Type C */
 #define MMC_CAP_DRIVER_TYPE_D	(1 << 25)	/* Host supports Driver Type D */
@@ -367,6 +380,9 @@ struct mmc_host {
 #define MMC_CAP2_CQE		(1 << 23)	/* Has eMMC command queue engine */
 #define MMC_CAP2_CQE_DCMD	(1 << 24)	/* CQE can issue a direct command */
 #define MMC_CAP2_AVOID_3_3V	(1 << 25)	/* Host must negotiate down from 3.3V */
+#define MMC_CAP2_DETECT_ON_ERR	(1 << 26)	/* On I/O err check card removal */
+#define MMC_CAP2_SKIP_INIT_SCAN		(1 << 27)		/* skip init mmc scan */
+
 
 	int			fixed_drv_type;	/* fixed driver type for non-removable media */
 
@@ -415,12 +431,19 @@ struct mmc_host {
 	struct mmc_ctx		default_ctx;	/* default context */
 
 	struct delayed_work	detect;
+	struct wake_lock        detect_wake_lock;
+	const char              *wlock_name;
 	int			detect_change;	/* card detect flag */
 	struct mmc_slot		slot;
 
 	const struct mmc_bus_ops *bus_ops;	/* current bus driver */
 	unsigned int		bus_refs;	/* reference counter */
 
+	unsigned int		bus_resume_flags;
+#define MMC_BUSRESUME_MANUAL_RESUME	(1 << 0)
+#define MMC_BUSRESUME_NEEDS_RESUME	(1 << 1)
+#define MMC_BUSRESUME_ENTER_IO		(1 << 2)
+#define MMC_BUSRESUME_ENTER_CMD		(1 << 3)
 	unsigned int		sdio_irqs;
 	struct task_struct	*sdio_irq_thread;
 	struct delayed_work	sdio_irq_work;
@@ -459,6 +482,7 @@ struct mmc_host {
 	bool			cqe_enabled;
 	bool			cqe_on;
 
+	int (*sdcard_uevent)(struct mmc_card *card);
 	unsigned long		private[0] ____cacheline_aligned;
 };
 
@@ -481,7 +505,19 @@ static inline void *mmc_priv(struct mmc_host *host)
 #define mmc_dev(x)	((x)->parent)
 #define mmc_classdev(x)	(&(x)->class_dev)
 #define mmc_hostname(x)	(dev_name(&(x)->class_dev))
+#define mmc_bus_needs_resume(host) ((host)->bus_resume_flags & MMC_BUSRESUME_NEEDS_RESUME)
+#define mmc_bus_manual_resume(host) ((host)->bus_resume_flags & MMC_BUSRESUME_MANUAL_RESUME)
 
+static inline void mmc_set_bus_resume_policy(struct mmc_host *host, int manual)
+{
+	if (manual) {
+		host->bus_resume_flags |= MMC_BUSRESUME_MANUAL_RESUME;
+		host->bus_resume_flags &= ~MMC_BUSRESUME_NEEDS_RESUME;
+	} else
+		host->bus_resume_flags &= ~MMC_BUSRESUME_MANUAL_RESUME;
+}
+
+extern int mmc_resume_bus(struct mmc_host *host);
 void mmc_detect_change(struct mmc_host *, unsigned long delay);
 void mmc_request_done(struct mmc_host *, struct mmc_request *);
 void mmc_command_done(struct mmc_host *host, struct mmc_request *mrq);

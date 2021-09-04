@@ -276,13 +276,6 @@ EXPORT_SYMBOL(console_set_on_cmdline);
 /* Flag: console code may call schedule() */
 static int console_may_schedule;
 
-enum con_msg_format_flags {
-	MSG_FORMAT_DEFAULT	= 0,
-	MSG_FORMAT_SYSLOG	= (1 << 0),
-};
-
-static int console_msg_format = MSG_FORMAT_DEFAULT;
-
 /*
  * The printk log buffer consists of a chain of concatenated variable
  * length records. Every record starts with a record header, containing
@@ -351,6 +344,7 @@ static int console_msg_format = MSG_FORMAT_DEFAULT;
  */
 
 enum log_flags {
+	LOG_NOCONS	= 1,	/* already flushed, do not print to console */
 	LOG_NEWLINE	= 2,	/* text ended with a newline */
 	LOG_PREFIX	= 4,	/* text started with a prefix */
 	LOG_CONT	= 8,	/* text is a fragment of a continuation line */
@@ -364,6 +358,16 @@ struct printk_log {
 	u8 facility;		/* syslog facility */
 	u8 flags:5;		/* internal record flags */
 	u8 level:3;		/* syslog level */
+#ifdef CONFIG_PRINTK_PROCESS
+	char process[16];	/* process name */
+	pid_t pid;		/* process id */
+	u8 cpu;			/* cpu id */
+	u8 in_interrupt;	/* interrupt context */
+#endif
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+	u8 for_auto_comment;
+	u8 type_auto_comment;
+#endif
 }
 #ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 __packed __aligned(4)
@@ -429,7 +433,19 @@ static u64 exclusive_console_stop_seq;
 static u64 clear_seq;
 static u32 clear_idx;
 
+/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+/* the next printk record to read after the last 'clear_knox' command */
+static u64 clear_seq_knox;
+static u32 clear_idx_knox;
+
+#define SYSLOG_ACTION_READ_CLEAR_KNOX 99
+/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+
+#ifdef CONFIG_PRINTK_PROCESS
+#define PREFIX_MAX		48
+#else
 #define PREFIX_MAX		32
+#endif
 #define LOG_LINE_MAX		(1024 - PREFIX_MAX)
 
 #define LOG_LEVEL(v)		((v) & 0x07)
@@ -538,6 +554,14 @@ static int log_make_free_space(u32 msg_size)
 		clear_idx = log_first_idx;
 	}
 
+	/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+	/* messages are gone, move to first available one */
+	if (clear_seq_knox < log_first_seq) {
+		clear_seq_knox = log_first_seq;
+		clear_idx_knox = log_first_idx;
+	}
+	/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+
 	/* sequence numbers are equal, so the log buffer is empty */
 	if (logbuf_has_space(msg_size, log_first_seq == log_next_seq))
 		return 0;
@@ -556,6 +580,116 @@ static u32 msg_used_size(u16 text_len, u16 dict_len, u32 *pad_len)
 
 	return size;
 }
+
+#ifdef CONFIG_PRINTK_PROCESS
+static bool printk_process = 1;
+static size_t print_process(const struct printk_log *msg, char *buf)
+
+{
+	if (!printk_process)
+		return 0;
+
+	if (!buf)
+		return snprintf(NULL, 0, "%c[%1d:%15s:%5d] ", ' ', 0, " ", 0);
+
+	return sprintf(buf, "%c[%1d:%15s:%5d] ",
+			msg->in_interrupt ? 'I' : ' ',
+			msg->cpu,
+			msg->process,
+			msg->pid);
+}
+#else
+static bool printk_process = 0;
+static size_t print_process(const struct printk_log *msg, char *buf)
+{
+	return 0;
+}
+#endif
+module_param_named(process, printk_process, bool, S_IRUGO | S_IWUSR);
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+static void (*func_hook_auto_comm)(int type, const char *buf, size_t size);
+void register_set_auto_comm_buf(void (*func)(int type, const char *buf, size_t size))
+{
+	func_hook_auto_comm = func;
+}
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+static void (*func_hook_init_log)(const char *buf, size_t size);
+void register_init_log_hook_func(void (*func)(const char *buf, size_t size))
+{
+	func_hook_init_log = func;
+}
+#endif
+
+#ifdef CONFIG_DEBUG_SNAPSHOT
+static size_t hook_size;
+static char hook_text[LOG_LINE_MAX + PREFIX_MAX];
+static void (*func_hook_logbuf)(const char *buf, size_t size, int fatal);
+static size_t msg_print_text(const struct printk_log *msg,
+			     bool syslog, char *buf, size_t size);
+void register_hook_logbuf(void (*func)(const char *buf, size_t size, int fatal))
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&logbuf_lock, flags);
+	/*
+	 * In register hooking function,  we should check messages already
+	 * printed on log_buf. If so, they will be copyied to backup
+	 * exynos log buffer
+	 * */
+	if (log_first_seq != log_next_seq) {
+		unsigned int step_seq, step_idx, start, end;
+		struct printk_log *msg;
+		start = log_first_seq;
+		end = log_next_seq;
+		step_idx = log_first_idx;
+		for (step_seq = start; step_seq < end; step_seq++) {
+			msg = (struct printk_log *)(log_buf + step_idx);
+			hook_size = msg_print_text(msg,
+					true, hook_text, LOG_LINE_MAX + PREFIX_MAX);
+			func(hook_text, hook_size, msg->level <= LOGLEVEL_ERR ? 1 : 0);
+			step_idx = log_next(step_idx);
+		}
+	}
+	func_hook_logbuf = func;
+	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
+}
+EXPORT_SYMBOL(register_hook_logbuf);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_FIRST2M_LOG
+void (*func_hook_first_kmsg)(const char *buf, size_t size);
+void register_first_kmsg_hook_func(void (*func)(const char *buf, size_t size))
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&logbuf_lock, flags);
+	/*
+	 * In register hooking function,  we should check messages already
+	 * printed on log_buf. If so, they will be copyied to backup
+	 * first2M log buffer
+	 * */
+	if (log_first_seq != log_next_seq) {
+		unsigned int step_seq, step_idx, start, end;
+		struct printk_log *msg;
+		start = log_first_seq;
+		end = log_next_seq;
+		step_idx = log_first_idx;
+		for (step_seq = start; step_seq < end; step_seq++) {
+			msg = (struct printk_log *)(log_buf + step_idx);
+			hook_size = msg_print_text(msg,
+					true, hook_text, LOG_LINE_MAX + PREFIX_MAX);
+			func(hook_text, hook_size);
+			step_idx = log_next(step_idx);
+		}
+	}
+	func_hook_first_kmsg = func;
+	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
+
+}
+#endif
 
 /*
  * Define how much of the log buffer we could take at maximum. The value
@@ -626,6 +760,13 @@ static int log_store(int facility, int level,
 	memcpy(log_dict(msg), dict, dict_len);
 	msg->dict_len = dict_len;
 	msg->facility = facility;
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+	msg->for_auto_comment = (level / 10 == 9) ? 1 : 0;
+	msg->type_auto_comment = (level / 10 == 9) ? level - LOGLEVEL_PR_AUTO_BASE : 0;
+	level = (msg->for_auto_comment) ? 0 : level;
+#endif
+
 	msg->level = level & 7;
 	msg->flags = flags & 0x1f;
 	if (ts_nsec > 0)
@@ -635,6 +776,39 @@ static int log_store(int facility, int level,
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = size;
 
+#ifdef CONFIG_PRINTK_PROCESS
+	if (printk_process) {
+		strncpy(msg->process, current->comm, sizeof(msg->process) - 1);
+		msg->process[sizeof(msg->process) - 1] = '\0';
+		msg->pid = task_pid_nr(current);
+		msg->cpu = smp_processor_id();
+		msg->in_interrupt = in_interrupt() ? 1 : 0;
+	}
+#endif
+#ifdef CONFIG_DEBUG_SNAPSHOT
+	if (func_hook_logbuf) {
+		hook_size = msg_print_text(msg,
+				true, hook_text, LOG_LINE_MAX + PREFIX_MAX);
+		func_hook_logbuf(hook_text, hook_size,
+				msg->level <= LOGLEVEL_ERR ? 1 : 0);
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+		if (msg->for_auto_comment && func_hook_auto_comm)
+			func_hook_auto_comm(msg->type_auto_comment, hook_text, hook_size);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_INIT_LOG
+		/* user log only */
+		if (msg->facility && task_pid_nr(current) == 1 && func_hook_init_log)
+			func_hook_init_log(hook_text, hook_size);
+#endif
+
+#if CONFIG_SEC_DEBUG_FIRST2M_LOG
+		if (func_hook_first_kmsg)
+			func_hook_first_kmsg(hook_text, hook_size);
+#endif
+	}
+#endif
 	/* insert message */
 	log_next_idx += msg->len;
 	log_next_seq++;
@@ -778,11 +952,12 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 		return len;
 
 	/* Ratelimit when not explicitly enabled. */
+	/*
 	if (!(devkmsg_log & DEVKMSG_LOG_MASK_ON)) {
 		if (!___ratelimit(&user->rs, current->comm))
 			return ret;
 	}
-
+	*/
 	buf = kmalloc(len+1, GFP_KERNEL);
 	if (buf == NULL)
 		return -ENOMEM;
@@ -927,13 +1102,13 @@ static loff_t devkmsg_llseek(struct file *file, loff_t offset, int whence)
 	return ret;
 }
 
-static __poll_t devkmsg_poll(struct file *file, poll_table *wait)
+static unsigned int devkmsg_poll(struct file *file, poll_table *wait)
 {
 	struct devkmsg_user *user = file->private_data;
-	__poll_t ret = 0;
+	int ret = 0;
 
 	if (!user)
-		return EPOLLERR|EPOLLNVAL;
+		return POLLERR|POLLNVAL;
 
 	poll_wait(file, &log_wait, wait);
 
@@ -941,9 +1116,9 @@ static __poll_t devkmsg_poll(struct file *file, poll_table *wait)
 	if (user->seq < log_next_seq) {
 		/* return error when data has vanished underneath us */
 		if (user->seq < log_first_seq)
-			ret = EPOLLIN|EPOLLRDNORM|EPOLLERR|EPOLLPRI;
+			ret = POLLIN|POLLRDNORM|POLLERR|POLLPRI;
 		else
-			ret = EPOLLIN|EPOLLRDNORM;
+			ret = POLLIN|POLLRDNORM;
 	}
 	logbuf_unlock_irq();
 
@@ -1116,6 +1291,7 @@ void __init setup_log_buf(int early)
 	if (!new_log_buf_len)
 		return;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_LOGBUF);
 	if (early) {
 		new_log_buf =
 			memblock_virt_alloc(new_log_buf_len, LOG_ALIGN);
@@ -1123,6 +1299,7 @@ void __init setup_log_buf(int early)
 		new_log_buf = memblock_virt_alloc_nopanic(new_log_buf_len,
 							  LOG_ALIGN);
 	}
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 
 	if (unlikely(!new_log_buf)) {
 		pr_err("log_buf_len: %lu bytes not available\n",
@@ -1257,6 +1434,7 @@ static size_t print_prefix(const struct printk_log *msg, bool syslog, char *buf)
 	}
 
 	len += print_time(msg->ts_nsec, buf ? buf + len : NULL);
+	len += print_process(msg, buf ? buf + len : NULL);
 	return len;
 }
 
@@ -1361,91 +1539,108 @@ static int syslog_print(char __user *buf, int size)
 	return len;
 }
 
-static int syslog_print_all(char __user *buf, int size, bool clear)
+static int syslog_print_all(char __user *buf, int size, bool clear, bool knox)
 {
 	char *text;
 	int len = 0;
-	u64 next_seq;
-	u64 seq;
-	u32 idx;
 
 	text = kmalloc(LOG_LINE_MAX + PREFIX_MAX, GFP_KERNEL);
 	if (!text)
 		return -ENOMEM;
 
 	logbuf_lock_irq();
-	/*
-	 * Find first record that fits, including all following records,
-	 * into the user-provided buffer for this dump.
-	 */
-	seq = clear_seq;
-	idx = clear_idx;
-	while (seq < log_next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
+	if (buf) {
+		u64 next_seq;
+		u64 seq;
+		u32 idx;
 
-		len += msg_print_text(msg, true, NULL, 0);
-		idx = log_next(idx);
-		seq++;
-	}
-
-	/* move first record forward until length fits into the buffer */
-	seq = clear_seq;
-	idx = clear_idx;
-	while (len > size && seq < log_next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
-
-		len -= msg_print_text(msg, true, NULL, 0);
-		idx = log_next(idx);
-		seq++;
-	}
-
-	/* last message fitting into this dump */
-	next_seq = log_next_seq;
-
-	len = 0;
-	while (len >= 0 && seq < next_seq) {
-		struct printk_log *msg = log_from_idx(idx);
-		int textlen;
-
-		textlen = msg_print_text(msg, true, text,
-					 LOG_LINE_MAX + PREFIX_MAX);
-		if (textlen < 0) {
-			len = textlen;
-			break;
+		/*
+		 * Find first record that fits, including all following records,
+		 * into the user-provided buffer for this dump.
+		 */
+		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+		if (!knox) {
+			seq = clear_seq;
+			idx = clear_idx;
+		} else { //MDM edmaudit
+			seq = clear_seq_knox;
+			idx = clear_idx_knox;
 		}
-		idx = log_next(idx);
-		seq++;
+		/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+		while (seq < log_next_seq) {
+			struct printk_log *msg = log_from_idx(idx);
 
-		logbuf_unlock_irq();
-		if (copy_to_user(buf + len, text, textlen))
-			len = -EFAULT;
-		else
-			len += textlen;
-		logbuf_lock_irq();
+			len += msg_print_text(msg, true, NULL, 0);
+			idx = log_next(idx);
+			seq++;
+		}
 
-		if (seq < log_first_seq) {
-			/* messages are gone, move to next one */
-			seq = log_first_seq;
-			idx = log_first_idx;
+		/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+		/* move first record forward until length fits into the buffer */
+		if (!knox) {
+			seq = clear_seq;
+			idx = clear_idx;
+		} else { // MDM edmaudit
+			seq = clear_seq_knox;
+			idx = clear_idx_knox;
+		}
+		/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+		while (len > size && seq < log_next_seq) {
+			struct printk_log *msg = log_from_idx(idx);
+
+			len -= msg_print_text(msg, true, NULL, 0);
+			idx = log_next(idx);
+			seq++;
+		}
+
+		/* last message fitting into this dump */
+		next_seq = log_next_seq;
+
+		len = 0;
+		while (len >= 0 && seq < next_seq) {
+			struct printk_log *msg = log_from_idx(idx);
+			int textlen;
+
+			textlen = msg_print_text(msg, true, text,
+						 LOG_LINE_MAX + PREFIX_MAX);
+			if (textlen < 0) {
+				len = textlen;
+				break;
+			}
+			idx = log_next(idx);
+			seq++;
+
+			logbuf_unlock_irq();
+			if (copy_to_user(buf + len, text, textlen))
+				len = -EFAULT;
+			else
+				len += textlen;
+			logbuf_lock_irq();
+
+			if (seq < log_first_seq) {
+				/* messages are gone, move to next one */
+				seq = log_first_seq;
+				idx = log_first_idx;
+			}
 		}
 	}
 
+	/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
 	if (clear) {
-		clear_seq = log_next_seq;
-		clear_idx = log_next_idx;
+		if (!knox) {
+			clear_seq = log_next_seq;
+			clear_idx = log_next_idx;
+		} else { //MDM edmaudit
+			clear_seq_knox = log_next_seq;
+			clear_idx_knox = log_next_idx;
+		}
 	}
+	/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
+
 	logbuf_unlock_irq();
 
 	kfree(text);
 	return len;
-}
-
-static void syslog_clear(void)
-{
-	logbuf_lock_irq();
-	clear_seq = log_next_seq;
-	clear_idx = log_next_idx;
-	logbuf_unlock_irq();
 }
 
 int do_syslog(int type, char __user *buf, int len, int source)
@@ -1488,11 +1683,11 @@ int do_syslog(int type, char __user *buf, int len, int source)
 			return 0;
 		if (!access_ok(VERIFY_WRITE, buf, len))
 			return -EFAULT;
-		error = syslog_print_all(buf, len, clear);
+		error = syslog_print_all(buf, len, clear, false);
 		break;
 	/* Clear ring buffer */
 	case SYSLOG_ACTION_CLEAR:
-		syslog_clear();
+		syslog_print_all(NULL, 0, true, false);
 		break;
 	/* Disable logging to console */
 	case SYSLOG_ACTION_CONSOLE_OFF:
@@ -1552,157 +1747,32 @@ int do_syslog(int type, char __user *buf, int len, int source)
 	case SYSLOG_ACTION_SIZE_BUFFER:
 		error = log_buf_len;
 		break;
+	/* { SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM edmaudit Read last kernel messages */
+	case SYSLOG_ACTION_READ_CLEAR_KNOX:
+		error = -EINVAL;
+		if (!buf || len < 0)
+			goto out;
+		error = 0;
+		if (!len)
+			goto out;
+		if (!access_ok(VERIFY_WRITE, buf, len)) {
+			error = -EFAULT;
+			goto out;
+		}
+		error = syslog_print_all(buf, len, /* clear */ true, /* knox */true);
+		break;
+	/* } SecProductFeature_KNOX.SEC_PRODUCT_FEATURE_KNOX_SUPPORT_MDM */
 	default:
 		error = -EINVAL;
 		break;
 	}
-
+out:
 	return error;
 }
 
 SYSCALL_DEFINE3(syslog, int, type, char __user *, buf, int, len)
 {
 	return do_syslog(type, buf, len, SYSLOG_FROM_READER);
-}
-
-/*
- * Special console_lock variants that help to reduce the risk of soft-lockups.
- * They allow to pass console_lock to another printk() call using a busy wait.
- */
-
-#ifdef CONFIG_LOCKDEP
-static struct lockdep_map console_owner_dep_map = {
-	.name = "console_owner"
-};
-#endif
-
-static DEFINE_RAW_SPINLOCK(console_owner_lock);
-static struct task_struct *console_owner;
-static bool console_waiter;
-
-/**
- * console_lock_spinning_enable - mark beginning of code where another
- *	thread might safely busy wait
- *
- * This basically converts console_lock into a spinlock. This marks
- * the section where the console_lock owner can not sleep, because
- * there may be a waiter spinning (like a spinlock). Also it must be
- * ready to hand over the lock at the end of the section.
- */
-static void console_lock_spinning_enable(void)
-{
-	raw_spin_lock(&console_owner_lock);
-	console_owner = current;
-	raw_spin_unlock(&console_owner_lock);
-
-	/* The waiter may spin on us after setting console_owner */
-	spin_acquire(&console_owner_dep_map, 0, 0, _THIS_IP_);
-}
-
-/**
- * console_lock_spinning_disable_and_check - mark end of code where another
- *	thread was able to busy wait and check if there is a waiter
- *
- * This is called at the end of the section where spinning is allowed.
- * It has two functions. First, it is a signal that it is no longer
- * safe to start busy waiting for the lock. Second, it checks if
- * there is a busy waiter and passes the lock rights to her.
- *
- * Important: Callers lose the lock if there was a busy waiter.
- *	They must not touch items synchronized by console_lock
- *	in this case.
- *
- * Return: 1 if the lock rights were passed, 0 otherwise.
- */
-static int console_lock_spinning_disable_and_check(void)
-{
-	int waiter;
-
-	raw_spin_lock(&console_owner_lock);
-	waiter = READ_ONCE(console_waiter);
-	console_owner = NULL;
-	raw_spin_unlock(&console_owner_lock);
-
-	if (!waiter) {
-		spin_release(&console_owner_dep_map, 1, _THIS_IP_);
-		return 0;
-	}
-
-	/* The waiter is now free to continue */
-	WRITE_ONCE(console_waiter, false);
-
-	spin_release(&console_owner_dep_map, 1, _THIS_IP_);
-
-	/*
-	 * Hand off console_lock to waiter. The waiter will perform
-	 * the up(). After this, the waiter is the console_lock owner.
-	 */
-	mutex_release(&console_lock_dep_map, 1, _THIS_IP_);
-	return 1;
-}
-
-/**
- * console_trylock_spinning - try to get console_lock by busy waiting
- *
- * This allows to busy wait for the console_lock when the current
- * owner is running in specially marked sections. It means that
- * the current owner is running and cannot reschedule until it
- * is ready to lose the lock.
- *
- * Return: 1 if we got the lock, 0 othrewise
- */
-static int console_trylock_spinning(void)
-{
-	struct task_struct *owner = NULL;
-	bool waiter;
-	bool spin = false;
-	unsigned long flags;
-
-	if (console_trylock())
-		return 1;
-
-	printk_safe_enter_irqsave(flags);
-
-	raw_spin_lock(&console_owner_lock);
-	owner = READ_ONCE(console_owner);
-	waiter = READ_ONCE(console_waiter);
-	if (!waiter && owner && owner != current) {
-		WRITE_ONCE(console_waiter, true);
-		spin = true;
-	}
-	raw_spin_unlock(&console_owner_lock);
-
-	/*
-	 * If there is an active printk() writing to the
-	 * consoles, instead of having it write our data too,
-	 * see if we can offload that load from the active
-	 * printer, and do some printing ourselves.
-	 * Go into a spin only if there isn't already a waiter
-	 * spinning, and there is an active printer, and
-	 * that active printer isn't us (recursive printk?).
-	 */
-	if (!spin) {
-		printk_safe_exit_irqrestore(flags);
-		return 0;
-	}
-
-	/* We spin waiting for the owner to release us */
-	spin_acquire(&console_owner_dep_map, 0, 0, _THIS_IP_);
-	/* Owner will clear console_waiter on hand off */
-	while (READ_ONCE(console_waiter))
-		cpu_relax();
-	spin_release(&console_owner_dep_map, 1, _THIS_IP_);
-
-	printk_safe_exit_irqrestore(flags);
-	/*
-	 * The owner passed the console lock to us.
-	 * Since we did not spin on console lock, annotate
-	 * this as a trylock. Otherwise lockdep will
-	 * complain.
-	 */
-	mutex_acquire(&console_lock_dep_map, 0, 1, _THIS_IP_);
-
-	return 1;
 }
 
 /*
@@ -1851,7 +1921,19 @@ int vprintk_store(int facility, int level,
 	char *text = textbuf;
 	size_t text_len;
 	enum log_flags lflags = 0;
+	int this_cpu;
+	bool in_sched = false;
 
+	if (level == LOGLEVEL_SCHED) {
+		level = LOGLEVEL_DEFAULT;
+		in_sched = true;
+	}
+
+	boot_delay_msec(level);
+	printk_delay();
+
+	/* This stops the holder of console_sem just where we want him */
+	this_cpu = smp_processor_id();
 	/*
 	 * The printf needs to come first; we need the syslog
 	 * prefix which might be passed-in as a parameter.
@@ -1874,6 +1956,12 @@ int vprintk_store(int facility, int level,
 				if (level == LOGLEVEL_DEFAULT)
 					level = kern_level - '0';
 				/* fallthrough */
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+			case 'B' ... 'J':
+				if (level == LOGLEVEL_DEFAULT)
+					level = LOGLEVEL_PR_AUTO_BASE + (kern_level - 'A'); /* 91 ~ 99 */
+				/* fallthrough */
+#endif
 			case 'd':	/* KERN_DEFAULT */
 				lflags |= LOG_PREFIX;
 				break;
@@ -1933,13 +2021,14 @@ asmlinkage int vprintk_emit(int facility, int level,
 		 * semaphore.  The release will print out buffers and wake up
 		 * /dev/kmsg and syslog() users.
 		 */
-		if (console_trylock_spinning())
+		if (console_trylock())
 			console_unlock();
 		preempt_enable();
 	}
 
 	if (pending_output)
 		wake_up_klogd();
+
 	return printed_len;
 }
 EXPORT_SYMBOL(vprintk_emit);
@@ -2039,8 +2128,6 @@ static ssize_t msg_print_ext_header(char *buf, size_t size,
 static ssize_t msg_print_ext_body(char *buf, size_t size,
 				  char *dict, size_t dict_len,
 				  char *text, size_t text_len) { return 0; }
-static void console_lock_spinning_enable(void) { }
-static int console_lock_spinning_disable_and_check(void) { return 0; }
 static void call_console_drivers(const char *ext_text, size_t ext_len,
 				 const char *text, size_t len) {}
 static size_t msg_print_text(const struct printk_log *msg,
@@ -2099,17 +2186,6 @@ static int __add_preferred_console(char *name, int idx, char *options,
 	c->index = idx;
 	return 0;
 }
-
-static int __init console_msg_format_setup(char *str)
-{
-	if (!strcmp(str, "syslog"))
-		console_msg_format = MSG_FORMAT_SYSLOG;
-	if (!strcmp(str, "default"))
-		console_msg_format = MSG_FORMAT_DEFAULT;
-	return 1;
-}
-__setup("console_msg_format=", console_msg_format_setup);
-
 /*
  * Set up a console.  Called via do_early_param() in init/main.c
  * for each "console=" parameter in the boot command line.
@@ -2195,7 +2271,7 @@ void suspend_console(void)
 {
 	if (!console_suspend_enabled)
 		return;
-	pr_info("Suspending console(s) (use no_console_suspend to debug)\n");
+	printk("Suspending console(s) (use no_console_suspend to debug)\n");
 	console_lock();
 	console_suspended = 1;
 	up_console_sem();
@@ -2275,7 +2351,6 @@ int is_console_locked(void)
 {
 	return console_locked;
 }
-EXPORT_SYMBOL(is_console_locked);
 
 /*
  * Check if we have any console that is capable of printing while cpu is
@@ -2323,7 +2398,9 @@ void console_unlock(void)
 {
 	static char ext_text[CONSOLE_EXT_LOG_MAX];
 	static char text[LOG_LINE_MAX + PREFIX_MAX];
+	static u64 seen_seq;
 	unsigned long flags;
+	bool wake_klogd = false;
 	bool do_cond_resched, retry;
 
 	if (console_suspended) {
@@ -2367,6 +2444,11 @@ again:
 
 		printk_safe_enter_irqsave(flags);
 		raw_spin_lock(&logbuf_lock);
+		if (seen_seq != log_next_seq) {
+			wake_klogd = true;
+			seen_seq = log_next_seq;
+		}
+
 		if (console_seq < log_first_seq) {
 			len = sprintf(text,
 				      "** %llu printk messages dropped **\n",
@@ -2401,7 +2483,7 @@ skip:
 		}
 
 		len += msg_print_text(msg,
-				console_msg_format & MSG_FORMAT_SYSLOG,
+				false,
 				text + len,
 				sizeof(text) - len);
 		if (nr_ext_console_drivers) {
@@ -2417,29 +2499,14 @@ skip:
 		console_seq++;
 		raw_spin_unlock(&logbuf_lock);
 
-		/*
-		 * While actively printing out messages, if another printk()
-		 * were to occur on another CPU, it may wait for this one to
-		 * finish. This task can not be preempted if there is a
-		 * waiter waiting to take over.
-		 */
-		console_lock_spinning_enable();
-
 		stop_critical_timings();	/* don't trace print latency */
 		call_console_drivers(ext_text, ext_len, text, len);
 		start_critical_timings();
-
-		if (console_lock_spinning_disable_and_check()) {
-			printk_safe_exit_irqrestore(flags);
-			return;
-		}
-
 		printk_safe_exit_irqrestore(flags);
 
 		if (do_cond_resched)
 			cond_resched();
 	}
-
 	console_locked = 0;
 
 	raw_spin_unlock(&logbuf_lock);
@@ -2459,6 +2526,9 @@ skip:
 
 	if (retry && console_trylock())
 		goto again;
+
+	if (wake_klogd)
+		wake_up_klogd();
 }
 EXPORT_SYMBOL(console_unlock);
 
@@ -3297,5 +3367,4 @@ void kmsg_dump_rewind(struct kmsg_dumper *dumper)
 	logbuf_unlock_irqrestore(flags);
 }
 EXPORT_SYMBOL_GPL(kmsg_dump_rewind);
-
 #endif

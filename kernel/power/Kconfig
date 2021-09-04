@@ -313,3 +313,17 @@ config ENERGY_MODEL
 	  The exact usage of the energy model is subsystem-dependent.
 
 	  If in doubt, say N.
+
+config FOTA_LIMIT
+	bool "Fota limit information node"
+	default n
+	help
+	  Add sysfs to notify limit information to recovery module
+	  /sys/power/fota_limit
+
+config SEC_PERF_BIG_AFFINITY_RESUME
+        bool "resume process set affinity to big CPUs"
+	default n
+	help
+	  need to decrease resume time
+	  set big affinity to resume process

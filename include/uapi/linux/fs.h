@@ -258,6 +258,12 @@ struct fsxattr {
 #define FS_IOC_GETFSLABEL		_IOR(0x94, 49, char[FSLABEL_MAX])
 #define FS_IOC_SETFSLABEL		_IOW(0x94, 50, char[FSLABEL_MAX])
 
+#ifdef CONFIG_DDAR
+#define FS_IOC_GET_DD_POLICY			_IO('P', 0x00)
+#define FS_IOC_SET_DD_POLICY			_IO('P', 0x01)
+#define FS_IOC_GET_DD_INODE_COUNT		_IOR('P', 0x02, long)
+#endif
+
 /*
  * File system encryption support
  */
@@ -283,6 +289,7 @@ struct fsxattr {
 #define FS_ENCRYPTION_MODE_SPECK128_256_XTS	7 /* Removed, do not use. */
 #define FS_ENCRYPTION_MODE_SPECK128_256_CTS	8 /* Removed, do not use. */
 #define FS_ENCRYPTION_MODE_ADIANTUM		9
+#define FS_ENCRYPTION_MODE_PRIVATE		127
 
 struct fscrypt_policy {
 	__u8 version;

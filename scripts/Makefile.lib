@@ -170,6 +170,10 @@ dtc_cpp_flags  = -Wp,-MD,$(depfile).pre.tmp -nostdinc                    \
 		 $(addprefix -I,$(DTC_INCLUDE))                          \
 		 -undef -D__DTS__
 
+ifeq ($(CONFIG_SEC_FACTORY),y)
+dtc_cpp_flags += -DCONFIG_SEC_FACTORY
+endif
+
 # Useful for describing the dependency of composite objects
 # Usage:
 #   $(call multi_depend, multi_used_targets, suffix_to_remove, suffix_to_add)
@@ -244,6 +248,9 @@ cmd_gzip = (cat $(filter-out FORCE,$^) | gzip -n -f -9 > $@) || \
 # ---------------------------------------------------------------------------
 DTC ?= $(objtree)/scripts/dtc/dtc
 
+# Overlay support
+DTC_FLAGS += -@
+
 # Disable noisy checks by default
 ifeq ($(findstring 1,$(KBUILD_ENABLE_EXTRA_GCC_CHECKS)),)
 DTC_FLAGS += -Wno-unit_address_vs_reg \
@@ -281,15 +288,32 @@ cmd_dt_S_dtb=						\
 $(obj)/%.dtb.S: $(obj)/%.dtb FORCE
 	$(call if_changed,dt_S_dtb)
 
+show_dtc_error =                                                          	\
+(                                                                         	\
+	cat $1;                                                           	\
+	for err in "$$(cat $1 | grep 'Error:')"; do                       	\
+		echo "See more detail error as below:";                   	\
+		cat $$(echo $$err | cut -d':' -f2) | nl -ba			\
+		| head -n $$(echo $$err | grep -Eo ':[0-9]+' | cut -d':' -f2)	\
+		| tail -n 2;							\
+	done;									\
+	rm $1;									\
+	false;									\
+)
+
 quiet_cmd_dtc = DTC     $@
 cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
 	$(CPP) $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $< ; \
-	$(DTC) -O dtb -o $@ -b 0 \
+	$(DTC) -O dtb -o $@ -b 0 -a 4 \
 		$(addprefix -i,$(dir $<) $(DTC_INCLUDE)) $(DTC_FLAGS) \
-		-d $(depfile).dtc.tmp $(dtc-tmp) ; \
+		-d $(depfile).dtc.tmp $(dtc-tmp) 2>$@.dtout || $(call show_dtc_error, $@.dtout) ;\
+	$(DTC) -O dts -I dtb -o $@.reverse.dts $(DTC_FLAGS) $@ ; \
 	cat $(depfile).pre.tmp $(depfile).dtc.tmp > $(depfile)
 
 $(obj)/%.dtb: $(src)/%.dts $(DTC) FORCE
+	$(call if_changed_dep,dtc)
+
+$(obj)/%.dtbo: $(src)/%.dts FORCE
 	$(call if_changed_dep,dtc)
 
 dtc-tmp = $(subst $(comma),_,$(dot-target).dts.tmp)

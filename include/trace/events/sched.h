@@ -890,25 +890,28 @@ TRACE_EVENT(sched_find_best_target,
  */
 TRACE_EVENT(sched_boost_cpu,
 
-	TP_PROTO(int cpu, unsigned long util, long margin),
+	TP_PROTO(int cpu, unsigned long util, unsigned long rt_util, long margin),
 
-	TP_ARGS(cpu, util, margin),
+	TP_ARGS(cpu, util, rt_util, margin),
 
 	TP_STRUCT__entry(
 		__field( int,           cpu	)
 		__field( unsigned long, util	)
+		__field( unsigned long, rt_util	)
 		__field(long,           margin	)
 	),
 
 	TP_fast_assign(
 		__entry->cpu    = cpu;
 		__entry->util   = util;
+		__entry->rt_util   = rt_util;
 		__entry->margin = margin;
 	),
 
-	TP_printk("cpu=%d util=%lu margin=%ld",
+	TP_printk("cpu=%d util=%lu rt_util=%lu margin=%ld",
 		__entry->cpu,
 		__entry->util,
+		__entry->rt_util,
 		__entry->margin)
 );
 

@@ -24,6 +24,7 @@
 #include <linux/usb/audio.h>
 #include <linux/usb/audio-v2.h>
 #include <linux/usb/audio-v3.h>
+#include <linux/usb/exynos_usb_audio.h>
 
 #include <sound/core.h>
 #include <sound/info.h>
@@ -510,6 +511,30 @@ static int set_sample_rate_v2v3(struct snd_usb_audio *chip, int iface,
 	int clock;
 	bool writeable;
 	u32 bmControls;
+	unsigned char ep;
+	unsigned char numEndpoints;
+	int direction;
+	int i;
+
+	numEndpoints = get_iface_desc(alts)->bNumEndpoints;
+	if (numEndpoints < 1)
+		return -EINVAL;
+	if (numEndpoints == 1) {
+		ep = get_endpoint(alts, 0)->bEndpointAddress;
+	} else {
+		for (i = 0; i < numEndpoints; i++) {
+			ep = get_endpoint(alts, i)->bmAttributes;
+			if (!(ep & 0x30)) {
+				ep = get_endpoint(alts, i)->bEndpointAddress;
+				break;
+			}
+		}
+	}
+	if (ep & 0x80)
+		direction = 1;
+	else
+		direction = 0;
+
 
 	/* First, try to find a valid clock. This may trigger
 	 * automatic clock selection if the current clock is not
@@ -584,8 +609,15 @@ static int set_sample_rate_v2v3(struct snd_usb_audio *chip, int iface,
 	 * interface is active. */
 	if (rate != prev_rate) {
 		usb_set_interface(dev, iface, 0);
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+		exynos_usb_audio_setintf(dev, fmt->iface, 0, direction);
+#endif
 		snd_usb_set_interface_quirk(dev);
 		usb_set_interface(dev, iface, fmt->altsetting);
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+		exynos_usb_audio_setintf(dev, fmt->iface,
+					fmt->altsetting, direction);
+#endif
 		snd_usb_set_interface_quirk(dev);
 	}
 

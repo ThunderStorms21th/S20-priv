@@ -51,6 +51,9 @@ int of_i2c_get_board_info(struct device *dev, struct device_node *node,
 		info->flags |= I2C_CLIENT_SLAVE;
 	}
 
+	if (of_get_property(node, "i2c-speedy-address", NULL))
+		info->flags |= I2C_CLIENT_SPEEDY;
+
 	info->addr = addr;
 	info->of_node = node;
 

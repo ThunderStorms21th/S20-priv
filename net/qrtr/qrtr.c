@@ -101,7 +101,7 @@ static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 	return container_of(sk, struct qrtr_sock, sk);
 }
 
-static unsigned int qrtr_local_nid = -1;
+static unsigned int qrtr_local_nid = 1;
 
 /* for node ids */
 static RADIX_TREE(qrtr_nodes, GFP_KERNEL);
@@ -203,7 +203,7 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	hdr->size = cpu_to_le32(len);
 	hdr->confirm_rx = 0;
 
-	skb_put_padto(skb, ALIGN(len, 4));
+	skb_put_padto(skb, ALIGN(len, 4) + sizeof(*hdr));
 
 	mutex_lock(&node->ep_lock);
 	if (node->ep)
@@ -1078,6 +1078,7 @@ static const struct nla_policy qrtr_policy[IFA_MAX + 1] = {
 	[IFA_LOCAL] = { .type = NLA_U32 },
 };
 
+#ifndef CONFIG_ARCH_EXYNOS9
 static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 			  struct netlink_ext_ack *extack)
 {
@@ -1104,6 +1105,7 @@ static int qrtr_addr_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 	qrtr_local_nid = nla_get_u32(tb[IFA_LOCAL]);
 	return 0;
 }
+#endif
 
 static const struct net_proto_family qrtr_family = {
 	.owner	= THIS_MODULE,
@@ -1125,11 +1127,7 @@ static int __init qrtr_proto_init(void)
 		return rc;
 	}
 
-	rc = rtnl_register_module(THIS_MODULE, PF_QIPCRTR, RTM_NEWADDR, qrtr_addr_doit, NULL, 0);
-	if (rc) {
-		sock_unregister(qrtr_family.family);
-		proto_unregister(&qrtr_proto);
-	}
+	qrtr_ns_init();
 
 	return rc;
 }
@@ -1137,7 +1135,7 @@ postcore_initcall(qrtr_proto_init);
 
 static void __exit qrtr_proto_fini(void)
 {
-	rtnl_unregister(PF_QIPCRTR, RTM_NEWADDR);
+	qrtr_ns_remove();
 	sock_unregister(qrtr_family.family);
 	proto_unregister(&qrtr_proto);
 }

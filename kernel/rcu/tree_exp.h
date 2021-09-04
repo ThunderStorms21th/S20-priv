@@ -21,6 +21,7 @@
  */
 
 #include <linux/lockdep.h>
+#include <linux/sec_debug.h>
 
 /*
  * Record the start of an expedited grace period.
@@ -535,7 +536,6 @@ static void synchronize_sched_expedited_wait(struct rcu_state *rsp)
 		WARN_ON(ret < 0);  /* workqueues should not be signaled. */
 		if (rcu_cpu_stall_suppress)
 			continue;
-		panic_on_rcu_stall();
 		pr_err("INFO: %s detected expedited stalls on CPUs/tasks: {",
 		       rsp->name);
 		ndetected = 0;
@@ -580,6 +580,7 @@ static void synchronize_sched_expedited_wait(struct rcu_state *rsp)
 				dump_cpu_task(cpu);
 			}
 		}
+		panic_on_rcu_stall();
 		jiffies_stall = 3 * rcu_jiffies_till_stall_check() + 3;
 	}
 }
@@ -678,6 +679,7 @@ static void _synchronize_rcu_expedited(struct rcu_state *rsp,
 		rew.rew_s = s;
 		INIT_WORK_ONSTACK(&rew.rew_work, wait_rcu_exp_gp);
 		queue_work(rcu_gp_wq, &rew.rew_work);
+		secdbg_dtsk_set_data(DTYPE_WORK, &rew.rew_work);
 	}
 
 	/* Wait for expedited grace period to complete. */
@@ -686,6 +688,8 @@ static void _synchronize_rcu_expedited(struct rcu_state *rsp,
 	wait_event(rnp->exp_wq[rcu_seq_ctr(s) & 0x3],
 		   sync_exp_work_done(rsp, s));
 	smp_mb(); /* Workqueue actions happen before return. */
+
+	secdbg_dtsk_clear_data();
 
 	/* Let the next expedited grace period start. */
 	mutex_unlock(&rsp->exp_mutex);

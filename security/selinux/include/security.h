@@ -16,6 +16,10 @@
 #include <linux/refcount.h>
 #include <linux/workqueue.h>
 #include "flask.h"
+#ifdef CONFIG_KDP_CRED
+#include <linux/uh.h>
+#include <linux/kdp.h>
+#endif
 
 #define SECSID_NULL			0x00000000 /* unspecified SID */
 #define SECSID_WILD			0xffffffff /* wildcard SID */
@@ -67,7 +71,11 @@
 
 struct netlbl_lsm_secattr;
 
+#if (defined CONFIG_KDP_CRED && defined CONFIG_SAMSUNG_PRODUCT_SHIP)
+extern int selinux_enabled __kdp_ro;
+#else
 extern int selinux_enabled;
+#endif
 
 /* Policy capabilities */
 enum {
@@ -104,6 +112,7 @@ struct selinux_state {
 	bool checkreqprot;
 	bool initialized;
 	bool policycap[__POLICYDB_CAPABILITY_MAX];
+	bool android_netlink_route;
 	struct selinux_avc *avc;
 	struct selinux_ss *ss;
 };
@@ -114,14 +123,24 @@ void selinux_avc_init(struct selinux_avc **avc);
 extern struct selinux_state selinux_state;
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+//If the binary is no-ship, selinux_enforcing value can be changed.
+#if (defined CONFIG_KDP_CRED && defined CONFIG_SAMSUNG_PRODUCT_SHIP)
+extern int selinux_enforcing __kdp_ro;
+#else
+extern int selinux_enforcing;
+#endif
 static inline bool enforcing_enabled(struct selinux_state *state)
 {
-	return state->enforcing;
+	return selinux_enforcing; // SEC_SELINUX_PORTING_COMMON Change to use RKP 
 }
 
 static inline void enforcing_set(struct selinux_state *state, bool value)
 {
-	state->enforcing = value;
+#if (defined CONFIG_KDP_CRED && defined CONFIG_SAMSUNG_PRODUCT_SHIP)
+	uh_call(UH_APP_KDP, RKP_KDP_X60, (u64)&selinux_enforcing, (u64)value, 0, 0);
+#else
+	selinux_enforcing = value; // SEC_SELINUX_PORTING_COMMON Change to use RKP 
+#endif
 }
 #else
 static inline bool enforcing_enabled(struct selinux_state *state)
@@ -176,6 +195,13 @@ static inline bool selinux_policycap_nnp_nosuid_transition(void)
 	return state->policycap[POLICYDB_CAPABILITY_NNP_NOSUID_TRANSITION];
 }
 
+static inline bool selinux_android_nlroute_getlink(void)
+{
+	struct selinux_state *state = &selinux_state;
+
+	return state->android_netlink_route;
+}
+
 int security_mls_enabled(struct selinux_state *state);
 int security_load_policy(struct selinux_state *state,
 			 void *data, size_t len);
@@ -219,7 +245,13 @@ struct extended_perms {
 };
 
 /* definitions of av_decision.flags */
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_ALWAYS_ENFORCE
+#define AVD_FLAGS_PERMISSIVE	0x0000
+#else
 #define AVD_FLAGS_PERMISSIVE	0x0001
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 
 void security_compute_av(struct selinux_state *state,
 			 u32 ssid, u32 tsid,
@@ -390,5 +422,6 @@ extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
 extern void avtab_cache_init(void);
 extern void ebitmap_cache_init(void);
 extern void hashtab_cache_init(void);
+extern void selinux_nlmsg_init(void);
 
 #endif /* _SELINUX_SECURITY_H_ */

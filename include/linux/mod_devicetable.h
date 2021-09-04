@@ -299,7 +299,7 @@ struct pcmcia_device_id {
 #define INPUT_DEVICE_ID_LED_MAX		0x0f
 #define INPUT_DEVICE_ID_SND_MAX		0x07
 #define INPUT_DEVICE_ID_FF_MAX		0x7f
-#define INPUT_DEVICE_ID_SW_MAX		0x0f
+#define INPUT_DEVICE_ID_SW_MAX		0x20
 #define INPUT_DEVICE_ID_PROP_MAX	0x1f
 
 #define INPUT_DEVICE_ID_MATCH_BUS	1
@@ -762,4 +762,12 @@ struct typec_device_id {
 	kernel_ulong_t driver_data;
 };
 
+#ifdef CONFIG_MHI_BUS
+#define MHI_NAME_SIZE 32
+
+struct mhi_device_id {
+	const char chan[MHI_NAME_SIZE];
+	kernel_ulong_t driver_data;
+};
+#endif /* CONFIG_MHI_BUS */
 #endif /* LINUX_MOD_DEVICETABLE_H */

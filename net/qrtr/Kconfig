@@ -3,7 +3,6 @@
 
 config QRTR
 	tristate "Qualcomm IPC Router support"
-	depends on ARCH_QCOM || COMPILE_TEST
 	---help---
 	  Say Y if you intend to use Qualcomm IPC router protocol.  The
 	  protocol is used to communicate with services provided by other
@@ -27,5 +26,15 @@ config QRTR_TUN
 	  Say Y here to expose a character device that allows user space to
 	  implement endpoints of QRTR, for purpose of tunneling data to other
 	  hosts or testing purposes.
+
+config QRTR_MHI
+	tristate "MHI IPC Router channels"
+	depends on MHI_BUS || (COMPILE_TEST && MHI_BUS=n)
+	help
+	  Say Y here to support MHI based ipcrouter channels.  MHI is the
+	  transport used for external modem connections for IPC Router. The
+	  MHI bus provides an asynchronous send mechanism, the QRTR MHI
+	  transport will wait for the uplink callback notification before
+	  returning to qrtr.
 
 endif # QRTR
