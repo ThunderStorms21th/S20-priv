@@ -23,7 +23,6 @@
 #include <asm/ptrace.h>
 #include <asm/types.h>
 #include <asm/unified.h>
-#include <asm-generic/processor.h>
 
 #ifdef __KERNEL__
 #define STACK_TOP	((current->personality & ADDR_LIMIT_32BIT) ? \
