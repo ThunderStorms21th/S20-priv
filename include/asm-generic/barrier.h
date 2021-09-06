@@ -18,7 +18,6 @@
 #ifndef __ASSEMBLY__
 
 #include <linux/compiler.h>
-#include <asm-generic/processor.h>
 
 #ifndef nop
 #define nop()	asm volatile ("nop")
@@ -239,7 +238,7 @@ do {									\
 		VAL = READ_ONCE(*__PTR);			\
 		if (cond_expr)					\
 			break;					\
-		cpu_read_relax();				\
+		cpu_relax();					\
 	}							\
 	VAL;							\
 })
