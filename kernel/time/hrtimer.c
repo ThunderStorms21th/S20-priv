@@ -233,7 +233,6 @@ switch_hrtimer_base(struct hrtimer *timer, struct hrtimer_clock_base *base,
 
 	this_cpu_base = this_cpu_ptr(&hrtimer_bases);
 	new_cpu_base = get_target_base(this_cpu_base, pinned);
-
 again:
 	new_base = &new_cpu_base->clock_base[basenum];
 
@@ -247,7 +246,7 @@ again:
 		 * completed. There is no conflict as we hold the lock until
 		 * the timer is enqueued.
 		 */
-		if (unlikely(hrtimer_callback_running_relaxed(timer)))
+		if (unlikely(hrtimer_callback_running(timer)))
 			return base;
 
 		/* See the comment in lock_hrtimer_base() */
@@ -1148,7 +1147,7 @@ int hrtimer_try_to_cancel(struct hrtimer *timer)
 
 	base = lock_hrtimer_base(timer, &flags);
 
-	if (!hrtimer_callback_running_relaxed(timer))
+	if (!hrtimer_callback_running(timer))
 		ret = remove_hrtimer(timer, base, false);
 
 	unlock_hrtimer_base(timer, &flags);
@@ -1838,7 +1837,7 @@ static void migrate_hrtimer_list(struct hrtimer_clock_base *old_base,
 
 	while ((node = timerqueue_getnext(&old_base->active))) {
 		timer = container_of(node, struct hrtimer, node);
-		BUG_ON(hrtimer_callback_running_relaxed(timer));
+		BUG_ON(hrtimer_callback_running(timer));
 		debug_deactivate(timer);
 
 		/*
