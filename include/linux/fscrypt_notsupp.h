@@ -267,4 +267,10 @@ static inline void *fscrypt_get_diskcipher(const struct inode *inode)
 {
 	return NULL;
 }
+
+static inline int fscrypt_symlink_getattr(const struct path *path,
+					  struct kstat *stat)
+{
+	return -EOPNOTSUPP;
+}
 #endif	/* _LINUX_FSCRYPT_NOTSUPP_H */
