@@ -7343,9 +7343,6 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 			      cpumask_test_cpu(cpu, &p->cpus_allowed);
 	}
 
-sd_loop:
-	rcu_read_lock();
-
 	if (sched_feat(EMS)) {
 		new_cpu = exynos_select_task_rq(p, prev_cpu,
 				sd_flag, sync, 1, sibling_count_hint);
@@ -7353,6 +7350,9 @@ sd_loop:
 			return new_cpu;
 		new_cpu = prev_cpu;
 	}
+
+sd_loop:
+	rcu_read_lock();
 
 	for_each_domain(cpu, tmp) {
 		if (!(tmp->flags & SD_LOAD_BALANCE))
