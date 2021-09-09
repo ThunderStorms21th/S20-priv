@@ -30,10 +30,10 @@
 static int wl_polling = 10;
 module_param(wl_polling, int, 0644);
 
-static unsigned int STORE_MODE_CHARGING_MAX = 85;
-static unsigned int STORE_MODE_CHARGING_MIN = 50;
-module_param_named(store_mode_max, STORE_MODE_CHARGING_MAX, bool, 0644);
-module_param_named(store_mode_min, STORE_MODE_CHARGING_MIN, bool, 0644);
+static int STORE_MODE_CHARGING_MAX = 85;
+static int STORE_MODE_CHARGING_MIN = 50;
+module_param_named(store_mode_max, STORE_MODE_CHARGING_MAX, int, 0644);
+module_param_named(store_mode_min, STORE_MODE_CHARGING_MIN, int, 0644);
 
 bool sleep_mode = false;
 bool batt_boot_complete = false;
