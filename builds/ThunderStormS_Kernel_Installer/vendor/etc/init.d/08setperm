@@ -1,0 +1,8 @@
+#!/system/bin/sh
+# Set correct permissions to init.d scripts
+
+mount -o remount,rw /system
+mount -o remount,rw /system/vendor
+mount -o remount,rw /vendor
+chmod 0755 /system/vendor/etc/init.d/*
+chmod 0644 /system/vendor/etc/init.d/01apkinstall 

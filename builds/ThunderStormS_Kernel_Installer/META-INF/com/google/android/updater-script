@@ -1,0 +1,181 @@
+show_progress(1.000000, 0);
+ui_print(" ");
+ui_print("*********************************************************");
+ui_print("                ThunderStorm Kernel OneUI-R              ");
+ui_print("                   For Samsung Galaxy S20                ");
+ui_print("           Developed by ThundeRStormS Team               ");
+ui_print("           G980F, G985F, G981B, G986B, G988B             ");
+ui_print("*********************************************************");
+ui_print(" ");
+ui_print(" ");
+
+package_extract_dir("minstall/bin", "/tmp");
+set_metadata_recursive("/tmp/scripts", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0777);
+
+ifelse(is_mounted("/system"), unmount("/system"));
+ifelse(is_mounted("/vendor"), unmount("/vendor"));
+ifelse(is_mounted("/product"), unmount("/product"));
+ifelse(is_mounted("/prism"), unmount("/prism"));
+ifelse(is_mounted("/optics"), unmount("/optics"));
+ifelse(is_mounted("/odm"), unmount("/odm"));
+# ifelse(is_mounted("/data"), unmount("/data"));
+ifelse(is_mounted("/efs"), unmount("/efs"));
+ifelse(is_mounted("/sec_efs"), unmount("/sec_efs"));
+
+# Permissions
+
+run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-0");
+run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-1");
+run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-2");
+run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-3");
+
+
+ui_print(" ");
+ui_print("@ThundeRStormS - Mounting partitions...");
+mount("ext4", "EMMC", "/dev/block/dm-0", "/system_root");
+mount("ext4", "EMMC", "/dev/block/dm-1", "/vendor");
+mount("ext4", "EMMC", "/dev/block/dm-2", "/product");
+
+
+#Cleanning
+
+run_program("/tmp/scripts/initial_settings.sh");
+
+
+#Extracting scripts	
+	
+
+#g980
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+if is_substring("G980", getprop("ro.boot.bootloader")) then
+ui_print("@G980 Detected");
+ui_print("@Installation : EdYoBlue Kernel");
+package_extract_file("edyo/g980/SM980F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system1/system", "/system_root/system");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("G980", getprop("ro.boot.bootloader")) then
+ui_print("@G980 Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g980/SM980F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+endif;
+
+#g981
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+if is_substring("G981", getprop("ro.boot.bootloader")) then
+ui_print("@G981 Detected");
+ui_print("@Installation : EdYoBlue Kernel");
+package_extract_file("edyo/g981/SM981B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system1/system", "/system_root/system");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("G981", getprop("ro.boot.bootloader")) then
+ui_print("@G981 Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g981/SM981B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+endif;
+
+#g985
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+if is_substring("G985", getprop("ro.boot.bootloader")) then
+ui_print("@G985 Detected");
+ui_print("@Installation : EdYoBlue Kernel");
+package_extract_file("edyo/g985/SM985F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system1/system", "/system_root/system");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("G985", getprop("ro.boot.bootloader")) then
+ui_print("@G985 Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g985/SM985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+endif;
+
+#g986
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+if is_substring("G986", getprop("ro.boot.bootloader")) then
+ui_print("@G986 Detected");
+ui_print("@Installation : EdYoBlue Kernel");
+package_extract_file("edyo/g986/SM986B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system1/system", "/system_root/system");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("G986", getprop("ro.boot.bootloader")) then
+ui_print("@G986 Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g986/SM986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+endif;
+
+#g988
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+if is_substring("G988", getprop("ro.boot.bootloader")) then
+ui_print("@G988 Detected");
+ui_print("@Installation : EdYoBlue Kernel");
+package_extract_file("edyo/g988/SM988B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system1/system", "/system_root/system");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("G988", getprop("ro.boot.bootloader")) then
+ui_print("@G988 Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g988/SM988B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+endif;
+
+# Run install script
+ui_print(" ");
+ui_print("@ThundeRStormS - System Patching...");
+package_extract_dir("data", "/data");
+package_extract_dir("vendor", "/vendor");
+run_program("/tmp/scripts/perms.sh");
+
+# Upating root
+
+ui_print(" ");
+ui_print("Magisk's Root...");
+package_extract_dir("root", "/tmp/magisk");
+run_program("/tmp/scripts/busybox", "unzip", "/tmp/magisk/Magisk.zip", "META-INF/com/google/android/*", "-d", "/tmp/magisk");
+run_program("/tmp/scripts/busybox", "sh", "/tmp/magisk/META-INF/com/google/android/update-binary", "dummy", "1", "/tmp/magisk/Magisk.zip");
+ui_print(" ");
+ui_print(" ");
+
+
+
+
+
+#####################################################################################
+#	Finishing																		#
+#####################################################################################
+set_progress(1.0);
+ui_print(" ");
+ui_print(" ");
+ui_print("*****************************************************");
+ui_print("* ThundeRStormS kernel and mod are installed *");
+ui_print("*****************************************************");
+ui_print(" ");
+ui_print(" ");
+ui_print(" ");
+

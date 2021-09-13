@@ -25,6 +25,13 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 #export CC=$(pwd)/toolchain/clang-13/bin
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
+
+export K_VERSION="v1.0"
+export K_NAME="ThundeRStormS-Kernel-S20"
+export K_NAME2="EdYoBlue-Kernel-S20"
+export K_BASE="DUH2"
+ANDROID=OneUI-R
+MODEL=G98X
 # -----------------------------
 
 # Paths
@@ -39,13 +46,16 @@ LOG=compile_build.log
 # -----------------------------
 
 # Kernel name
-KERNEL_NAME="LOCALVERSION=-ThunderStormS-v1.0-DUF9-OneUI3"
+# KERNEL_NAME="LOCALVERSION=-ThunderStormS-v1.0-DUF9-OneUI3"
 DEFCONFIG1=exynos9830-z3sxxx_defconfig
 DEFCONFIG2=exynos9830-x1slte_defconfig
 DEFCONFIG3=exynos9830-y2slte_defconfig
 DEFCONFIG4=exynos9830-x1sxxx_defconfig
 DEFCONFIG5=exynos9830-y2sxxx_defconfig
 DEFCONFIG_TS=ts_defconfig
+DEFCONFIG_ED=ed_defconfig
+ZIP_DATE=`date +%Y%m%d`
+ZIP_NAME=$K_NAME-$MODEL-$ANDROID-$K_VERSION-CLANG808-$ZIP_DATE.zip
 # -----------------------------
 
 # FUNCTIONS
@@ -73,6 +83,7 @@ CLEAN_DTB()
 		rm $(pwd)/arch/arm64/boot/dts/samsung/*.dtb.reverse.dts
 		rm $(pwd)/arch/arm64/boot/boot.img-dtb
 		rm $(pwd)/arch/arm64/boot/boot.img-kernel
+		rm $(pwd)/arch/arm64/configs/tmp_defconfig
 	fi
 }
 
@@ -178,6 +189,127 @@ BUILD_KERNEL_986B()
     # Make .config
 	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG5 $(pwd)/arch/arm64/configs/tmp_defconfig
 	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_TS >> $(pwd)/arch/arm64/configs/tmp_defconfig
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-986B" ] && mkdir out/SM-986B
+    # SM-G91BF
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-986B/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-986B/Image
+      # DTB for Exynos 9830 - SM-G986B
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-986B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-986B/dtbo.img dt.configs/y2sxxx.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
+BUILD_KERNEL_988Bed()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG1 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_ED >> $(pwd)/arch/arm64/configs/tmp_defconfig
+
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-988B" ] && mkdir out/SM-988B
+    # SM-G988B
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-988B/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-988B/Image
+      # DTB for Exynos 9830 - SM-G988B
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-988B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-988B/dtbo.img dt.configs/z3sxxx.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
+BUILD_KERNEL_980Fed()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG2 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_ED >> $(pwd)/arch/arm64/configs/tmp_defconfig
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-980F" ] && mkdir out/SM-980F
+    # SM-G980F
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-980F/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-980F/Image
+      # DTB for Exynos 9830 - SM-G980F
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-980F/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-980F/dtbo.img dt.configs/x1slte.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
+BUILD_KERNEL_985Fed()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG3 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_ED >> $(pwd)/arch/arm64/configs/tmp_defconfig
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-985F" ] && mkdir out/SM-985F
+    # SM-G985F
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-985F/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-985F/Image
+      # DTB for Exynos 9830 - SM-G985F
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-985F/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-985F/dtbo.img dt.configs/y2slte.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
+BUILD_KERNEL_981Bed()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG4 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_ED >> $(pwd)/arch/arm64/configs/tmp_defconfig
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-981B" ] && mkdir out/SM-981B
+    # SM-G91BF
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-981B/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-981B/Image
+      # DTB for Exynos 9830 - SM-G981B
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-981B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-981B/dtbo.img dt.configs/x1sxxx.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
+BUILD_KERNEL_986Bed()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG5 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_ED >> $(pwd)/arch/arm64/configs/tmp_defconfig
     # Compile kernels
     echo "***** Compiling kernel *****"
     [ ! -d "out" ] && mkdir out
@@ -340,6 +472,175 @@ BUILD_RAMDISK_986B()
     rm -rf $(pwd)/builds/temp
 }
 
+BUILD_RAMDISK_988Bed()
+{
+    # Build Ramdisk and boot.img
+    # SM-G988B
+    echo ""
+    echo "Building Ramdisk for SM-988B"
+    mv $(pwd)/out/SM-988B/Image $(pwd)/out/SM-988B/boot.img-kernel
+    mv $(pwd)/out/SM-988B/dtb.img $(pwd)/out/SM-988B/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-988B/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-988B/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM988B-ed-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_RAMDISK_980Fed()
+{
+    # SM-G980F
+    echo ""
+    echo "Building Ramdisk for SM-980F"
+    mv $(pwd)/out/SM-980F/Image $(pwd)/out/SM-980F/boot.img-kernel
+    mv $(pwd)/out/SM-980F/dtb.img $(pwd)/out/SM-980F/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-980F/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-980F/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM980F-ed-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_RAMDISK_985Fed()
+{
+    # SM-G985F
+    echo ""
+    echo "Building Ramdisk for SM-985F"
+    mv $(pwd)/out/SM-985F/Image $(pwd)/out/SM-985F/boot.img-kernel
+    mv $(pwd)/out/SM-985F/dtb.img $(pwd)/out/SM-985F/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-985F/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-985F/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM985F-ed-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_RAMDISK_981Bed()
+{
+    # SM-G981B
+    echo ""
+    echo "Building Ramdisk for SM-981B"
+    mv $(pwd)/out/SM-981B/Image $(pwd)/out/SM-981B/boot.img-kernel
+    mv $(pwd)/out/SM-981B/dtb.img $(pwd)/out/SM-981B/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-981B/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-981B/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM981B-ed-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_RAMDISK_986Bed()
+{
+    # SM-G986B
+    echo ""
+    echo "Building Ramdisk for SM-986B"
+    mv $(pwd)/out/SM-986B/Image $(pwd)/out/SM-986B/boot.img-kernel
+    mv $(pwd)/out/SM-986B/dtb.img $(pwd)/out/SM-986B/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-986B/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-986B/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM986B-ed-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_FLASHABLES()
+{
+	cd $(pwd)/builds
+	mkdir temp2
+	cp -rf zip-OneUIR/common/. temp2
+    cp -rf *.img temp2/
+	cd temp2
+	echo ""
+	echo "Compressing kernels..."
+	tar cv *.img | xz -9 > kernel.tar.xz
+	echo "Copying kernels to ts folder..."
+	mv kernel.tar.xz ts/
+    rm -rf *.img	
+	zip -9 -r ../$ZIP_NAME *
+
+	cd ..
+    rm -rf temp2
+}
+
+BUILD_FLASHABLES_TS()
+{
+	cd $(pwd)/builds
+	mkdir temp2
+	cp -rf ThunderStormS_Kernel_Installer/. temp2
+    cp -rf SM980F-boot.img temp2/thunderstorm/g980
+    cp -rf SM985F-boot.img temp2/thunderstorm/g985
+    cp -rf SM981B-boot.img temp2/thunderstorm/g981
+    cp -rf SM986B-boot.img temp2/thunderstorm/g986
+    cp -rf SM988B-boot.img temp2/thunderstorm/g988
+
+    cp -rf SM980F-ed-boot.img temp2/edyo/g980
+    cp -rf SM985F-ed-boot.img temp2/edyo/g985
+    cp -rf SM981B-ed-boot.img temp2/edyo/g981
+    cp -rf SM986B-ed-boot.img temp2/edyo/g986
+    cp -rf SM988B-ed-boot.img temp2/edyo/g988
+	cd temp2
+	echo ""
+	#echo "Compressing kernels..."
+	#tar cv *.img | xz -9 > kernel.tar.xz
+	#echo "Copying kernels to ts folder..."
+	#mv kernel.tar.xz ts/
+    #rm -rf *.img	
+	zip -9 -r ../$ZIP_NAME *
+
+	cd ..
+    rm -rf temp2
+}
+
 MAIN()
 {
 
@@ -358,7 +659,21 @@ MAIN()
         BUILD_RAMDISK_980F
         BUILD_KERNEL_985F
         BUILD_RAMDISK_985F
+		rm $(pwd)/arch/arm64/configs/tmp_defconfig
+        BUILD_KERNEL_988Bed
+        BUILD_RAMDISK_988Bed
+        BUILD_KERNEL_981Bed
+        BUILD_RAMDISK_981Bed
+        BUILD_KERNEL_986Bed
+        BUILD_RAMDISK_986Bed
+        BUILD_KERNEL_980Fed
+        BUILD_RAMDISK_980Fed
+        BUILD_KERNEL_985Fed
+        BUILD_RAMDISK_985Fed
+
         # BUILD_DTB
+        # BUILD_FLASHABLES
+        BUILD_FLASHABLES_TS
     END_TIME=`date +%T`
     END_TIME_SEC=`date +%s`
     # -----------------------------

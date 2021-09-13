@@ -1,0 +1,111 @@
+﻿### LICENSE:
+#
+# Copyright (C) 2011 Ahmad Amarullah ( http://amarullz.com/ )
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+### LANGUAGE STRING RESOURCE FILE
+#
+#   Language  : #LANG HERE#
+#   By        : #NAME HERE#
+#
+
+#
+#--- COMMON SYSTEM STRING RESOURCE
+#
+text_ok=
+text_next=
+text_back=
+text_yes=
+text_no=
+text_about=
+text_calibrating=
+text_quit=
+text_quit_msg=
+text_install=
+text_chooce=
+#
+#Welcome/start
+welcome.title=
+welcome.text1=
+welcome.text2=
+welcome.text3=
+welcome.version=
+welcome.author=
+welcome.themer=
+welcome.date=
+welcome.next=
+#
+#Terms & Conditions
+terms.title=
+terms.desc=
+terms.check=
+terms.confirm=
+#
+#Changelog
+changelog.title=
+changelog.desc=
+#
+#MainMenu
+mainmenu.title=
+mainmenu.desc=
+mainmenu.choice1=
+#
+#Aroma File Manager
+manager.text1=
+#
+#Installation Menu
+menu1.text1=
+menu1.choice1=
+menu1.choice2=
+menu1.desc1=
+menu1.desc2=
+
+menu2.text1=
+menu2.text2=
+menu2.text3=
+menu2.choice1=
+menu2.choice2=
+menu2.choice3=
+menu2.choice4=
+menu2.choice5=
+menu2.choice6=
+menu2.choice7=
+menu2.choice8=
+menu2.choice9=
+menu2.choice10=
+
+menu3.text1=
+menu3.choice1=
+menu3.choice2=
+
+menu4.text1=
+#
+#Install Menu
+install.now=
+install.title=
+install.desc1=
+install.desc2=
+install.desc3=
+install.desc4=
+
+install.text1=
+install.text2=
+install.text3=
+install.done1=
+install.done2=
+install.done3=
+install.done4=
+install.done5=
+install.done6=
+install.done7=

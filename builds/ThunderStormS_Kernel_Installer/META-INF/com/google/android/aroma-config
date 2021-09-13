@@ -1,0 +1,232 @@
+﻿### LICENSE:
+#
+# Copyright (C) 2011 Ahmad Amarullah ( http://amarullz.com/ )
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+### FILE INFO:
+#
+# AROMA Installer 3.00b1 - AROMA Installer Test Script Configuration
+#       (c) 2011-2015 by Ahmad Amarullah
+#           amarullz - xda-developers
+#           http://www.amarullz.com/
+#
+#       Binary Version  : 3.00b1
+#       Binary Codename : Flamboyan
+#
+#
+### ROM INFORMATION
+ini_set("rom_name",				"ThunderStormS Kernel");
+ini_set("rom_version",          "1.0");
+ini_set("rom_author",           "nalasTS");
+ini_set("rom_themer",           "");
+ini_set("rom_device",           "G98x");
+ini_set("rom_date",             "10/09/2021");
+# SET THEME
+###################################################################################################################
+theme("ts");
+ini_set("force_colorspace","rgba"); theme("ts");
+
+
+#  Show Simple Splash
+splash(
+#-- Duration 5000ms / 5 seconds
+	3000,
+#-- <AROMA Resource Dir>/logo.png
+	"logo"
+);
+# Include language select menu
+
+# FONT
+fontresload( "0", "ttf/Roboto-Regular.ttf;ttf/DroidSansFallback.ttf;", "12" ); #-- Use sets of font (Font Family)
+fontresload( "1", "ttf/Roboto-Regular.ttf;ttf/DroidSansFallback.ttf;", "14" ); #-- Use sets of font (Font Family)
+
+# SHOW LANGUAGE SELECTION
+#
+selectbox(
+ "<#0099c0>Select Language",
+"<@center><#ff0000>Please select an installer language:",
+  "@default",
+  "lang.prop",
+  #---------------------------------[ Selectbox Without Group ]----------------------------------#
+  # TITLE            |  SUBTITLE                                                 | Initial Value #
+  #------------------+-----------------------------------------------------------+---------------#
+    #example of menu option, always add them to the top to ensure that they work
+	#"Some language","Welcome to the Installer text",0,
+	"English","Welcome to ThunderStormS Kernel Installation",1,
+	"French","Bienvenue dans l'installation de la ThunderStormS Kernel",0
+
+  #--------[ Initial Value = 0: Unselected, 1: Selected, 2: Group Item, 3: Not Visible ]---------#
+);
+##
+# SET LANGUAGE & FONT FAMILY
+#
+if prop("lang.prop","selected.0")=="1" then
+  loadlang("langs/en.lang");
+  setvar("agreement",resread("agreement_en.txt"));
+  setvar("changelog",resread("changelog_en.txt"));
+endif;
+
+# Example for another language selection:
+if prop("lang.prop","selected.0")=="2" then
+loadlang("langs/fr.lang");
+setvar("agreement",resread("agreement_fr.txt"));
+setvar("changelog",resread("changelog_fr.txt"));
+endif;
+
+
+
+viewbox(
+    "<@center><~welcome.title></@>",
+
+	
+    "<@center><~welcome.text3></@>\n\n"+
+	"  Kernel	 \t: <b><#selectbg_g>"+ini_get("rom_name")+"</#></b>\n"+
+    "  Version    \t: <b><#selectbg_g>"+ini_get("rom_version")+"</#></b>\n"+	
+	"  Dev          \t: <b><#selectbg_g>"+ini_get("rom_author")+"</#></b>\n"+
+	"  Theme        \t: <b><#selectbg_g>"+"<~rom.themer>"+"</#></b>\n"+
+	"  Device	 \t: <b><#selectbg_g>"+ini_get("rom_device")+"</#></b>\n"+
+	"  Date	 \t: <b><#selectbg_g>"+ini_get("rom_date")+"</#></b></@>\n\n"+
+	"<@center><~welcome.next></@>",
+    "@welcome"
+);
+
+# TERMS AND CONDITIONS
+
+agreebox(
+	#-- Title
+	"<@center><b><#0099c0><~terms.title>",
+	
+	#-- Subtitle
+	"<@center><b><~terms.dexc>",
+	
+	#-- Icon
+	"@agreement",
+	
+	#-- Arg 
+	getvar("agreement"),
+	"<~terms.check>",
+	"<~terms.confirm>"
+);
+
+# CHANGELOG
+
+textbox(
+  #-- Title
+    "<#0099c0>ThunderStormS Kernel",
+  
+  #-- Subtitle
+   "<@center><b><~changelog.desc>",
+  
+  #-- Icon
+    "@update",
+  
+  #-- Arg
+    getvar("changelog")
+);
+
+###################################################################################################################
+#                                                                                                                 #
+#                                                  Installer                                                      #
+#                                                                                                                 #
+###################################################################################################################
+
+
+
+###################################################################################################################
+#
+# Boot
+#
+###################################################################################################################
+	selectbox(
+           "<#0099c0>ThunderStormS Kernel Installer",
+           "<@center><b><~menu2.text>",
+           "@personalize",
+           "boot.prop",
+		   
+		"<@center><b><#0099c0><~menu2.text1>",			    	                "",				2,							#-- Group 1 - key = "selected.1"		
+			"<~menu2.choice1>",					                  "<~menu2.choice1.1",0,				#-- selected.1 = 1
+			"<~menu2.choice2>",					                  "<~menu2.choice2.1",1			#-- selected.1 = 2
+		
+
+			);
+
+
+	
+
+
+
+###################################################################################################################
+#
+# Install
+#
+###################################################################################################################	 
+ini_set("text_next", "<~install.now>");
+
+viewbox(
+  #-- Title
+    "<#0099c0><~install.title>",
+
+  #-- Text
+    "<@center><b><#selectbg_g>"+ini_get("rom_name")+"</#></b> <~install.desc1>\n\n"+
+	"<~install.desc2>\n\n"+
+	"<~install.desc3>\n\n"+
+	"<~install.desc4>",
+
+  #-- Icon
+    "@install"
+);
+
+ini_set("text_next", "<~text.next>");
+
+###################################################################################################################
+#
+# STEP 10 - INSTALLATION PROCESS
+#
+install(
+	#-- Title
+     "<#0099c0><~install.text1>",
+	
+	#-- Installation Process message
+	  "<@center><b><#selectbg_g>" +ini_get("rom_name")+"</#></b> <~install.desc1></@>\n\n"+
+      
+	  "<~install.text3></@>",
+	
+	#-- Installation Icon
+      "@install",
+	
+	#-- Installation Finish Message
+     "<#0099c0><~install.done1>" 
+	  
+  );
+  
+ini_set("text_next", "<~text.quit>");
+ini_set("icon_next", "icons/finish1");
+  
+viewbox(
+  #-- Title
+    "<#0099c0><~install.done3>",
+
+  #-- Text
+    "<@center><b><#selectbg_g>"+ini_get("rom_name")+"</#></b> <~install.done4>\n\n"+
+	"<~install.done5>\n\n"+
+
+	"<#selectbg_g><b><~install.done7></b></#></@>\n\n",
+   
+  #-- Icon
+    "icons/info1"
+);
+
+reboot("now");
+
+#---- FINISH

@@ -1,0 +1,68 @@
+img.background		  = bg
+img.titlebar		  = titlebar
+img.navbar			  = navbar
+img.dialog			  = dialog.9
+img.dialog.titlebar	  = dialog_titlebar.9
+img.progress		  = button.9
+img.prograss.fill	  = button_press.9
+img.selection		  = list.9
+img.selection.push	  = list.9
+img.button			  = button.9
+img.button.focus	  = button_focus.9
+img.button.push		  = button_press.9
+img.checkbox		  = cb
+img.checkbox.focus	  = cb_focus
+img.checkbox.push	  = cb_press
+img.checkbox.on		  = cb_on
+img.checkbox.on.focus = cb_on_focus
+img.checkbox.on.push  = cb_on_press
+img.radio			  = radio
+img.radio.focus		  = radio_focus
+img.radio.push		  = radio_press
+img.radio.on		  = radio_on
+img.radio.on.focus	  = radio_on_focus
+img.radio.on.push	  = radio_on_press
+
+
+color.winbg           = #000000
+color.winbg_g         = #000000
+color.winfg           = #ffffff
+color.winfg_gray      = #bbbbbb
+color.dialogbg        = #000000
+color.dialogbg_g      = #bbbbbb
+color.dialogfg        = #ffffff
+color.textbg          = #000000
+color.textfg          = #ffffff
+color.textfg_gray     = #bbbbbb
+color.controlbg       = #000000
+color.controlbg_g     = #000000
+color.controlfg       = #53a9f6
+color.selectbg        = #53a9f6
+color.selectbg_g      = #53a9f6
+color.selectfg        = #000000
+color.titlebg         = #53a9f6
+color.titlebg_g       = #53a9f6
+color.titlefg         = #000000
+color.dlgtitlebg      = #000000
+color.dlgtitlebg_g    = #000000
+color.dlgtitlefg      = #ffffff
+color.scrollbar       = #53a9f6
+color.navbg           = #000000
+color.navbg_g         = #000000
+color.border          = #bbbbbb
+color.border_g        = #bbbbbb
+color.progressglow    = #53a9f6
+
+
+config.roundsize             = 1
+config.button_roundsize      = 1
+config.window_roundsize      = 1
+config.transition_frame      = 5
+
+font.small            = font.roboto.small
+font.big              = font.roboto.big
+
+
+info.themename        = TS v1
+info.description      = ThundeRStormS v1 Theme for AROMA Installer
+info.author           = ThundeRStormS Team
