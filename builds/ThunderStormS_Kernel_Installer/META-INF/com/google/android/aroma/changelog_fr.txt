@@ -1,0 +1,24 @@
+<@center><b><#selectbg_g>ThunderStormS Kernel Installer v1.0</#></b></@> 
+
+<*>Kernel EdYoBlue ou ThunderStormS
+- Linux 4.19.87
+- Sources Samsung DUF9
+- Filtre TTL activé
+- Fenêtre IP TCP 64k
+- Quelques débogages désactivés
+- USB en série ajouté
+- MTP Samsung activé
+- Mappage de pages Zmalloc désactivé
+- Wakelocks ajoutés
+- Wakelocks Boeffla ajoutés
+- Prise en charge de la puissance de la file d'attente dans la section CPU
+- Support CRC dans la section MISC
+- Prise en charge de Fsync dans la section MISC
+- Prise en charge de Geantle Fair Sleepers  en charge la section MISC
+- Assistance Frandom
+- Prise en charge des partitions CIFS et NTFS
+- Désactivation de certaines sécurités Samsung et FIPS
+- Prise en charge du magasin de batteries
+- Améliorations des sources Linux
+
+</*>

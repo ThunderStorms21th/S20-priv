@@ -1,0 +1,93 @@
+﻿### LICENSE:
+#
+# Copyright (C) 2011 Ahmad Amarullah ( http://amarullz.com/ )
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+### LANGUAGE STRING RESOURCE FILE
+#
+#   Language  : French
+#   By        : Edzamber
+#
+
+#
+#--- COMMON SYSTEM STRING RESOURCE
+#
+text_ok=OK
+text_next=Suivant
+text_back=Retour
+text_yes=Oui
+text_no=Non
+text_about=A propos
+text_calibrating=Calibrating Tools
+text_quit=Quitter Installation
+text_quit_msg=Etes-vous certain de vouloir quitter?
+text_install=Installation
+text_chooce=Veuillez choisir:
+#
+#Welcome/start
+welcome.title=<#ff99cb>
+welcome.text1=Vous allez installer
+welcome.text2=Pour le
+welcome.text3=<#ff0000>Information sur la ROM
+welcome.version=VERSION
+welcome.author=Dev
+welcome.themer=Theme
+welcome.date=Date
+welcome.next=Pressez <b>Suivant</b> pour continuer
+#
+#Rom info
+rom.themer=yoanf26
+#
+rom0
+#Terms & Conditions
+terms.title=<#ff99cb>Termes et conditions
+terms.dexc=<#ff0000>Veuillez lire les termes et conditions
+terms.check=Je suis d'accord avec les conditions
+terms.confirm=<#ff0000>Vous devez accepter les conditions
+#
+#Changelog
+changelog.title=Changelog
+changelog.desc=<#ff0000>Changelog
+
+#Installation Menu
+
+
+menu2.text=<#ff0000>Kernel
+menu2.text1=Quel Kernel voulez-vous installer?
+menu2.choice1=Kernel EdYoBlue
+menu2.choice2=Kernel ThunderStormS
+
+
+
+#
+#Install Menu
+install.now=Installer Maintenant
+install.title=Début de l'installation
+install.desc1=sera installé
+install.desc2=Pressez <b> Installer Maintenant </b> pour démarrer
+install.desc3=Pour corriger pressez <b>Retour</b>
+install.desc4=Pressez <b>Menu</b>-><b>Quitter l'installation</b> pour sortir.
+
+install.text1=Installation
+install.text2=
+install.text3=</#></b><@center>Cela devrait durer quelques minutes</@>
+install.done1=<@center>Installation réussie !!!</@><#selectbg_g><b>
+install.done2=</b>Pressez <b>Suivant</b> pour continuer.
+install.done3=Installation complète
+install.done4=à été installée
+install.done5=Veuillez laisser un retour sur le topic de le Rom
+install.done6=
+install.done7=Si vous appréciez notre travail, considerez un p'tit café 
+text.quit=Redémarrer
+text.next=Suivant

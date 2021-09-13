@@ -1,0 +1,32 @@
+<b><#selectbg_g>TERMS AND CONDITIONS FOR USE</#></b></@>
+
+<@center><b><#selectbg_g>GENERAL</#></b>,/@>
+
+<@fill>
+- I am not responsible for any damage of any kind
+  caused by this software, either directly or indirectly..
+- You are installing this kernel for Your own risk.
+- You are installing this Device Tree for Your own risk.
+- Kernel was tested by TESTERS.
+
+  Credits: 
+  -@CruelKernel @Team for Kernel Source,
+  -@Shariq for make clear Aroma Installer,
+  -@Tagdu17 for help with Aroma Installer,
+  -@Denis Efremov,
+  -@Corsicanu,
+  -@EdZamber.
+
+  INSTALLATION:
+  - backup Your DATA partition
+  - do not use TWRP patched by Magisk
+  - install ThundeRStormS kernel via Aroma Installer
+  - reboot and enjoy.
+
+  BACK TO OLD DTB/DTBO:
+  - flash via ODIN stock's or another dtb/dtbo,
+  - Stock's dtb/dtbo are in AP stock firmware.
+
+<@center>AROMA theme by @yoanf26 & @nalas.</@>
+
+<@center><b><#selectbg_g>END OF TERMS AND CONDITIONS</#></b></@>

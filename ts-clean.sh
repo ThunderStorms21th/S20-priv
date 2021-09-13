@@ -5,7 +5,7 @@
 # XDA@nalas
 
 # Make the source clean
-# make mrproper
+make mrproper
 
 # Remove unused temporary and old files
 rm -f compile_build.log

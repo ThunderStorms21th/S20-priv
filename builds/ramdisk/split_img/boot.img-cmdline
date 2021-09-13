@@ -1,1 +1,1 @@
-androidboot.hardware=exynos990
+androidboot.selinux=enforcing androidboot.selinux=enforcing

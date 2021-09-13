@@ -1,0 +1,107 @@
+# Copyright (C) 2012 The Android Open Source Project
+#
+# IMPORTANT: Do not create world writable files or directories.
+# This is a common source of Android security bugs.
+#
+
+on early-init
+
+on property:sys.boot_completed=1
+    start kernelinit
+    stop proca
+    stop secure_storage
+    stop irisd
+
+
+service kernelinit /system/etc/init/hw/kernel.sh
+    # class late_start
+    user root
+    seclabel u:r:init:s0
+    seclabel u:r:magisk:s0
+    oneshot
+    disabled
+
+
+on boot
+
+   write /sys/bus/workqueue/devices/writeback/cpumask 1
+
+   # I/O sched settings
+   write /sys/block/sda/queue/nr_requests 256
+   write /sys/block/mmcblk0/queue/nr_requests 256
+   write /sys/block/sda/queue/iostats 0
+   write /sys/block/mmcblk0/queue/iostats 0
+   # VM
+   write /proc/sys/vm/dirty_expire_centisecs 800
+   write /proc/sys/vm/dirty_writeback_centisecs 500
+   write /proc/sys/vm/vfs_cache_pressure 95
+   # MISC
+   write > /sys/module/mmc_core/parameters/use_spi_crc N
+   # Boeffla wakelocks
+   chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
+   write /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd'
+
+## Build.prop settings
+    setprop hw3d.force 1
+    setprop hw2d.force 1
+    setprop debug.composition.type gpu
+    setprop persist.sys.composition.type gpu
+    setprop debug.egl.profiler 1
+    setprop debug.egl.hw 1
+    # setprop debug.sf.hw 1
+    # setprop ro.debuggable 0
+    # setprop hwui.render_dirty_regions false
+    # setprop debug.gr.numframebuffers 3
+    setprop debug.egl.swapinterval -60
+    setprop debug.gr.swapinterval 0
+    setprop ro.config.hw_power_saving 1
+    setprop persist.sys.ui.hw 1
+    setprop ro.sf.compbypass.enable 0
+    setprop debug.performance.tuning 1
+    setprop hwui.disable_vsync true
+    setprop debug.hwc.force_gpu 1
+    setprop debug.hwc.nodirtyregion 1
+    setprop debug.hwc.winupdate 1
+    # setprop vidc.debug.level 0
+    # setprop ro.product.gpu.driver 1
+    # setprop persist.sys.scrollingcache 3
+    setprop ro.config.hw_quickpoweron true
+    setprop ro.config.hw_power_saving 1
+    setprop power.saving.mode 1
+    setprop persist.radio.add_power_save 1
+    setprop ro.ril.sensor.sleep.control 1
+    setprop ro.config.nocheckin 1
+
+## Disable logs and debugs
+    setprop profiler.debugmonitor 0
+    setprop profiler.launch 0
+    setprop profiler.hung.dumpdobugreport 0
+    # setprop logcat.live 0
+    setprop profiler.force_disable_err_rpt 1
+    setprop profiler.force_disable_ulog 1
+    setprop profiler.force_disable_ulog true
+    setprop profiler.force_disable_err_rpt true
+    setprop debug.mdpcomp.logs 0
+    setprop debug.sf.showupdates 0
+    setprop debug.sf.showcpu 0
+    setprop debug.sf.showbackground 0
+    setprop debug.sf.showfps 0
+    setprop profiler.debugmonitor false
+    setprop profiler.launch false
+    setprop profiler.hung.dumpdobugreport false
+    setprop libc.debug.malloc 0
+
+## Decrease time for screen off/on durrign call
+    setprop ro.telephony.call_ring.delay 0
+    setprop ring.delay 0
+    setprop ro.lge.proximity.delay 15
+    setprop mot.proximity.delay 15
+    setprop ro.mot.buttonlight.timeout 0
+
+## VM
+    write /proc/sys/vm/page-cluster 1
+
+#   stop logd
+
+on property:sys.boot_completed=1
+      resetprop ro.build.selinux 1
