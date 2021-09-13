@@ -121,6 +121,16 @@ config CPU_FREQ_DEFAULT_GOV_ENERGYSTEP
 	  have a look at the help section of that governor. The fallback
 	  governor will be 'performance'.
 
+config CPU_FREQ_DEFAULT_GOV_ENERGYSTEP_S21
+	bool "energystep_S21"
+	depends on SMP
+	select CPU_FREQ_GOV_ENERGYSTEP_S21
+	select CPU_FREQ_GOV_PERFORMANCE
+	help
+	  Use the 'energy_step' CPUFreq governor by default. If unsure,
+	  have a look at the help section of that governor. The fallback
+	  governor will be 'performance'. Taken from Galaxy S21.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -229,6 +239,15 @@ config CPU_FREQ_GOV_ENERGYSTEP
 
 	  If in doubt, say N.
 
+config CPU_FREQ_GOV_ENERGYSTEP_S21
+	bool "'energystep_S21' cpufreq policy governor"
+	depends on CPU_FREQ && SMP
+	select IRQ_WORK
+	help
+	  This governor makes decisions based on the utilization data provided
+	  by cpu activated time and the scheduler. Taken from Galaxy S21.
+
+	  If in doubt, say N.
 
 comment "CPU frequency scaling drivers"
 
