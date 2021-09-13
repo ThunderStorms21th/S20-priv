@@ -135,8 +135,8 @@ enum misc_battery_health {
 #define STORE_MODE_CHARGING_MAX 80
 #define STORE_MODE_CHARGING_MIN 70
 #else                                       // !SEC_FACTORY, STORE MODE
-// #define STORE_MODE_CHARGING_MAX 70
-// #define STORE_MODE_CHARGING_MIN 60
+// #define STORE_MODE_CHARGING_MAX 90
+// #define STORE_MODE_CHARGING_MIN 50
 #define STORE_MODE_CHARGING_MAX_VZW 35
 #define STORE_MODE_CHARGING_MIN_VZW 30
 #endif //(CONFIG_SEC_FACTORY)
