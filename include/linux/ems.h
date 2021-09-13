@@ -315,7 +315,8 @@ void update_cont_avg(struct rq *rq, struct task_struct *prev, struct task_struct
 static inline void update_cont_avg(struct rq *rq, struct task_struct *prev, struct task_struct *next) { };
 #endif
 
-#ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP
+#if defined(CONFIG_CPU_FREQ_GOV_ENERGYSTEP) || defined (CONFIG_CPU_FREQ_GOV_ENERGYSTEP_S21)
+// #ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP
 extern int esg_get_migov_boost(int cpu);
 extern void esg_set_migov_boost(int cpu, int boost);
 #else

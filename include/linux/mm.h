@@ -2519,7 +2519,7 @@ void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
 #define VM_MAX_READAHEAD	CONFIG_VM_MAX_READAHEAD	/* kbytes - default 128 kbytes */
-#define VM_MIN_READAHEAD	64	/* Default 16 kbytes (includes current page) *//
+#define VM_MIN_READAHEAD	64	/* Default 16 kbytes (includes current page) */
 extern unsigned int mmap_readaround_limit;
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,

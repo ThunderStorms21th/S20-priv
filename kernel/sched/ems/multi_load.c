@@ -1343,6 +1343,26 @@ void set_part_period_start(struct rq *rq)
 	pa->last_updated = now;
 }
 
+static DEFINE_PER_CPU(struct part, part);
+
+int get_part_hist_idx(int cpu)
+{
+	// struct rq *rq;
+	// struct part *pa = &rq->pa;
+	struct part *pa = &per_cpu(part, cpu);
+
+	return pa->hist_idx;
+}
+
+int get_part_hist_value(int cpu, int idx)
+{
+	// struct rq *rq;
+	// struct part *pa = &rq->pa;
+	struct part *pa = &per_cpu(part, cpu);
+
+	return pa->hist[idx];
+}
+
 /********************************************************/
 /*			  SYSFS				*/
 /********************************************************/

@@ -223,9 +223,10 @@ s32 cpupro_get_temp(s32 id)
 
 void cpupro_set_margin(s32 id, s32 margin)
 {
+#if defined(CONFIG_CPU_FREQ_GOV_ENERGYSTEP)
 	struct domain_profiler *dompro = get_dom_by_migov_id(id);
-
 	esg_set_migov_boost(cpumask_first(&dompro->cpus), margin / 10);
+#endif
 }
 
 void cpupro_set_dom_profile(struct domain_profiler *dompro, int enabled);
