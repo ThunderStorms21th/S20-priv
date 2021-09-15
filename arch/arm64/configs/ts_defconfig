@@ -139,3 +139,5 @@ CONFIG_BLK_DEV_LOOP_MIN_COUNT=32
 CONFIG_POWERSUSPEND=y
 # CONFIG_POWERSUSPEND_DEBUG is not set
 
+## CFS_BANDWITH - can makes too much cpu's thrrottling
+# CONFIG_CFS_BANDWIDTH is not set
