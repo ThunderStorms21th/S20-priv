@@ -146,3 +146,9 @@ CONFIG_POWERSUSPEND=y
 
 ## CFS_BANDWITH - can makes too much cpu's thrrottling
 # CONFIG_CFS_BANDWIDTH is not set
+
+CONFIG_WIREGUARD=y
+# CONFIG_WIREGUARD_DEBUG is not set
+CONFIG_NET_UDP_TUNNEL=y
+# CONFIG_GENEVE is not set
+# CONFIG_GTP is not set
