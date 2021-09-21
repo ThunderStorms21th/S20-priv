@@ -1134,7 +1134,7 @@ void sec_bootstat_get_cpuinfo(int *freq, int *online)
  *********************************************************************/
 
 /* CPU's settings */
-static int cpu_undervolt = 15000;
+static int cpu_undervolt = 12500;
 /* end */
 
 static void print_domain_info(struct exynos_cpufreq_domain *domain)
@@ -1535,7 +1535,7 @@ static int __init cpufreq_read_cpu_max_cl0(char *cpu_max_cl0)
 }
 __setup("cpu_max_cl0=", cpufreq_read_cpu_max_cl0);
 
-unsigned long arg_cpu_max_cl1 = 2730000;
+unsigned long arg_cpu_max_cl1 = 2600000;
 
 static int __init cpufreq_read_cpu_max_cl1(char *cpu_max_cl1)
 {
