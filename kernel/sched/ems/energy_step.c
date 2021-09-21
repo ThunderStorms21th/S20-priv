@@ -86,16 +86,9 @@ struct esgov_cpu {
 	unsigned long		min;		/* min util matched with min_cap */
 };
 
-struct esgov_param {
-	struct cpumask		cpus;
-	int			step;
-	int			patient_mode;
-};
-
 struct kobject *esg_kobj;
 DEFINE_PER_CPU(struct esgov_policy *, esgov_policy);
 DEFINE_PER_CPU(struct esgov_cpu, esgov_cpu);
-DEFINE_PER_CPU(struct esgov_param *, esgov_param);
 bool esg_apply_migov;
 
 /*************************************************************************/
@@ -205,7 +198,6 @@ static int esg_mode_update_callback(struct notifier_block *nb,
 {
 	struct emstune_set *cur_set = (struct emstune_set *)v;
 	struct esgov_policy *esg_policy;
-	struct esgov_param *param;
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
@@ -214,10 +206,6 @@ static int esg_mode_update_callback(struct notifier_block *nb,
 
 		esg_policy = per_cpu(esgov_policy, cpu);
 		if (unlikely((!esg_policy) || !esg_policy->enabled))
-			continue;
-
-		param = per_cpu(esgov_param, cpu);
-		if (unlikely(!param))
 			continue;
 
 		esg_update_step(esg_policy, cur_set->esg.step[cpu]);
@@ -269,7 +257,7 @@ static int esg_apply_migov_boost(int cpu, int util)
 	} else
 		margin = util * boost;
 
-	margin = margin / 150;  // 100
+	margin = margin / 100;  // 100
 
 	boosted_util = util + margin;
 
