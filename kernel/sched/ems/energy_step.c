@@ -257,7 +257,7 @@ static int esg_apply_migov_boost(int cpu, int util)
 	} else
 		margin = util * boost;
 
-	margin = margin / 100;  // 100
+	margin = margin / 130;  // 100
 
 	boosted_util = util + margin;
 
