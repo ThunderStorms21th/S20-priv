@@ -7573,7 +7573,7 @@
 		gpu_dvs = <0x00>;
 		gpu_inter_frame_pm = <0x01>;
 		gpu_inter_frame_dynamic_util = <0x32>;
-		gpu_inter_frame_dynamic_freq = <0xab630>;
+		gpu_inter_frame_dynamic_freq = <0xc3500>;   // 0xab630
 		gpu_perf_gathering = <0x00>;
 		gpu_runtime_pm_delay_time = <0x32>;
 		gpu_dvfs_polling_time = <0x1e>;
@@ -7582,18 +7582,18 @@
 		gpu_pmqos_mif_max_clock = <0x29a810>;
 		gpu_pmqos_mif_max_clock_base = <0x9eb10>;
 		gpu_pmqos_g3d_clock = <0xc3500 0xab630>;
-		gpu_pmqos_cl2_max_clock = <0x1506d0 0x19c990>;
-		gpu_pmqos_cl1_max_clock = <0x19c990 0x00>;
-		gpu_cl_dvfs_start_base = <0x5c0a8>;
+		gpu_pmqos_cl2_max_clock = <0x19c990 0x21b8d0>;  // <0x1506d0 0x19c990>
+		gpu_pmqos_cl1_max_clock = <0x1e8c50 0x00>;      // <0x19c990 0x00>
+		gpu_cl_dvfs_start_base = <0x6f158>;             // <0x5c0a8> 
 		gpu_debug_level = <0x01>;   // 0x03
-		gpu_trace_level = <0x08>;   // 0x08
+		gpu_trace_level = <0x02>;   // 0x08
 		gpu_mo_min_clock = <0x5c0a8>;
 		gpu_boost_gpu_min_lock = <0x00>;
 		gpu_boost_egl_min_lock = <0x1c9080>;
 		gpu_vk_boost_max_lock = <0x4f588>;
 		gpu_vk_boost_mif_min_lock = <0xf78f0>;
 		gpu_bts_support = <0x01>;
-		gpu_neg_boost_clock = <0x5c0a8>;
+		gpu_neg_boost_clock = <0x6f158>;                // <0x5c0a8>
 		phandle = <0x146>;
 	};
 
@@ -15576,7 +15576,7 @@
 
 			dvfs_gpu {
 				dm-index = <0x0d>;
-				available = "false";    // false
+				available = "true";    // false
 				cal_id = <0xb04000a>;
 				dm_type_name = "dm_gpu";
 			};
@@ -15636,7 +15636,7 @@
 
 				mode_1 {
 					mode_id = <0x01>;
-					target_load = "3 2730000:3";
+					target_load = "60 845000:84 1014000:90 1352000:95 2028000:97 2730000:99";    // 3 2730000:3
 					min_sample_time = <0x32>;
 					hold_sample_time = <0x64>;
 					hispeed_load = <0x03>;
@@ -15881,7 +15881,7 @@
 		id = <0x00>;
 		sensors = <0x3e>;
 		sensing_mode = "max";   // min (balance) max
-		hotplug_enable = <0x01>;// 0x01
+		hotplug_enable = <0x00>;// 0x01
 		hotplug_in_threshold = <0x5b>;
 		hotplug_out_threshold = <0x60>;
 		#thermal-sensor-cells = <0x00>;
@@ -15963,9 +15963,9 @@
 			zone_name = "BIG_THERMAL";
 			polling-delay-passive = <0x32>;
 			polling-delay = <0x3e8>;
-			thermal-sensors = <0x176>;  // 0x176
+			thermal-sensors = <0x172>;
 			governor = "power_allocator";
-			sustainable-power = <0x00>; // 0x00
+			sustainable-power = <0x01>; // 0x00
 			k_po = <0x00>;
 			k_pu = <0x00>;
 			k_i = <0x00>;
@@ -15983,42 +15983,42 @@
 				};
 
 				big-switch-on {
-					temperature = <0xd6d8>;     // 0xd6d8
+					temperature = <0xd0d8>;     // 0xd6d8
 					hysteresis = <0x7d0>;
 					type = "active";
 					phandle = <0x346>;
 				};
 
 				big-control-temp {
-					temperature = <0x14438>;     // 0x14438
+					temperature = <0x13438>;     // 0x14438
 					hysteresis = <0x1388>;
 					type = "passive";
 					phandle = <0x173>;
 				};
 
 				big-alert0 {
-					temperature = <0x17318>;    // 0x17318
+					temperature = <0x16318>;    // 0x17318
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x347>;
 				};
 
 				big-alert1 {
-					temperature = <0x186a0>;    // 0x186a0
+					temperature = <0x176a0>;    // 0x186a0
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x348>;
 				};
 
 				big-alert2 {
-					temperature = <0x19a28>;    // 0x19a28
+					temperature = <0x18a28>;    // 0x19a28
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x349>;
 				};
 
 				big-alert3 {
-					temperature = <0x1adb0>;    // <0x1adb0
+					temperature = <0x10db0>;    // <0x1adb0
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x34a>;
@@ -16045,7 +16045,7 @@
 			zone_name = "MID_THERMAL";
 			polling-delay-passive = <0x32>;
 			polling-delay = <0x3e8>;
-			thermal-sensors = <0x176>;  // 0x174
+			thermal-sensors = <0x174>;
 			governor = "power_allocator";
 			sustainable-power = <0x00>;
 			k_po = <0x00>;
@@ -16065,42 +16065,42 @@
 				};
 
 				mid-switch-on {
-					temperature = <0xd6d8>;     // 0xd6d8
+					temperature = <0xd0d8>;     // 0xd6d8
 					hysteresis = <0x7d0>;
 					type = "active";
 					phandle = <0x34e>;
 				};
 
 				mid-control-temp {
-					temperature = <0x14438>;    // 0x14438
+					temperature = <0x13438>;    // 0x14438
 					hysteresis = <0x1388>;
 					type = "passive";
 					phandle = <0x175>;
 				};
 
 				mid-alert0 {
-					temperature = <0x17318>;    // 0x17318
+					temperature = <0x16318>;    // 0x17318
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x34f>;
 				};
 
 				mid-alert1 {
-					temperature = <0x186a0>;    // 0x186a0
+					temperature = <0x176a0>;    // 0x186a0
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x350>;
 				};
 
 				mid-alert2 {
-					temperature = <0x19a28>;    // 0x19a28
+					temperature = <0x18a28>;    // 0x19a28
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x351>;
 				};
 
 				mid-alert3 {
-					temperature = <0x1adb0>;    // 0x1adb0
+					temperature = <0x10db0>;    // 0x1adb0
 					hysteresis = <0x1388>;
 					type = "active";
 					phandle = <0x352>;
