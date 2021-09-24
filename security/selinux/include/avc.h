@@ -146,7 +146,7 @@ static inline int avc_audit(struct selinux_state *state,
 		return -ECHILD;
 	return slow_avc_audit(state, ssid, tsid, tclass,
 			      requested, audited, denied, result,
-			      a, flags);
+			      a);
 #else
 	return 0;
 #endif

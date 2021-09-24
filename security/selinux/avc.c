@@ -505,7 +505,7 @@ static inline int avc_xperms_audit(struct selinux_state *state,
 	if (likely(!audited))
 		return 0;
 	return slow_avc_audit(state, ssid, tsid, tclass, requested,
-			audited, denied, result, ad, 0);
+			audited, denied, result, ad);
 #else
 	return 0;
 #endif
@@ -707,6 +707,7 @@ static struct avc_node *avc_insert(struct selinux_avc *avc,
 	if (avc_latest_notif_update(avc, avd->seqno, 1))
 		return NULL;
 
+	int rc = 0;
 	node = avc_alloc_node(avc);
 		if (rc) {
 //[SEC_SELINUX_PORTING_COMMON

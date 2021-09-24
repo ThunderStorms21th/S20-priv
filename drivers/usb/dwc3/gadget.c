@@ -1846,10 +1846,9 @@ static int __dwc3_gadget_wakeup(struct dwc3 *dwc)
 	case DWC3_LINK_STATE_RESET:
 	case DWC3_LINK_STATE_RX_DET:	/* in HS, means Early Suspend */
 #if defined(CONFIG_SOC_EXYNOS9830) /* To support L1*/
-	case DWC3_LINK_STATE_U2:	/* in HS, means SLEEP */
+	case DWC3_LINK_STATE_U2:	/* in HS, means SLEEP (L1) */
 #endif
 	case DWC3_LINK_STATE_U3:	/* in HS, means SUSPEND */
-	case DWC3_LINK_STATE_U2:	/* in HS, means Sleep (L1) */
 	case DWC3_LINK_STATE_U1:
 	case DWC3_LINK_STATE_RESUME:
 		break;
@@ -2326,6 +2325,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
 	int			ret;
+	u32			reg;
 
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	if(is_on)

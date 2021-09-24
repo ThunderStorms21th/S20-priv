@@ -496,10 +496,10 @@ static u8 encode_bMaxPower(enum usb_device_speed speed,
 		 * USB 3.x supports up to 900mA, but since 900 isn't divisible
 		 * by 8 the integral division will effectively cap to 896mA.
 		 */
-		return (min(val, 900U) / 8;
+		return (min(val, 900U) / 8);
 	default:
 		/* only SuperSpeed and faster support > 500mA */
-		return (min(val, 500U) / 2;
+		return (min(val, 500U) / 2);
 	}
 }
 

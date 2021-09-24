@@ -537,8 +537,6 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 				else
 				gfp_flags |= __GFP_NOFAIL;
 				congestion_wait(BLK_RW_ASYNC, HZ/50);
-				}
-				gfp_flags |= __GFP_NOFAIL;
 				goto retry_encrypt;
 			}
 			data_page = NULL;

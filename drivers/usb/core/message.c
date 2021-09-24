@@ -1248,6 +1248,7 @@ static void usb_disable_device_endpoints(struct usb_device *dev, int skip_ep0)
  */
 void usb_disable_device(struct usb_device *dev, int skip_ep0)
 {
+	struct usb_hcd *hcd = bus_to_hcd(dev->bus);
 	int i;
 
 #if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)

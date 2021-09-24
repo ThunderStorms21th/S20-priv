@@ -338,7 +338,7 @@ static struct s3c2410_dma_client s3c64xx_spi_dma_client = {
 	.name = "samsung-spi-dma",
 };
 
-static void prepare_dma(struct s3c64xx_spi_dma_data *dma,
+static int prepare_dma(struct s3c64xx_spi_dma_data *dma,
 					unsigned len, dma_addr_t buf)
 {
 	struct s3c64xx_spi_driver_data *sdd;
@@ -395,6 +395,7 @@ static void prepare_dma(struct s3c64xx_spi_dma_data *dma,
 	sdd->ops->trigger((enum dma_ch)dma->ch);
 #endif
 
+	return 0;
 }
 
 static int acquire_dma(struct s3c64xx_spi_driver_data *sdd)
@@ -516,6 +517,7 @@ static void enable_datapath(struct s3c64xx_spi_driver_data *sdd,
 {
 	void __iomem *regs = sdd->regs;
 	u32 modecfg, chcfg, dma_burst_len, packet_cnt_en;
+	int ret;
 
 	chcfg = readl(regs + S3C64XX_SPI_CH_CFG);
 	chcfg &= ~S3C64XX_SPI_CH_TXCH_ON;
@@ -593,13 +595,8 @@ static void enable_datapath(struct s3c64xx_spi_driver_data *sdd,
 		}
 	}
 
-	if (ret)
-		return ret;
-
 	writel(modecfg, regs + S3C64XX_SPI_MODE_CFG);
 	writel(chcfg, regs + S3C64XX_SPI_CH_CFG);
-
-	return 0;
 }
 
 static inline void enable_cs(struct s3c64xx_spi_driver_data *sdd,
@@ -741,7 +738,6 @@ static void s3c64xx_spi_config(struct s3c64xx_spi_driver_data *sdd)
 	void __iomem *regs = sdd->regs;
 	int ret;
 	u32 val;
-	int ret;
 
 	/* Disable Clock */
 	if (!sdd->port_conf->clk_from_cmu) {
@@ -919,6 +915,81 @@ static void s3c64xx_spi_unmap_one_msg(struct s3c64xx_spi_driver_data *sdd,
 					xfer->len, DMA_TO_DEVICE);
 }
 
+static int s3c64xx_enable_datapath(struct s3c64xx_spi_driver_data *sdd,
+				    struct spi_transfer *xfer, int dma_mode)
+{
+	void __iomem *regs = sdd->regs;
+	u32 modecfg, chcfg;
+	int ret = 0;
+
+	modecfg = readl(regs + S3C64XX_SPI_MODE_CFG);
+	modecfg &= ~(S3C64XX_SPI_MODE_TXDMA_ON | S3C64XX_SPI_MODE_RXDMA_ON);
+
+	chcfg = readl(regs + S3C64XX_SPI_CH_CFG);
+	chcfg &= ~S3C64XX_SPI_CH_TXCH_ON;
+
+	if (dma_mode) {
+		chcfg &= ~S3C64XX_SPI_CH_RXCH_ON;
+	} else {
+		/* Always shift in data in FIFO, even if xfer is Tx only,
+		 * this helps setting PCKT_CNT value for generating clocks
+		 * as exactly needed.
+		 */
+		chcfg |= S3C64XX_SPI_CH_RXCH_ON;
+		writel(((xfer->len * 8 / sdd->cur_bpw) & 0xffff)
+					| S3C64XX_SPI_PACKET_CNT_EN,
+					regs + S3C64XX_SPI_PACKET_CNT);
+	}
+
+	if (xfer->tx_buf != NULL) {
+		sdd->state |= TXBUSY;
+		chcfg |= S3C64XX_SPI_CH_TXCH_ON;
+		if (dma_mode) {
+			modecfg |= S3C64XX_SPI_MODE_TXDMA_ON;
+			ret = prepare_dma(&sdd->tx_dma, xfer->len, xfer->tx_dma);
+		} else {
+			switch (sdd->cur_bpw) {
+			case 32:
+				iowrite32_rep(regs + S3C64XX_SPI_TX_DATA,
+					xfer->tx_buf, xfer->len / 4);
+				break;
+			case 16:
+				iowrite16_rep(regs + S3C64XX_SPI_TX_DATA,
+					xfer->tx_buf, xfer->len / 2);
+				break;
+			default:
+				iowrite8_rep(regs + S3C64XX_SPI_TX_DATA,
+					xfer->tx_buf, xfer->len);
+				break;
+			}
+		}
+	}
+
+	if (xfer->rx_buf != NULL) {
+		sdd->state |= RXBUSY;
+
+		if (sdd->port_conf->high_speed && sdd->cur_speed >= 30000000UL
+					&& !(sdd->cur_mode & SPI_CPHA))
+			chcfg |= S3C64XX_SPI_CH_HS_EN;
+
+		if (dma_mode) {
+			modecfg |= S3C64XX_SPI_MODE_RXDMA_ON;
+			chcfg |= S3C64XX_SPI_CH_RXCH_ON;
+			writel(((xfer->len * 8 / sdd->cur_bpw) & 0xffff)
+					| S3C64XX_SPI_PACKET_CNT_EN,
+					regs + S3C64XX_SPI_PACKET_CNT);
+			ret = prepare_dma(&sdd->rx_dma, xfer->len, xfer->tx_dma);
+		}
+	}
+
+	if (ret)
+		return ret;
+
+	writel(modecfg, regs + S3C64XX_SPI_MODE_CFG);
+	writel(chcfg, regs + S3C64XX_SPI_CH_CFG);
+
+	return 0;
+}
 
 static int s3c64xx_spi_transfer_one_message(struct spi_master *master,
 					    struct spi_message *msg)
@@ -943,9 +1014,7 @@ static int s3c64xx_spi_transfer_one_message(struct spi_master *master,
 		sdd->cur_bpw = spi->bits_per_word;
 		sdd->cur_speed = spi->max_speed_hz;
 		sdd->cur_mode = spi->mode;
-		status = s3c64xx_spi_config(sdd);
-		if (status)
-			return status;
+		s3c64xx_spi_config(sdd);
 	}
 
 	if (!(msg->is_dma_mapped) && (sci->dma_mode == DMA_MODE))
@@ -1039,7 +1108,7 @@ try_transfer:
 			enable_cs(sdd, spi);
 		}
 
-		status = s3c64xx_enable_datapath(sdd, xfer, use_dma);
+		s3c64xx_enable_datapath(sdd, xfer, use_dma);
 
 		spin_unlock_irqrestore(&sdd->lock, flags);
 
