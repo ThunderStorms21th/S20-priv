@@ -2173,6 +2173,13 @@ static int dhd_suspend_resume_helper(struct dhd_info *dhd, int val, int force)
 	}
 
 	DHD_OS_WAKE_UNLOCK(dhdp);
+#ifdef DHD_PERIODIC_CNTRS
+	if (val) {
+		 dhd_dbg_periodic_cntrs_start(dhdp);
+	} else {
+		dhd_dbg_periodic_cntrs_stop(dhdp);
+	}
+#endif /* DHD_PERIODIC_CNTRS */
 	return ret;
 }
 
@@ -2182,8 +2189,9 @@ static void dhd_early_suspend(struct early_suspend *h)
 	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 	DHD_TRACE_HW4(("%s: enter\n", __FUNCTION__));
 
-	if (dhd)
+	if (dhd) {
 		dhd_suspend_resume_helper(dhd, 1, 0);
+	}
 }
 
 static void dhd_late_resume(struct early_suspend *h)
@@ -2191,8 +2199,9 @@ static void dhd_late_resume(struct early_suspend *h)
 	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 	DHD_TRACE_HW4(("%s: enter\n", __FUNCTION__));
 
-	if (dhd)
+	if (dhd) {
 		dhd_suspend_resume_helper(dhd, 0, 0);
+	}
 }
 #endif /* CONFIG_HAS_EARLYSUSPEND && DHD_USE_EARLYSUSPEND */
 
@@ -4802,6 +4811,143 @@ void dhd_runtime_pm_enable(dhd_pub_t *dhdp)
 }
 
 #endif /* DHD_PCIE_RUNTIMEPM */
+#ifdef DHD_PERIODIC_CNTRS
+void
+dhd_dbg_periodic_cntrs_timer_cb(ulong data)
+{
+	dhd_info_t *dhd = (dhd_info_t *)data;
+
+	if (!dhd) {
+		return;
+	}
+
+	if (dhd->pub.dongle_reset ||
+		DHD_BUS_CHECK_SUSPEND_OR_ANY_SUSPEND_IN_PROGRESS(&dhd->pub)) {
+		return;
+	}
+
+	if (dhd->thr_periodic_cntrs_ctl.thr_pid >= 0) {
+		up(&dhd->thr_periodic_cntrs_ctl.sema);
+		return;
+	}
+}
+
+void
+dhd_dbg_periodic_cntrs_start(dhd_pub_t * dhdp)
+{
+	dhd_info_t *dhd = NULL;
+	uint32 current_time = wl_cfgdbg_current_timestamp();
+
+	if (FW_SUPPORTED(dhdp, ecounters)) {
+		/* Not required DHD periodic conters */
+		return;
+	}
+
+	if (dhdp && dhdp->info && dhdp->early_suspended) {
+		/* Periodic conters timer start if screen was off(early suspend) */
+		dhd = (dhd_info_t *)dhdp->info;
+	} else {
+		/* Screen on state */
+		return;
+	}
+
+	if (dhdp->dongle_reset) {
+		return;
+	}
+
+	if ((current_time - dhdp->dhd_periodic_cntrs_last_time) > DHD_ECNT_INTERVAL) {
+		mod_timer(&dhd->dhd_periodic_cntrs_timer,
+		jiffies + msecs_to_jiffies(10));
+	} else {
+		mod_timer(&dhd->dhd_periodic_cntrs_timer,
+		jiffies + msecs_to_jiffies(DHD_ECNT_INTERVAL));
+	};
+
+	dhd->dhd_periodic_cntrs_tmr_valid = TRUE;
+}
+
+void
+dhd_dbg_periodic_cntrs_stop(dhd_pub_t * dhdp)
+{
+	dhd_info_t *dhd = NULL;
+
+	if (dhdp && dhdp->info) {
+		dhd = (dhd_info_t *)dhdp->info;
+	} else {
+		return;
+	}
+
+	if (dhd->dhd_periodic_cntrs_tmr_valid &&
+		dhd->thr_periodic_cntrs_ctl.thr_pid >= 0) {
+		del_timer(&dhd->dhd_periodic_cntrs_timer);
+	}
+	dhd->dhd_periodic_cntrs_tmr_valid = FALSE;
+}
+
+void
+dhd_dbg_periodic_cntrs_wrapper(dhd_pub_t * dhdp)
+{
+	struct net_device *primary_ndev = NULL;
+	struct bcm_cfg80211 *cfg = NULL;
+
+	DHD_INFO(("Enter\n"));
+	primary_ndev = dhd_linux_get_primary_netdev(dhdp);
+	if (!primary_ndev) {
+		DHD_ERROR(("Cannot find primary netdev\n"));
+		return;
+	}
+
+	cfg = wl_get_cfg(primary_ndev);
+	if (!cfg) {
+		DHD_ERROR(("Cannot find cfg\n"));
+		return;
+	}
+
+	wl_cfgdbg_periodic_cntrs(primary_ndev, cfg);
+}
+
+int
+dhd_dbg_periodic_cntrs_thread(void *data)
+{
+	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
+	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
+
+	while (1) {
+		if (down_interruptible (&tsk->sema) == 0) {
+			unsigned long flags;
+			unsigned long jiffies_at_start = jiffies;
+			unsigned long time_lapse;
+
+			SMP_RD_BARRIER_DEPENDS();
+			if (tsk->terminated) {
+				break;
+			}
+
+			if (dhd->pub.dongle_reset == FALSE) {
+				DHD_TIMER(("%s:\n", __FUNCTION__));
+				if (dhd->pub.up && dhd->dhd_periodic_cntrs_tmr_valid) {
+					dhd_dbg_periodic_cntrs_wrapper(&dhd->pub);
+				}
+				DHD_GENERAL_LOCK(&dhd->pub, flags);
+				time_lapse = jiffies - jiffies_at_start;
+
+				if (dhd->dhd_periodic_cntrs_tmr_valid) {
+					mod_timer(&dhd->dhd_periodic_cntrs_timer,
+						jiffies +
+						msecs_to_jiffies(DHD_ECNT_INTERVAL) -
+						min(msecs_to_jiffies(DHD_ECNT_INTERVAL),
+							time_lapse));
+				}
+				DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+			}
+		} else {
+			break;
+		}
+	}
+
+	complete_and_exit(&tsk->completed, 0);
+}
+#endif /* DHD_PERIODIC_CNTRS */
 
 #ifdef ENABLE_ADAPTIVE_SCHED
 static void
@@ -8622,6 +8768,18 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		goto fail;
 	}
 #endif /* DHD_PCIE_RUNTIMEPM */
+
+#ifdef DHD_PERIODIC_CNTRS
+	init_timer_compat(&dhd->dhd_periodic_cntrs_timer, dhd_dbg_periodic_cntrs_timer_cb, dhd);
+	dhd->dhd_periodic_cntrs_tmr_valid = FALSE;
+
+	dhd->thr_periodic_cntrs_ctl.thr_pid = DHD_PID_KT_INVALID;
+	PROC_START(dhd_dbg_periodic_cntrs_thread, dhd, &dhd->thr_periodic_cntrs_ctl, 0,
+		"dhd_dbg_periodic_cntrs_thread");
+	if (dhd->thr_periodic_cntrs_ctl.thr_pid < 0) {
+		goto fail;
+	}
+#endif /* DHD_PERIODIC_CNTRS */
 
 #ifdef SHOW_LOGTRACE
 	skb_queue_head_init(&dhd->evt_trace_queue);
@@ -13141,6 +13299,13 @@ void dhd_detach(dhd_pub_t *dhdp)
 			PROC_STOP(&dhd->thr_rpm_ctl);
 		}
 #endif /* DHD_PCIE_RUNTIMEPM */
+#ifdef DHD_PERIODIC_CNTRS
+		if (dhd->thr_periodic_cntrs_ctl.thr_pid >= 0) {
+			dhd_dbg_periodic_cntrs_stop(dhdp);
+			PROC_STOP(&dhd->thr_periodic_cntrs_ctl);
+		}
+#endif /* DHD_PERIODIC_CNTRS */
+
 		if (dhd->thr_wdt_ctl.thr_pid >= 0) {
 			PROC_STOP(&dhd->thr_wdt_ctl);
 		}
