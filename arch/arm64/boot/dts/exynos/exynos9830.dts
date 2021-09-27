@@ -7582,18 +7582,18 @@
 		gpu_pmqos_mif_max_clock = <0x29a810>;
 		gpu_pmqos_mif_max_clock_base = <0x9eb10>;
 		gpu_pmqos_g3d_clock = <0xc3500 0xab630>;
-		gpu_pmqos_cl2_max_clock = <0x19c990 0x21b8d0>;  // <0x1506d0 0x19c990>
-		gpu_pmqos_cl1_max_clock = <0x1e8c50 0x00>;      // <0x19c990 0x00>
-		gpu_cl_dvfs_start_base = <0x6f158>;             // <0x5c0a8> 
+		gpu_pmqos_cl2_max_clock = <0x1506d0 0x19c990>;  // <0x1506d0 0x19c990>
+		gpu_pmqos_cl1_max_clock = <0x19c990 0x00>;      // <0x19c990 0x00>
+		gpu_cl_dvfs_start_base = <0x5c0a8>;             // <0x5c0a8> 
 		gpu_debug_level = <0x01>;   // 0x03
-		gpu_trace_level = <0x02>;   // 0x08
+		gpu_trace_level = <0x04>;   // 0x08
 		gpu_mo_min_clock = <0x5c0a8>;
 		gpu_boost_gpu_min_lock = <0x00>;
 		gpu_boost_egl_min_lock = <0x1c9080>;
 		gpu_vk_boost_max_lock = <0x4f588>;
 		gpu_vk_boost_mif_min_lock = <0xf78f0>;
 		gpu_bts_support = <0x01>;
-		gpu_neg_boost_clock = <0x6f158>;                // <0x5c0a8>
+		gpu_neg_boost_clock = <0x5c0a8>;                // <0x5c0a8>
 		phandle = <0x146>;
 	};
 
@@ -11880,7 +11880,7 @@
 
 				frt {
 					coverage_ratio = <0x1e 0x1e 0x1e>;
-					active_ratio = <0x19 0x03 0x05>;
+					active_ratio = <0x19 0x0f 0x0a>;    // 0x19 0x03 0x05
 				};
 			};
 
