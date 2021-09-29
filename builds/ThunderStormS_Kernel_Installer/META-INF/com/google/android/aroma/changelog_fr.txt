@@ -1,4 +1,33 @@
-<@center><b><#selectbg_g>ThunderStormS Kernel Installer v1.0</#></b></@> 
+<@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
+
+<*>EdYoBlue or ThunderStormS Kernel v1.2
+- Linux 4.19.87
+- Sources Samsung DUH5
+- Quelques débogages désactivés
+- Améliorations des I/O sched cfq
+- Améliorations des EMS & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.1
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.1
+- Linux 4.19.87
+- Sources Samsung DUF9
+- Le support Powersuspned v2.0
+- Le support Wireguard
+- Quelques débogages désactivés
+- Le support File Blocker pour certaines applications de réglage
+- Améliorations des I/O sched cfq de Pixel 4
+- Améliorations des EMS & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.0
+</*>
+------------------------------------------------
 
 <*>Kernel EdYoBlue ou ThunderStormS
 - Linux 4.19.87

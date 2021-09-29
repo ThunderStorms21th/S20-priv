@@ -66,7 +66,7 @@ changelog.desc=<#ff0000>Changelog
 menu2.text=<#ff0000>Kernel
 menu2.text1=Quel Kernel voulez-vous installer?
 menu2.choice1=Kernel EdYoBlue
-menu2.choice2=Kernel ThunderStormS
+menu2.choice2=Kernel ThunderStormS & Stock Boot Logo
 
 
 

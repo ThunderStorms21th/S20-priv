@@ -63,6 +63,7 @@ ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/g980/SM980F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 #g981
@@ -83,6 +84,7 @@ ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/g981/SM981B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 #g985
@@ -103,6 +105,7 @@ ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/g985/SM985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 #g986
@@ -123,6 +126,7 @@ ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/g986/SM986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 #g988
@@ -143,6 +147,7 @@ ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/g988/SM988B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 # Run install script
@@ -163,9 +168,6 @@ ui_print(" ");
 ui_print(" ");
 
 
-
-
-
 #####################################################################################
 #	Finishing																		#
 #####################################################################################
@@ -178,4 +180,3 @@ ui_print("*****************************************************");
 ui_print(" ");
 ui_print(" ");
 ui_print(" ");
-

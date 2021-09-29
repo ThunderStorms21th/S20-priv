@@ -146,11 +146,11 @@ rm -f $LOG
     echo "50" > /proc/sys/vm/overcommit_ratio
 
     # ZRAM
-    # for another SM-G97x - ZRAM is OFF because RAM is 8GB (no needed)
+    # for another SM-G98x - ZRAM is OFF because RAM is 8GB (no needed)
     swapoff /dev/block/zram0 > /dev/null 2>&1
     echo "1" > /sys/block/zram0/reset
-    # echo "1073741824" > /sys/block/zram0/disksize  # 1,0 GB
-    echo "1610612736" > /sys/block/zram0/disksize  # 1,5 GB
+    echo "1073741824" > /sys/block/zram0/disksize  # 1,0 GB
+    # echo "1610612736" > /sys/block/zram0/disksize  # 1,5 GB
     # echo "2147483648" > /sys/block/zram0/disksize  # 2,0 GB
     # echo "2684354560" > /sys/block/zram0/disksize  # 2,5 GB
     # echo "3221225472" > /sys/block/zram0/disksize  # 3,0 GB
@@ -161,8 +161,8 @@ rm -f $LOG
     # GPU set at max/min freq
     echo "800000" > /sys/kernel/gpu/gpu_max_clock
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
-    echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
-    echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
+    # echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
+    # echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
     echo "260000" > /sys/devices/platform/18500000.mali/highspeed_clock
     echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
     echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
@@ -267,36 +267,29 @@ rm -f $LOG
 
 
    ## Kernel Scheduler
-   #echo "2000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
+   echo "4000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
    #echo "10000000" > /proc/sys/kernel/sched_latency_ns
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
 
-   # CPU EFF_mode
-   #echo "0" > /sys/kernel/ems/eff_mode						# 0
-
-   # CPU Energy Aware
-   #echo "1" > /proc/sys/kernel/sched_energy_aware			# 0
-   #echo "0" > /proc/sys/kernel/sched_tunable_scaling		# 0
-
    # Thermal Governors
    # BIG Cluster
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone0/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone0/policy
    # MID Cluster
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone1/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone1/policy
    # LITTLE Cluster
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone2/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone2/policy
    # GPU
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone3/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone3/policy
    # ISP
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone4/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone4/policy
    # NPU
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone5/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone5/policy
    # AC
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone6/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone6/policy
    # BATTERY
-   echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone7/policy
+   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone7/policy
 
    # Boeffla wakelocks
    chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
