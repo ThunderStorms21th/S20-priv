@@ -257,7 +257,7 @@ static int esg_apply_migov_boost(int cpu, int util)
 	} else
 		margin = util * boost;
 
-	margin = margin / 130;  // 100
+	margin = margin / 100;  // 100
 
 	boosted_util = util + margin;
 
@@ -521,7 +521,7 @@ static struct esgov_policy *esgov_policy_alloc(struct cpufreq_policy *policy)
 		goto free_allocation;
 	esg_policy->patient_mode = val;
 
-	esg_policy->rate_delay_ns = 4 * NSEC_PER_MSEC;
+	esg_policy->rate_delay_ns = 5 * NSEC_PER_MSEC;  // 4 * NSEC_PER_MSEC
 
 	/* Init Sysfs */
 	if (kobject_init_and_add(&esg_policy->kobj, &ktype_esg, esg_kobj,
