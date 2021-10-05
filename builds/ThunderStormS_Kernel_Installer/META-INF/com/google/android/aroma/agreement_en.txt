@@ -4,7 +4,7 @@
 
 <@fill>
 - I am not responsible for any damage of any kind
-  caused by this software, either directly or indirectly..
+  caused by this software, either directly or indirectly.
 - You are installing this kernel for Your own risk.
 - You are installing this Device Tree for Your own risk.
 - Kernel was tested by TESTERS.
