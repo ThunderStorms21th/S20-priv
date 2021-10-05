@@ -26,10 +26,10 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v1.0"
+export K_VERSION="v1.3"
 export K_NAME="ThundeRStormS-Kernel-S20"
 export K_NAME2="EdYoBlue-Kernel-S20"
-export K_BASE="DUH2"
+export K_BASE="DUH5"
 ANDROID=OneUI-R
 MODEL=G98X
 # -----------------------------
