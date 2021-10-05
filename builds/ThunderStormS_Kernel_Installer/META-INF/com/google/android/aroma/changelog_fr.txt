@@ -1,5 +1,19 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>EdYoBlue or ThunderStormS Kernel v1.3
+- Linux 4.19.87
+- Sources Samsung DUH5
+- Quelques débogages désactivés
+- Prend en charge tous les gouverneurs de CPU d'origine
+- I/O sched - nouveau SEN, FIOPS, SIO et MAPLE
+- Améliorations des EMS, VM & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.2
+</*>
+------------------------------------------------
+
 <*>EdYoBlue or ThunderStormS Kernel v1.2
 - Linux 4.19.87
 - Sources Samsung DUH5

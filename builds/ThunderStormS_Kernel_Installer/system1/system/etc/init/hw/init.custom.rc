@@ -32,8 +32,8 @@ on boot
    write /sys/block/sda/queue/iostats 0
    write /sys/block/mmcblk0/queue/iostats 0
    # VM
-   write /proc/sys/vm/dirty_expire_centisecs 800
-   write /proc/sys/vm/dirty_writeback_centisecs 500
+   write /proc/sys/vm/dirty_expire_centisecs 600
+   write /proc/sys/vm/dirty_writeback_centisecs 600
    write /proc/sys/vm/vfs_cache_pressure 95
    # MISC
    write > /sys/module/mmc_core/parameters/use_spi_crc N
