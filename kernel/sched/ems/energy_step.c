@@ -521,7 +521,7 @@ static struct esgov_policy *esgov_policy_alloc(struct cpufreq_policy *policy)
 		goto free_allocation;
 	esg_policy->patient_mode = val;
 
-    int rate_multipler = 9 / 2; // added multipler for more precision
+    int rate_multipler = 10 / 2; // added multipler for more precision
 	esg_policy->rate_delay_ns = rate_multipler * NSEC_PER_MSEC;  // 4 * NSEC_PER_MSEC
 
 	/* Init Sysfs */
@@ -572,7 +572,7 @@ static void esgov_work(struct kthread_work *work)
 
 	down_write(&esg_policy->policy->rwsem);
 	mutex_lock(&esg_policy->work_lock);
-	__cpufreq_driver_target(esg_policy->policy, freq, CPUFREQ_RELATION_L);
+	__cpufreq_driver_target(esg_policy->policy, freq, CPUFREQ_RELATION_L);  // default L, C, H
 	mutex_unlock(&esg_policy->work_lock);
 	up_write(&esg_policy->policy->rwsem);
 }
