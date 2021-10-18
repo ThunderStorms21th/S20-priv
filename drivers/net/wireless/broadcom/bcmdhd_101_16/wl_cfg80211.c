@@ -6243,6 +6243,9 @@ wl_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 		}
 	}
 
+	/* Kill CMD_BTCOEXMODE timer/handler if those are enabled */
+	wl_cfg80211_btcoex_kill_handler();
+
 #ifdef CUSTOM_SET_CPUCORE
 	/* set default cpucore */
 	if (dev == bcmcfg_to_prmry_ndev(cfg)) {
@@ -7197,6 +7200,10 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 	if (cfg80211_to_wl_iftype(dev->ieee80211_ptr->iftype, &wl_iftype, &wl_mode) < 0) {
 		return -EINVAL;
 	}
+
+#ifdef DHD_PERIODIC_CNTRS
+	wl_cfgdbg_periodic_cntrs(dev, cfg);
+#endif /* DHD_PERIODIC_CNTRS */
 
 	buf = MALLOC(cfg->osh, WLC_IOCTL_MEDLEN);
 	if (buf == NULL) {
@@ -16812,6 +16819,9 @@ s32 wl_cfg80211_down(struct net_device *dev)
 #ifdef TPUT_DEBUG_DUMP
 	wl_cfgdbg_tput_debug_mode(dev, FALSE);
 #endif /* TPUT_DEBUG_DUMP */
+	/* Kill CMD_BTCOEXMODE timer/handler if those are enabled */
+	wl_cfg80211_btcoex_kill_handler();
+
 	return err;
 }
 
