@@ -391,39 +391,6 @@ static struct uvc_streaming *uvc_stream_by_id(struct uvc_device *dev, int id)
 }
 
 /* ------------------------------------------------------------------------
- * Streaming Object Management
- */
-
-static void uvc_stream_delete(struct uvc_streaming *stream)
-{
-	mutex_destroy(&stream->mutex);
-
-	usb_put_intf(stream->intf);
-
-	kfree(stream->format);
-	kfree(stream->header.bmaControls);
-	kfree(stream);
-}
-
-static struct uvc_streaming *uvc_stream_new(struct uvc_device *dev,
-					    struct usb_interface *intf)
-{
-	struct uvc_streaming *stream;
-
-	stream = kzalloc(sizeof(*stream), GFP_KERNEL);
-	if (stream == NULL)
-		return NULL;
-
-	mutex_init(&stream->mutex);
-
-	stream->dev = dev;
-	stream->intf = usb_get_intf(intf);
-	stream->intfnum = intf->cur_altsetting->desc.bInterfaceNumber;
-
-	return stream;
-}
-
-/* ------------------------------------------------------------------------
  * Descriptors parsing
  */
 
@@ -715,11 +682,16 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 		return -EINVAL;
 	}
 
-	streaming = uvc_stream_new(dev, intf);
+	streaming = kzalloc(sizeof(*streaming), GFP_KERNEL);
 	if (streaming == NULL) {
 		usb_driver_release_interface(&uvc_driver.driver, intf);
-		return -ENOMEM;
+		return -EINVAL;
 	}
+
+	mutex_init(&streaming->mutex);
+	streaming->dev = dev;
+	streaming->intf = usb_get_intf(intf);
+	streaming->intfnum = intf->cur_altsetting->desc.bInterfaceNumber;
 
 	/* The Pico iMage webcam has its class-specific interface descriptors
 	 * after the endpoint descriptors.
@@ -927,7 +899,10 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 
 error:
 	usb_driver_release_interface(&uvc_driver.driver, intf);
-	uvc_stream_delete(streaming);
+	usb_put_intf(intf);
+	kfree(streaming->format);
+	kfree(streaming->header.bmaControls);
+	kfree(streaming);
 	return ret;
 }
 
@@ -940,10 +915,7 @@ static struct uvc_entity *uvc_alloc_entity(u16 type, u8 id,
 	unsigned int i;
 
 	extra_size = roundup(extra_size, sizeof(*entity->pads));
-	if (num_pads)
-		num_inputs = type & UVC_TERM_OUTPUT ? num_pads : num_pads - 1;
-	else
-		num_inputs = 0;
+	num_inputs = (type & UVC_TERM_OUTPUT) ? num_pads : num_pads - 1;
 	size = sizeof(*entity) + extra_size + sizeof(*entity->pads) * num_pads
 	     + num_inputs;
 	entity = kzalloc(size, GFP_KERNEL);
@@ -959,7 +931,7 @@ static struct uvc_entity *uvc_alloc_entity(u16 type, u8 id,
 
 	for (i = 0; i < num_inputs; ++i)
 		entity->pads[i].flags = MEDIA_PAD_FL_SINK;
-	if (!UVC_ENTITY_IS_OTERM(entity) && num_pads)
+	if (!UVC_ENTITY_IS_OTERM(entity))
 		entity->pads[num_pads-1].flags = MEDIA_PAD_FL_SOURCE;
 
 	entity->bNrInPins = num_inputs;
@@ -1858,7 +1830,7 @@ static int uvc_scan_device(struct uvc_device *dev)
  * is released.
  *
  * As this function is called after or during disconnect(), all URBs have
- * already been cancelled by the USB core. There is no need to kill the
+ * already been canceled by the USB core. There is no need to kill the
  * interrupt URB manually.
  */
 static void uvc_delete(struct kref *kref)
@@ -1896,7 +1868,10 @@ static void uvc_delete(struct kref *kref)
 		streaming = list_entry(p, struct uvc_streaming, list);
 		usb_driver_release_interface(&uvc_driver.driver,
 			streaming->intf);
-		uvc_stream_delete(streaming);
+		usb_put_intf(streaming->intf);
+		kfree(streaming->format);
+		kfree(streaming->header.bmaControls);
+		kfree(streaming);
 	}
 
 	kfree(dev);

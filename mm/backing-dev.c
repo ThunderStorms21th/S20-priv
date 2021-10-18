@@ -19,7 +19,6 @@ struct backing_dev_info noop_backing_dev_info = {
 EXPORT_SYMBOL_GPL(noop_backing_dev_info);
 
 static struct class *bdi_class;
-static const char *bdi_unknown_name = "(unknown)";
 
 /*
  * bdi_lock protects updates to bdi_list. bdi_list has RCU reader side
@@ -222,11 +221,78 @@ static ssize_t stable_pages_required_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(stable_pages_required);
 
+static ssize_t bdp_debug_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *page)
+{
+	struct backing_dev_info *bdi = dev_get_drvdata(dev);
+	struct sec_backing_dev_info *sec_bdi = SEC_BDI(bdi);
+	int len = 0, i;
+
+	len += snprintf(page + len, PAGE_SIZE-len-1,
+		"start_time, elapsed_ms, g_thresh, g_dirty, wb_thresh, wb_dirty"
+		", avg_bw, timelist_dirty, timelist_inodes\n");
+
+	spin_lock(&sec_bdi->bdp_debug.lock);
+	for (i = 0; i < BDI_BDP_DEBUG_ENTRY && i < sec_bdi->bdp_debug.total; i++) {
+		struct bdi_sec_bdp_entry *entry = sec_bdi->bdp_debug.entry + i;
+
+		len += snprintf(page + len, PAGE_SIZE-len-1,
+			"%lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu\n",
+			entry->start_time,
+			entry->elapsed_ms,
+			entry->global_thresh,
+			entry->global_dirty,
+			entry->wb_thresh,
+			entry->wb_dirty,
+			entry->wb_avg_write_bandwidth,
+			entry->wb_timelist_dirty,
+			entry->wb_timelist_inodes);
+	}
+	spin_unlock(&sec_bdi->bdp_debug.lock);
+
+	return len;
+}
+static DEVICE_ATTR_RO(bdp_debug);
+
+static ssize_t max_bdp_debug_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *page)
+{
+	struct backing_dev_info *bdi = dev_get_drvdata(dev);
+	struct sec_backing_dev_info *sec_bdi = SEC_BDI(bdi);
+	int len = 0;
+	struct bdi_sec_bdp_entry *entry = &sec_bdi->bdp_debug.max_entry;
+
+	len += snprintf(page + len, PAGE_SIZE-len-1,
+		"start_time, elapsed_ms, g_thresh, g_dirty, wb_thresh, wb_dirty"
+		", avg_bw, timelist_dirty, timelist_inodes\n");
+
+	spin_lock(&sec_bdi->bdp_debug.lock);
+	len += snprintf(page + len, PAGE_SIZE-len-1,
+			"%lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu\n",
+			entry->start_time,
+			entry->elapsed_ms,
+			entry->global_thresh,
+			entry->global_dirty,
+			entry->wb_thresh,
+			entry->wb_dirty,
+			entry->wb_avg_write_bandwidth,
+			entry->wb_timelist_dirty,
+			entry->wb_timelist_inodes);
+	spin_unlock(&sec_bdi->bdp_debug.lock);
+
+	return len;
+}
+static DEVICE_ATTR_RO(max_bdp_debug);
+
 static struct attribute *bdi_dev_attrs[] = {
 	&dev_attr_read_ahead_kb.attr,
 	&dev_attr_min_ratio.attr,
 	&dev_attr_max_ratio.attr,
 	&dev_attr_stable_pages_required.attr,
+	&dev_attr_bdp_debug.attr,
+	&dev_attr_max_bdp_debug.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bdi_dev);
@@ -250,8 +316,8 @@ static int __init default_bdi_init(void)
 {
 	int err;
 
-	bdi_wq = alloc_workqueue("writeback", WQ_MEM_RECLAIM | WQ_UNBOUND |
-				 WQ_SYSFS, 0);
+	bdi_wq = alloc_workqueue("writeback", WQ_MEM_RECLAIM | WQ_FREEZABLE |
+					      WQ_UNBOUND | WQ_SYSFS, 0);
 	if (!bdi_wq)
 		return -ENOMEM;
 
@@ -851,6 +917,10 @@ static int bdi_init(struct backing_dev_info *bdi)
 	INIT_LIST_HEAD(&bdi->wb_list);
 	init_waitqueue_head(&bdi->wb_waitq);
 
+	bdi->last_thresh = 0;
+	bdi->last_nr_dirty = 0;
+	bdi->paused_total = 0;
+
 	ret = cgwb_bdi_init(bdi);
 
 	return ret;
@@ -873,6 +943,25 @@ struct backing_dev_info *bdi_alloc_node(gfp_t gfp_mask, int node_id)
 }
 EXPORT_SYMBOL(bdi_alloc_node);
 
+struct backing_dev_info *sec_bdi_alloc_node(gfp_t gfp_mask, int node_id)
+{
+	struct sec_backing_dev_info *sec_bdi;
+
+	sec_bdi = kmalloc_node(sizeof(struct sec_backing_dev_info),
+			   gfp_mask | __GFP_ZERO, node_id);
+	if (!sec_bdi)
+		return NULL;
+
+	if (bdi_init(&sec_bdi->bdi)) {
+		kfree(sec_bdi);
+		return NULL;
+	}
+	spin_lock_init(&sec_bdi->bdp_debug.lock);
+
+	return (struct backing_dev_info *)sec_bdi;
+}
+EXPORT_SYMBOL(sec_bdi_alloc_node);
+
 int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 {
 	struct device *dev;
@@ -880,8 +969,7 @@ int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 	if (bdi->dev)	/* The driver needs to use separate queues per device */
 		return 0;
 
-	vsnprintf(bdi->dev_name, sizeof(bdi->dev_name), fmt, args);
-	dev = device_create(bdi_class, NULL, MKDEV(0, 0), bdi, bdi->dev_name);
+	dev = device_create_vargs(bdi_class, NULL, MKDEV(0, 0), bdi, fmt, args);
 	if (IS_ERR(dev))
 		return PTR_ERR(dev);
 
@@ -968,7 +1056,14 @@ static void release_bdi(struct kref *ref)
 	WARN_ON_ONCE(bdi->dev);
 	wb_exit(&bdi->wb);
 	cgwb_bdi_exit(bdi);
-	kfree(bdi);
+
+	if (bdi->capabilities & BDI_CAP_SEC_DEBUG) {
+		struct sec_backing_dev_info *sec_bdi = SEC_BDI(bdi);
+
+		kfree(sec_bdi);
+	} else {
+		kfree(bdi);
+	}
 }
 
 void bdi_put(struct backing_dev_info *bdi)
@@ -976,14 +1071,6 @@ void bdi_put(struct backing_dev_info *bdi)
 	kref_put(&bdi->refcnt, release_bdi);
 }
 EXPORT_SYMBOL(bdi_put);
-
-const char *bdi_dev_name(struct backing_dev_info *bdi)
-{
-	if (!bdi || !bdi->dev)
-		return bdi_unknown_name;
-	return bdi->dev_name;
-}
-EXPORT_SYMBOL_GPL(bdi_dev_name);
 
 static wait_queue_head_t congestion_wqh[2] = {
 		__WAIT_QUEUE_HEAD_INITIALIZER(congestion_wqh[0]),

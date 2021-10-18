@@ -407,7 +407,7 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 	unsigned long clk_hz;
 	int err;
 
-	master = devm_spi_alloc_master(&pdev->dev, sizeof(*bs));
+	master = spi_alloc_master(&pdev->dev, sizeof(*bs));
 	if (!master) {
 		dev_err(&pdev->dev, "spi_alloc_master() failed\n");
 		return -ENOMEM;
@@ -416,18 +416,7 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, master);
 	master->mode_bits = (SPI_CPOL | SPI_CS_HIGH | SPI_NO_CS);
 	master->bits_per_word_mask = SPI_BPW_MASK(8);
-	/* even though the driver never officially supported native CS
-	 * allow a single native CS for legacy DT support purposes when
-	 * no cs-gpio is configured.
-	 * Known limitations for native cs are:
-	 * * multiple chip-selects: cs0-cs2 are all simultaniously asserted
-	 *     whenever there is a transfer -  this even includes SPI_NO_CS
-	 * * SPI_CS_HIGH: is ignores - cs are always asserted low
-	 * * cs_change: cs is deasserted after each spi_transfer
-	 * * cs_delay_usec: cs is always deasserted one SCK cycle after
-	 *     a spi_transfer
-	 */
-	master->num_chipselect = 1;
+	master->num_chipselect = -1;
 	master->transfer_one = bcm2835aux_spi_transfer_one;
 	master->handle_err = bcm2835aux_spi_handle_err;
 	master->prepare_message = bcm2835aux_spi_prepare_message;
@@ -439,27 +428,30 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 	/* the main area */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	bs->regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(bs->regs))
-		return PTR_ERR(bs->regs);
+	if (IS_ERR(bs->regs)) {
+		err = PTR_ERR(bs->regs);
+		goto out_master_put;
+	}
 
 	bs->clk = devm_clk_get(&pdev->dev, NULL);
 	if ((!bs->clk) || (IS_ERR(bs->clk))) {
 		err = PTR_ERR(bs->clk);
 		dev_err(&pdev->dev, "could not get clk: %d\n", err);
-		return err;
+		goto out_master_put;
 	}
 
 	bs->irq = platform_get_irq(pdev, 0);
 	if (bs->irq <= 0) {
 		dev_err(&pdev->dev, "could not get IRQ: %d\n", bs->irq);
-		return bs->irq ? bs->irq : -ENODEV;
+		err = bs->irq ? bs->irq : -ENODEV;
+		goto out_master_put;
 	}
 
 	/* this also enables the HW block */
 	err = clk_prepare_enable(bs->clk);
 	if (err) {
 		dev_err(&pdev->dev, "could not prepare clock: %d\n", err);
-		return err;
+		goto out_master_put;
 	}
 
 	/* just checking if the clock returns a sane value */
@@ -482,7 +474,7 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 		goto out_clk_disable;
 	}
 
-	err = spi_register_master(master);
+	err = devm_spi_register_master(&pdev->dev, master);
 	if (err) {
 		dev_err(&pdev->dev, "could not register SPI master: %d\n", err);
 		goto out_clk_disable;
@@ -492,6 +484,8 @@ static int bcm2835aux_spi_probe(struct platform_device *pdev)
 
 out_clk_disable:
 	clk_disable_unprepare(bs->clk);
+out_master_put:
+	spi_master_put(master);
 	return err;
 }
 
@@ -499,8 +493,6 @@ static int bcm2835aux_spi_remove(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct bcm2835aux_spi *bs = spi_master_get_devdata(master);
-
-	spi_unregister_master(master);
 
 	bcm2835aux_spi_reset_hw(bs);
 

@@ -117,35 +117,6 @@ dwc3_gadget_link_string(enum dwc3_link_state link_state)
 }
 
 /**
- * dwc3_gadget_hs_link_string - returns highspeed and below link name
- * @link_state: link state code
- */
-static inline const char *
-dwc3_gadget_hs_link_string(enum dwc3_link_state link_state)
-{
-	switch (link_state) {
-	case DWC3_LINK_STATE_U0:
-		return "On";
-	case DWC3_LINK_STATE_U2:
-		return "Sleep";
-	case DWC3_LINK_STATE_U3:
-		return "Suspend";
-	case DWC3_LINK_STATE_SS_DIS:
-		return "Disconnected";
-	case DWC3_LINK_STATE_RX_DET:
-		return "Early Suspend";
-	case DWC3_LINK_STATE_RECOV:
-		return "Recovery";
-	case DWC3_LINK_STATE_RESET:
-		return "Reset";
-	case DWC3_LINK_STATE_RESUME:
-		return "Resume";
-	default:
-		return "UNKNOWN link state\n";
-	}
-}
-
-/**
  * dwc3_trb_type_string - returns TRB type as a string
  * @type: the type of the TRB
  */
@@ -653,12 +624,9 @@ static inline const char *dwc3_gadget_generic_cmd_status_string(int status)
 
 
 #ifdef CONFIG_DEBUG_FS
-extern void dwc3_debugfs_create_endpoint_dir(struct dwc3_ep *dep);
 extern void dwc3_debugfs_init(struct dwc3 *);
 extern void dwc3_debugfs_exit(struct dwc3 *);
 #else
-static inline void dwc3_debugfs_create_endpoint_dir(struct dwc3_ep *dep)
-{  }
 static inline void dwc3_debugfs_init(struct dwc3 *d)
 {  }
 static inline void dwc3_debugfs_exit(struct dwc3 *d)

@@ -433,17 +433,13 @@ static int dwc3_link_state_show(struct seq_file *s, void *unused)
 	unsigned long		flags;
 	enum dwc3_link_state	state;
 	u32			reg;
-	u8			speed;
 
 	spin_lock_irqsave(&dwc->lock, flags);
 	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
 	state = DWC3_DSTS_USBLNKST(reg);
-	speed = reg & DWC3_DSTS_CONNECTSPD;
-
-	seq_printf(s, "%s\n", (speed >= DWC3_DSTS_SUPERSPEED) ?
-		   dwc3_gadget_link_string(state) :
-		   dwc3_gadget_hs_link_string(state));
 	spin_unlock_irqrestore(&dwc->lock, flags);
+
+	seq_printf(s, "%s\n", dwc3_gadget_link_string(state));
 
 	return 0;
 }
@@ -461,8 +457,6 @@ static ssize_t dwc3_link_state_write(struct file *file,
 	unsigned long		flags;
 	enum dwc3_link_state	state = 0;
 	char			buf[32];
-	u32			reg;
-	u8			speed;
 
 	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
 		return -EFAULT;
@@ -483,15 +477,6 @@ static ssize_t dwc3_link_state_write(struct file *file,
 		return -EINVAL;
 
 	spin_lock_irqsave(&dwc->lock, flags);
-	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
-	speed = reg & DWC3_DSTS_CONNECTSPD;
-
-	if (speed < DWC3_DSTS_SUPERSPEED &&
-	    state != DWC3_LINK_STATE_RECOV) {
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		return -EINVAL;
-	}
-
 	dwc3_gadget_set_link_state(dwc, state);
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
@@ -725,12 +710,28 @@ static void dwc3_debugfs_create_endpoint_files(struct dwc3_ep *dep,
 	}
 }
 
-void dwc3_debugfs_create_endpoint_dir(struct dwc3_ep *dep)
+static void dwc3_debugfs_create_endpoint_dir(struct dwc3_ep *dep,
+		struct dentry *parent)
 {
 	struct dentry		*dir;
 
-	dir = debugfs_create_dir(dep->name, dep->dwc->root);
+	dir = debugfs_create_dir(dep->name, parent);
 	dwc3_debugfs_create_endpoint_files(dep, dir);
+}
+
+static void dwc3_debugfs_create_endpoint_dirs(struct dwc3 *dwc,
+		struct dentry *parent)
+{
+	int			i;
+
+	for (i = 0; i < dwc->num_eps; i++) {
+		struct dwc3_ep	*dep = dwc->eps[i];
+
+		if (!dep)
+			continue;
+
+		dwc3_debugfs_create_endpoint_dir(dep, parent);
+	}
 }
 
 void dwc3_debugfs_init(struct dwc3 *dwc)
@@ -761,6 +762,7 @@ void dwc3_debugfs_init(struct dwc3 *dwc)
 				    &dwc3_testmode_fops);
 		debugfs_create_file("link_state", S_IRUGO | S_IWUSR, root, dwc,
 				    &dwc3_link_state_fops);
+		dwc3_debugfs_create_endpoint_dirs(dwc, root);
 	}
 }
 

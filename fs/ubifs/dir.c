@@ -220,9 +220,11 @@ static struct dentry *ubifs_lookup(struct inode *dir, struct dentry *dentry,
 
 	dbg_gen("'%pd' in dir ino %lu", dentry, dir->i_ino);
 
-	err = fscrypt_prepare_lookup(dir, dentry, &nm);
-	if (err == -ENOENT)
-		return d_splice_alias(NULL, dentry);
+	err = fscrypt_prepare_lookup(dir, dentry, flags);
+	if (err)
+		return ERR_PTR(err);
+
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 1, &nm);
 	if (err)
 		return ERR_PTR(err);
 
@@ -240,8 +242,6 @@ static struct dentry *ubifs_lookup(struct inode *dir, struct dentry *dentry,
 	if (nm.hash) {
 		ubifs_assert(c, fname_len(&nm) == 0);
 		ubifs_assert(c, fname_name(&nm) == NULL);
-		if (nm.hash & ~UBIFS_S_KEY_HASH_MASK)
-			goto done; /* ENOENT */
 		dent_key_init_hash(c, &key, dir->i_ino, nm.hash);
 		err = ubifs_tnc_lookup_dh(c, &key, dent, nm.minor_hash);
 	} else {
@@ -290,15 +290,6 @@ done:
 	return d_splice_alias(inode, dentry);
 }
 
-static int ubifs_prepare_create(struct inode *dir, struct dentry *dentry,
-				struct fscrypt_name *nm)
-{
-	if (fscrypt_is_nokey_name(dentry))
-		return -ENOKEY;
-
-	return fscrypt_setup_filename(dir, &dentry->d_name, 0, nm);
-}
-
 static int ubifs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 			bool excl)
 {
@@ -322,7 +313,7 @@ static int ubifs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	if (err)
 		return err;
 
-	err = ubifs_prepare_create(dir, dentry, &nm);
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
 	if (err)
 		goto out_budg;
 
@@ -986,7 +977,7 @@ static int ubifs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	if (err)
 		return err;
 
-	err = ubifs_prepare_create(dir, dentry, &nm);
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
 	if (err)
 		goto out_budg;
 
@@ -1071,7 +1062,7 @@ static int ubifs_mknod(struct inode *dir, struct dentry *dentry,
 		return err;
 	}
 
-	err = ubifs_prepare_create(dir, dentry, &nm);
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
 	if (err) {
 		kfree(dev);
 		goto out_budg;
@@ -1155,7 +1146,7 @@ static int ubifs_symlink(struct inode *dir, struct dentry *dentry,
 	if (err)
 		return err;
 
-	err = ubifs_prepare_create(dir, dentry, &nm);
+	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
 	if (err)
 		goto out_budg;
 
@@ -1354,10 +1345,7 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 			goto out_release;
 		}
 
-		spin_lock(&whiteout->i_lock);
 		whiteout->i_state |= I_LINKABLE;
-		spin_unlock(&whiteout->i_lock);
-
 		whiteout_ui = ubifs_inode(whiteout);
 		whiteout_ui->data = dev;
 		whiteout_ui->data_len = ubifs_encode_dev(dev, MKDEV(0, 0));
@@ -1450,11 +1438,7 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 		inc_nlink(whiteout);
 		mark_inode_dirty(whiteout);
-
-		spin_lock(&whiteout->i_lock);
 		whiteout->i_state &= ~I_LINKABLE;
-		spin_unlock(&whiteout->i_lock);
-
 		iput(whiteout);
 	}
 

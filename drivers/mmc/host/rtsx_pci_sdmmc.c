@@ -551,6 +551,23 @@ static int sd_write_long_data(struct realtek_pci_sdmmc *host,
 	return 0;
 }
 
+static int sd_rw_multi(struct realtek_pci_sdmmc *host, struct mmc_request *mrq)
+{
+	struct mmc_data *data = mrq->data;
+
+	if (host->sg_count < 0) {
+		data->error = host->sg_count;
+		dev_dbg(sdmmc_dev(host), "%s: sg_count = %d is invalid\n",
+			__func__, host->sg_count);
+		return data->error;
+	}
+
+	if (data->flags & MMC_DATA_READ)
+		return sd_read_long_data(host, mrq);
+
+	return sd_write_long_data(host, mrq);
+}
+
 static inline void sd_enable_initial_mode(struct realtek_pci_sdmmc *host)
 {
 	rtsx_pci_write_register(host->pcr, SD_CFG1,
@@ -561,33 +578,6 @@ static inline void sd_disable_initial_mode(struct realtek_pci_sdmmc *host)
 {
 	rtsx_pci_write_register(host->pcr, SD_CFG1,
 			SD_CLK_DIVIDE_MASK, SD_CLK_DIVIDE_0);
-}
-
-static int sd_rw_multi(struct realtek_pci_sdmmc *host, struct mmc_request *mrq)
-{
-	struct mmc_data *data = mrq->data;
-	int err;
-
-	if (host->sg_count < 0) {
-		data->error = host->sg_count;
-		dev_dbg(sdmmc_dev(host), "%s: sg_count = %d is invalid\n",
-			__func__, host->sg_count);
-		return data->error;
-	}
-
-	if (data->flags & MMC_DATA_READ) {
-		if (host->initial_mode)
-			sd_disable_initial_mode(host);
-
-		err = sd_read_long_data(host, mrq);
-
-		if (host->initial_mode)
-			sd_enable_initial_mode(host);
-
-		return err;
-	}
-
-	return sd_write_long_data(host, mrq);
 }
 
 static void sd_normal_rw(struct realtek_pci_sdmmc *host,
@@ -628,22 +618,19 @@ static int sd_change_phase(struct realtek_pci_sdmmc *host,
 		u8 sample_point, bool rx)
 {
 	struct rtsx_pcr *pcr = host->pcr;
-	u16 SD_VP_CTL = 0;
+
 	dev_dbg(sdmmc_dev(host), "%s(%s): sample_point = %d\n",
 			__func__, rx ? "RX" : "TX", sample_point);
 
 	rtsx_pci_write_register(pcr, CLK_CTL, CHANGE_CLK, CHANGE_CLK);
-	if (rx) {
-		SD_VP_CTL = SD_VPRX_CTL;
+	if (rx)
 		rtsx_pci_write_register(pcr, SD_VPRX_CTL,
 			PHASE_SELECT_MASK, sample_point);
-	} else {
-		SD_VP_CTL = SD_VPTX_CTL;
+	else
 		rtsx_pci_write_register(pcr, SD_VPTX_CTL,
 			PHASE_SELECT_MASK, sample_point);
-	}
-	rtsx_pci_write_register(pcr, SD_VP_CTL, PHASE_NOT_RESET, 0);
-	rtsx_pci_write_register(pcr, SD_VP_CTL, PHASE_NOT_RESET,
+	rtsx_pci_write_register(pcr, SD_VPCLK0_CTL, PHASE_NOT_RESET, 0);
+	rtsx_pci_write_register(pcr, SD_VPCLK0_CTL, PHASE_NOT_RESET,
 				PHASE_NOT_RESET);
 	rtsx_pci_write_register(pcr, CLK_CTL, CHANGE_CLK, 0);
 	rtsx_pci_write_register(pcr, SD_CFG1, SD_ASYNC_FIFO_NOT_RST, 0);

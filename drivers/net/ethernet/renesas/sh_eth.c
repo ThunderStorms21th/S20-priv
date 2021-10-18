@@ -610,8 +610,6 @@ static struct sh_eth_cpu_data r7s72100_data = {
 			  EESR_TDE,
 	.fdr_value	= 0x0000070f,
 
-	.trscer_err_mask = DESC_I_RINT8 | DESC_I_RINT5,
-
 	.no_psr		= 1,
 	.apr		= 1,
 	.mpr		= 1,
@@ -826,8 +824,6 @@ static struct sh_eth_cpu_data r7s9210_data = {
 			  EESR_RDE | EESR_RFRMER | EESR_TFE | EESR_TDE,
 
 	.fdr_value	= 0x0000070f,
-
-	.trscer_err_mask = DESC_I_RINT8 | DESC_I_RINT5,
 
 	.apr		= 1,
 	.mpr		= 1,
@@ -1130,9 +1126,6 @@ static struct sh_eth_cpu_data sh771x_data = {
 			  EESIPR_CEEFIP | EESIPR_CELFIP |
 			  EESIPR_RRFIP | EESIPR_RTLFIP | EESIPR_RTSFIP |
 			  EESIPR_PREIP | EESIPR_CERFIP,
-
-	.trscer_err_mask = DESC_I_RINT8,
-
 	.tsu		= 1,
 	.dual_port	= 1,
 };
@@ -2191,28 +2184,24 @@ static size_t __sh_eth_get_regs(struct net_device *ndev, u32 *buf)
 	if (cd->tsu) {
 		add_tsu_reg(ARSTR);
 		add_tsu_reg(TSU_CTRST);
-		if (cd->dual_port) {
-			add_tsu_reg(TSU_FWEN0);
-			add_tsu_reg(TSU_FWEN1);
-			add_tsu_reg(TSU_FCM);
-			add_tsu_reg(TSU_BSYSL0);
-			add_tsu_reg(TSU_BSYSL1);
-			add_tsu_reg(TSU_PRISL0);
-			add_tsu_reg(TSU_PRISL1);
-			add_tsu_reg(TSU_FWSL0);
-			add_tsu_reg(TSU_FWSL1);
-		}
+		add_tsu_reg(TSU_FWEN0);
+		add_tsu_reg(TSU_FWEN1);
+		add_tsu_reg(TSU_FCM);
+		add_tsu_reg(TSU_BSYSL0);
+		add_tsu_reg(TSU_BSYSL1);
+		add_tsu_reg(TSU_PRISL0);
+		add_tsu_reg(TSU_PRISL1);
+		add_tsu_reg(TSU_FWSL0);
+		add_tsu_reg(TSU_FWSL1);
 		add_tsu_reg(TSU_FWSLC);
-		if (cd->dual_port) {
-			add_tsu_reg(TSU_QTAGM0);
-			add_tsu_reg(TSU_QTAGM1);
-			add_tsu_reg(TSU_FWSR);
-			add_tsu_reg(TSU_FWINMK);
-			add_tsu_reg(TSU_ADQT0);
-			add_tsu_reg(TSU_ADQT1);
-			add_tsu_reg(TSU_VTAG0);
-			add_tsu_reg(TSU_VTAG1);
-		}
+		add_tsu_reg(TSU_QTAGM0);
+		add_tsu_reg(TSU_QTAGM1);
+		add_tsu_reg(TSU_FWSR);
+		add_tsu_reg(TSU_FWINMK);
+		add_tsu_reg(TSU_ADQT0);
+		add_tsu_reg(TSU_ADQT1);
+		add_tsu_reg(TSU_VTAG0);
+		add_tsu_reg(TSU_VTAG1);
 		add_tsu_reg(TSU_ADSBSY);
 		add_tsu_reg(TSU_TEN);
 		add_tsu_reg(TSU_POST1);
@@ -2302,7 +2291,7 @@ static void sh_eth_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, sh_eth_gstrings_stats,
+		memcpy(data, *sh_eth_gstrings_stats,
 		       sizeof(sh_eth_gstrings_stats));
 		break;
 	}
@@ -2547,7 +2536,6 @@ static int sh_eth_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	else
 		txdesc->status |= cpu_to_le32(TD_TACT);
 
-	wmb(); /* cur_tx must be incremented after TACT bit was set */
 	mdp->cur_tx++;
 
 	if (!(sh_eth_read(ndev, EDTRR) & mdp->cd->edtrr_trns))
@@ -2628,9 +2616,9 @@ static int sh_eth_close(struct net_device *ndev)
 	/* Free all the skbuffs in the Rx queue and the DMA buffer. */
 	sh_eth_ring_free(ndev);
 
-	mdp->is_opened = 0;
+	pm_runtime_put_sync(&mdp->pdev->dev);
 
-	pm_runtime_put(&mdp->pdev->dev);
+	mdp->is_opened = 0;
 
 	return 0;
 }
@@ -3141,16 +3129,12 @@ static struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 	struct device_node *np = dev->of_node;
 	struct sh_eth_plat_data *pdata;
 	const char *mac_addr;
-	int ret;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return NULL;
 
-	ret = of_get_phy_mode(np);
-	if (ret < 0)
-		return NULL;
-	pdata->phy_interface = ret;
+	pdata->phy_interface = of_get_phy_mode(np);
 
 	mac_addr = of_get_mac_address(np);
 	if (mac_addr)

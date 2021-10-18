@@ -82,6 +82,13 @@ static int ravb_config(struct net_device *ndev)
 	return error;
 }
 
+static void ravb_set_duplex(struct net_device *ndev)
+{
+	struct ravb_private *priv = netdev_priv(ndev);
+
+	ravb_modify(ndev, ECMR, ECMR_DM, priv->duplex ? ECMR_DM : 0);
+}
+
 static void ravb_set_rate(struct net_device *ndev)
 {
 	struct ravb_private *priv = netdev_priv(ndev);
@@ -391,11 +398,13 @@ error:
 /* E-MAC init function */
 static void ravb_emac_init(struct net_device *ndev)
 {
+	struct ravb_private *priv = netdev_priv(ndev);
+
 	/* Receive frame limit set register */
 	ravb_write(ndev, ndev->mtu + ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN, RFLR);
 
 	/* EMAC Mode: PAUSE prohibition; Duplex; RX Checksum; TX; RX */
-	ravb_write(ndev, ECMR_ZPF | ECMR_DM |
+	ravb_write(ndev, ECMR_ZPF | (priv->duplex ? ECMR_DM : 0) |
 		   (ndev->features & NETIF_F_RXCSUM ? ECMR_RCSC : 0) |
 		   ECMR_TE | ECMR_RE, ECMR);
 
@@ -983,6 +992,12 @@ static void ravb_adjust_link(struct net_device *ndev)
 		ravb_rcv_snd_disable(ndev);
 
 	if (phydev->link) {
+		if (phydev->duplex != priv->duplex) {
+			new_state = true;
+			priv->duplex = phydev->duplex;
+			ravb_set_duplex(ndev);
+		}
+
 		if (phydev->speed != priv->speed) {
 			new_state = true;
 			priv->speed = phydev->speed;
@@ -997,6 +1012,7 @@ static void ravb_adjust_link(struct net_device *ndev)
 		new_state = true;
 		priv->link = 0;
 		priv->speed = 0;
+		priv->duplex = -1;
 	}
 
 	/* Enable TX and RX right over here, if E-MAC change is ignored */
@@ -1026,6 +1042,7 @@ static int ravb_phy_init(struct net_device *ndev)
 
 	priv->link = 0;
 	priv->speed = 0;
+	priv->duplex = -1;
 
 	/* Try connecting to PHY */
 	pn = of_parse_phandle(np, "phy-handle", 0);
@@ -1445,7 +1462,6 @@ static void ravb_tx_timeout_work(struct work_struct *work)
 	struct ravb_private *priv = container_of(work, struct ravb_private,
 						 work);
 	struct net_device *ndev = priv->ndev;
-	int error;
 
 	netif_tx_stop_all_queues(ndev);
 
@@ -1454,36 +1470,15 @@ static void ravb_tx_timeout_work(struct work_struct *work)
 		ravb_ptp_stop(ndev);
 
 	/* Wait for DMA stopping */
-	if (ravb_stop_dma(ndev)) {
-		/* If ravb_stop_dma() fails, the hardware is still operating
-		 * for TX and/or RX. So, this should not call the following
-		 * functions because ravb_dmac_init() is possible to fail too.
-		 * Also, this should not retry ravb_stop_dma() again and again
-		 * here because it's possible to wait forever. So, this just
-		 * re-enables the TX and RX and skip the following
-		 * re-initialization procedure.
-		 */
-		ravb_rcv_snd_enable(ndev);
-		goto out;
-	}
+	ravb_stop_dma(ndev);
 
 	ravb_ring_free(ndev, RAVB_BE);
 	ravb_ring_free(ndev, RAVB_NC);
 
 	/* Device init */
-	error = ravb_dmac_init(ndev);
-	if (error) {
-		/* If ravb_dmac_init() fails, descriptors are freed. So, this
-		 * should return here to avoid re-enabling the TX and RX in
-		 * ravb_emac_init().
-		 */
-		netdev_err(ndev, "%s: ravb_dmac_init() failed, error %d\n",
-			   __func__, error);
-		return;
-	}
+	ravb_dmac_init(ndev);
 	ravb_emac_init(ndev);
 
-out:
 	/* Initialise PTP Clock driver */
 	if (priv->chip_id == RCAR_GEN2)
 		ravb_ptp_init(ndev, priv->pdev);
@@ -1732,16 +1727,12 @@ static int ravb_hwtstamp_get(struct net_device *ndev, struct ifreq *req)
 	config.flags = 0;
 	config.tx_type = priv->tstamp_tx_ctrl ? HWTSTAMP_TX_ON :
 						HWTSTAMP_TX_OFF;
-	switch (priv->tstamp_rx_ctrl & RAVB_RXTSTAMP_TYPE) {
-	case RAVB_RXTSTAMP_TYPE_V2_L2_EVENT:
+	if (priv->tstamp_rx_ctrl & RAVB_RXTSTAMP_TYPE_V2_L2_EVENT)
 		config.rx_filter = HWTSTAMP_FILTER_PTP_V2_L2_EVENT;
-		break;
-	case RAVB_RXTSTAMP_TYPE_ALL:
+	else if (priv->tstamp_rx_ctrl & RAVB_RXTSTAMP_TYPE_ALL)
 		config.rx_filter = HWTSTAMP_FILTER_ALL;
-		break;
-	default:
+	else
 		config.rx_filter = HWTSTAMP_FILTER_NONE;
-	}
 
 	return copy_to_user(req->ifr_data, &config, sizeof(config)) ?
 		-EFAULT : 0;

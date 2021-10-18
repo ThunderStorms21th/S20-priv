@@ -57,6 +57,7 @@
 #include <linux/workqueue.h>
 #include <linux/scatterlist.h>
 #include <linux/io.h>
+#include <linux/async.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
 #include <linux/glob.h>
@@ -2268,25 +2269,6 @@ static void ata_dev_config_ncq_prio(struct ata_device *dev)
 
 }
 
-static bool ata_dev_check_adapter(struct ata_device *dev,
-				  unsigned short vendor_id)
-{
-	struct pci_dev *pcidev = NULL;
-	struct device *parent_dev = NULL;
-
-	for (parent_dev = dev->tdev.parent; parent_dev != NULL;
-	     parent_dev = parent_dev->parent) {
-		if (dev_is_pci(parent_dev)) {
-			pcidev = to_pci_dev(parent_dev);
-			if (pcidev->vendor == vendor_id)
-				return true;
-			break;
-		}
-	}
-
-	return false;
-}
-
 static int ata_dev_config_ncq(struct ata_device *dev,
 			       char *desc, size_t desc_sz)
 {
@@ -2303,13 +2285,6 @@ static int ata_dev_config_ncq(struct ata_device *dev,
 		snprintf(desc, desc_sz, "NCQ (not used)");
 		return 0;
 	}
-
-	if (dev->horkage & ATA_HORKAGE_NO_NCQ_ON_ATI &&
-	    ata_dev_check_adapter(dev, PCI_VENDOR_ID_ATI)) {
-		snprintf(desc, desc_sz, "NCQ (not used)");
-		return 0;
-	}
-
 	if (ap->flags & ATA_FLAG_NCQ) {
 		hdepth = min(ap->scsi_host->can_queue, ATA_MAX_QUEUE);
 		dev->flags |= ATA_DFLAG_NCQ;
@@ -4518,8 +4493,9 @@ static const struct ata_blacklist_entry ata_device_blacklist [] = {
 	/* https://bugzilla.kernel.org/show_bug.cgi?id=15573 */
 	{ "C300-CTFDDAC128MAG",	"0001",		ATA_HORKAGE_NONCQ, },
 
-	/* Sandisk SD7/8/9s lock up hard on large trims */
-	{ "SanDisk SD[789]*",	NULL,		ATA_HORKAGE_MAX_TRIM_128M, },
+	/* Some Sandisk SSDs lock up hard with NCQ enabled.  Reported on
+	   SD7SN6S256G and SD8SN8U256G */
+	{ "SanDisk SD[78]SN*G",	NULL,		ATA_HORKAGE_NONCQ, },
 
 	/* devices which puke on READ_NATIVE_MAX */
 	{ "HDS724040KLSA80",	"KFAOA20N",	ATA_HORKAGE_BROKEN_HPA, },
@@ -4600,12 +4576,6 @@ static const struct ata_blacklist_entry ata_device_blacklist [] = {
 						ATA_HORKAGE_ZERO_AFTER_TRIM, },
 	{ "Samsung SSD 850*",		NULL,	ATA_HORKAGE_NO_NCQ_TRIM |
 						ATA_HORKAGE_ZERO_AFTER_TRIM, },
-	{ "Samsung SSD 860*",		NULL,	ATA_HORKAGE_NO_NCQ_TRIM |
-						ATA_HORKAGE_ZERO_AFTER_TRIM |
-						ATA_HORKAGE_NO_NCQ_ON_ATI, },
-	{ "Samsung SSD 870*",		NULL,	ATA_HORKAGE_NO_NCQ_TRIM |
-						ATA_HORKAGE_ZERO_AFTER_TRIM |
-						ATA_HORKAGE_NO_NCQ_ON_ATI, },
 	{ "FCCT*M500*",			NULL,	ATA_HORKAGE_NO_NCQ_TRIM |
 						ATA_HORKAGE_ZERO_AFTER_TRIM, },
 
@@ -5028,10 +4998,7 @@ int ata_std_qc_defer(struct ata_queued_cmd *qc)
 	return ATA_DEFER_LINK;
 }
 
-enum ata_completion_errors ata_noop_qc_prep(struct ata_queued_cmd *qc)
-{
-	return AC_ERR_OK;
-}
+void ata_noop_qc_prep(struct ata_queued_cmd *qc) { }
 
 /**
  *	ata_sg_init - Associate command with scatter-gather table.
@@ -5377,30 +5344,6 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 }
 
 /**
- *	ata_qc_get_active - get bitmask of active qcs
- *	@ap: port in question
- *
- *	LOCKING:
- *	spin_lock_irqsave(host lock)
- *
- *	RETURNS:
- *	Bitmask of active qcs
- */
-u64 ata_qc_get_active(struct ata_port *ap)
-{
-	u64 qc_active = ap->qc_active;
-
-	/* ATA_TAG_INTERNAL is sent to hw as tag 0 */
-	if (qc_active & (1ULL << ATA_TAG_INTERNAL)) {
-		qc_active |= (1 << 0);
-		qc_active &= ~(1ULL << ATA_TAG_INTERNAL);
-	}
-
-	return qc_active;
-}
-EXPORT_SYMBOL_GPL(ata_qc_get_active);
-
-/**
  *	ata_qc_complete_multiple - Complete multiple qcs successfully
  *	@ap: port in question
  *	@qc_active: new qc_active mask
@@ -5518,9 +5461,7 @@ void ata_qc_issue(struct ata_queued_cmd *qc)
 		return;
 	}
 
-	qc->err_mask |= ap->ops->qc_prep(qc);
-	if (unlikely(qc->err_mask))
-		goto err;
+	ap->ops->qc_prep(qc);
 	trace_ata_qc_issue(qc);
 	qc->err_mask |= ap->ops->qc_issue(qc);
 	if (unlikely(qc->err_mask))
@@ -6444,7 +6385,7 @@ int ata_host_start(struct ata_host *host)
 			have_stop = 1;
 	}
 
-	if (host->ops && host->ops->host_stop)
+	if (host->ops->host_stop)
 		have_stop = 1;
 
 	if (have_stop) {
@@ -6645,7 +6586,7 @@ int ata_host_register(struct ata_host *host, struct scsi_host_template *sht)
 	/* perform each probe asynchronously */
 	for (i = 0; i < host->n_ports; i++) {
 		struct ata_port *ap = host->ports[i];
-		ap->cookie = async_schedule(async_port_probe, ap);
+		async_schedule(async_port_probe, ap);
 	}
 
 	return 0;
@@ -6785,11 +6726,8 @@ void ata_host_detach(struct ata_host *host)
 {
 	int i;
 
-	for (i = 0; i < host->n_ports; i++) {
-		/* Ensure ata_port probe has completed */
-		async_synchronize_cookie(host->ports[i]->cookie + 1);
+	for (i = 0; i < host->n_ports; i++)
 		ata_port_detach(host->ports[i]);
-	}
 
 	/* the host is dead now, dissociate ACPI */
 	ata_acpi_dissociate(host);
@@ -6813,26 +6751,6 @@ void ata_pci_remove_one(struct pci_dev *pdev)
 	struct ata_host *host = pci_get_drvdata(pdev);
 
 	ata_host_detach(host);
-}
-
-void ata_pci_shutdown_one(struct pci_dev *pdev)
-{
-	struct ata_host *host = pci_get_drvdata(pdev);
-	int i;
-
-	for (i = 0; i < host->n_ports; i++) {
-		struct ata_port *ap = host->ports[i];
-
-		ap->pflags |= ATA_PFLAG_FROZEN;
-
-		/* Disable port interrupts */
-		if (ap->ops->freeze)
-			ap->ops->freeze(ap);
-
-		/* Stop the port DMA engines */
-		if (ap->ops->port_stop)
-			ap->ops->port_stop(ap);
-	}
 }
 
 /* move to PCI subsystem */
@@ -6962,8 +6880,6 @@ static int __init ata_parse_force_one(char **cur,
 		{ "ncq",	.horkage_off	= ATA_HORKAGE_NONCQ },
 		{ "noncqtrim",	.horkage_on	= ATA_HORKAGE_NO_NCQ_TRIM },
 		{ "ncqtrim",	.horkage_off	= ATA_HORKAGE_NO_NCQ_TRIM },
-		{ "noncqati",	.horkage_on	= ATA_HORKAGE_NO_NCQ_ON_ATI },
-		{ "ncqati",	.horkage_off	= ATA_HORKAGE_NO_NCQ_ON_ATI },
 		{ "dump_id",	.horkage_on	= ATA_HORKAGE_DUMP_ID },
 		{ "pio0",	.xfer_mask	= 1 << (ATA_SHIFT_PIO + 0) },
 		{ "pio1",	.xfer_mask	= 1 << (ATA_SHIFT_PIO + 1) },
@@ -7457,7 +7373,6 @@ EXPORT_SYMBOL_GPL(ata_timing_cycle2mode);
 
 #ifdef CONFIG_PCI
 EXPORT_SYMBOL_GPL(pci_test_config_bits);
-EXPORT_SYMBOL_GPL(ata_pci_shutdown_one);
 EXPORT_SYMBOL_GPL(ata_pci_remove_one);
 #ifdef CONFIG_PM
 EXPORT_SYMBOL_GPL(ata_pci_device_do_suspend);

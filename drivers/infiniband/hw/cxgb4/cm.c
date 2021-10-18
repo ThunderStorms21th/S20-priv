@@ -2076,7 +2076,7 @@ static int import_ep(struct c4iw_ep *ep, int iptype, __u8 *peer_ip,
 	} else {
 		pdev = get_real_dev(n->dev);
 		ep->l2t = cxgb4_l2t_get(cdev->rdev.lldi.l2t,
-					n, pdev, rt_tos2priority(tos));
+					n, pdev, 0);
 		if (!ep->l2t)
 			goto out;
 		ep->mtu = dst_mtu(dst);
@@ -2166,8 +2166,7 @@ static int c4iw_reconnect(struct c4iw_ep *ep)
 					   laddr6->sin6_addr.s6_addr,
 					   raddr6->sin6_addr.s6_addr,
 					   laddr6->sin6_port,
-					   raddr6->sin6_port,
-					   ep->com.cm_id->tos,
+					   raddr6->sin6_port, 0,
 					   raddr6->sin6_scope_id);
 		iptype = 6;
 		ra = (__u8 *)&raddr6->sin6_addr;
@@ -2799,8 +2798,7 @@ static int peer_abort(struct c4iw_dev *dev, struct sk_buff *skb)
 		break;
 	case MPA_REQ_SENT:
 		(void)stop_ep_timer(ep);
-		if (status != CPL_ERR_CONN_RESET || mpa_rev == 1 ||
-		    (mpa_rev == 2 && ep->tried_with_mpa_v1))
+		if (mpa_rev == 1 || (mpa_rev == 2 && ep->tried_with_mpa_v1))
 			connect_reply_upcall(ep, -ECONNRESET);
 		else {
 			/*
@@ -2948,18 +2946,15 @@ static int terminate(struct c4iw_dev *dev, struct sk_buff *skb)
 
 	ep = get_ep_from_tid(dev, tid);
 
-	if (ep) {
-		if (ep->com.qp) {
-			pr_warn("TERM received tid %u qpid %u\n", tid,
-				ep->com.qp->wq.sq.qid);
-			attrs.next_state = C4IW_QP_STATE_TERMINATE;
-			c4iw_modify_qp(ep->com.qp->rhp, ep->com.qp,
-				       C4IW_QP_ATTR_NEXT_STATE, &attrs, 1);
-		}
-
-		c4iw_put_ep(&ep->com);
+	if (ep && ep->com.qp) {
+		pr_warn("TERM received tid %u qpid %u\n",
+			tid, ep->com.qp->wq.sq.qid);
+		attrs.next_state = C4IW_QP_STATE_TERMINATE;
+		c4iw_modify_qp(ep->com.qp->rhp, ep->com.qp,
+			       C4IW_QP_ATTR_NEXT_STATE, &attrs, 1);
 	} else
 		pr_warn("TERM received tid %u no ep/qp\n", tid);
+	c4iw_put_ep(&ep->com);
 
 	return 0;
 }
@@ -3293,7 +3288,7 @@ int c4iw_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 		if (raddr->sin_addr.s_addr == htonl(INADDR_ANY)) {
 			err = pick_local_ipaddrs(dev, cm_id);
 			if (err)
-				goto fail3;
+				goto fail2;
 		}
 
 		/* find a route */
@@ -3315,7 +3310,7 @@ int c4iw_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 		if (ipv6_addr_type(&raddr6->sin6_addr) == IPV6_ADDR_ANY) {
 			err = pick_local_ip6addrs(dev, cm_id);
 			if (err)
-				goto fail3;
+				goto fail2;
 		}
 
 		/* find a route */
@@ -3327,7 +3322,7 @@ int c4iw_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 					   laddr6->sin6_addr.s6_addr,
 					   raddr6->sin6_addr.s6_addr,
 					   laddr6->sin6_port,
-					   raddr6->sin6_port, cm_id->tos,
+					   raddr6->sin6_port, 0,
 					   raddr6->sin6_scope_id);
 	}
 	if (!ep->dst) {
@@ -3517,14 +3512,13 @@ int c4iw_destroy_listen(struct iw_cm_id *cm_id)
 	    ep->com.local_addr.ss_family == AF_INET) {
 		err = cxgb4_remove_server_filter(
 			ep->com.dev->rdev.lldi.ports[0], ep->stid,
-			ep->com.dev->rdev.lldi.rxq_ids[0], false);
+			ep->com.dev->rdev.lldi.rxq_ids[0], 0);
 	} else {
 		struct sockaddr_in6 *sin6;
 		c4iw_init_wr_wait(ep->com.wr_waitp);
 		err = cxgb4_remove_server(
 				ep->com.dev->rdev.lldi.ports[0], ep->stid,
-				ep->com.dev->rdev.lldi.rxq_ids[0],
-				ep->com.local_addr.ss_family == AF_INET6);
+				ep->com.dev->rdev.lldi.rxq_ids[0], 0);
 		if (err)
 			goto done;
 		err = c4iw_wait_for_reply(&ep->com.dev->rdev, ep->com.wr_waitp,
@@ -3783,7 +3777,11 @@ static void build_cpl_pass_accept_req(struct sk_buff *skb, int stid , u8 tos)
 	 */
 	memset(&tmp_opt, 0, sizeof(tmp_opt));
 	tcp_clear_options(&tmp_opt);
+#ifdef CONFIG_MPTCP
+	tcp_parse_options(&init_net, skb, &tmp_opt, NULL, 0, NULL, NULL);
+#else
 	tcp_parse_options(&init_net, skb, &tmp_opt, 0, NULL);
+#endif
 
 	req = __skb_push(skb, sizeof(*req));
 	memset(req, 0, sizeof(*req));

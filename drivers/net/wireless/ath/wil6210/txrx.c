@@ -881,7 +881,7 @@ static void wil_rx_buf_len_init(struct wil6210_priv *wil)
 	}
 }
 
-static int wil_rx_init(struct wil6210_priv *wil, uint order)
+static int wil_rx_init(struct wil6210_priv *wil, u16 size)
 {
 	struct wil_ring *vring = &wil->ring_rx;
 	int rc;
@@ -895,7 +895,7 @@ static int wil_rx_init(struct wil6210_priv *wil, uint order)
 
 	wil_rx_buf_len_init(wil);
 
-	vring->size = 1 << order;
+	vring->size = size;
 	vring->is_rx = true;
 	rc = wil_vring_alloc(wil, vring);
 	if (rc)

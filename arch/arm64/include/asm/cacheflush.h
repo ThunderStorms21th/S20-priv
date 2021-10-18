@@ -41,6 +41,10 @@
  *	the implementation assumes non-aliasing VIPT D-cache and (aliasing)
  *	VIPT I-cache.
  *
+ *	flush_cache_all()
+ *
+ *		Unconditionally clean and invalidate the entire cache.
+ *
  *	flush_cache_mm(mm)
  *
  *		Clean and invalidate all user space cache entries
@@ -72,7 +76,10 @@
  *		- kaddr  - page address
  *		- size   - region size
  */
+extern void flush_cache_louis(void);
+extern void flush_cache_all(void);
 extern void __flush_icache_range(unsigned long start, unsigned long end);
+extern void flush_icache_range_poc(unsigned long start, unsigned long end);
 extern int  invalidate_icache_range(unsigned long start, unsigned long end);
 extern void __flush_dcache_area(void *addr, size_t len);
 extern void __inval_dcache_area(void *addr, size_t len);
@@ -90,7 +97,7 @@ static inline void flush_icache_range(unsigned long start, unsigned long end)
 	 * IPI all online CPUs so that they undergo a context synchronization
 	 * event and are forced to refetch the new instructions.
 	 */
-
+#ifdef CONFIG_KGDB
 	/*
 	 * KGDB performs cache maintenance with interrupts disabled, so we
 	 * will deadlock trying to IPI the secondary CPUs. In theory, we can
@@ -100,9 +107,9 @@ static inline void flush_icache_range(unsigned long start, unsigned long end)
 	 * the patching operation, so we don't need extra IPIs here anyway.
 	 * In which case, add a KGDB-specific bodge and return early.
 	 */
-	if (in_dbg_master())
+	if (kgdb_connected && irqs_disabled())
 		return;
-
+#endif
 	kick_all_cpus_sync();
 }
 

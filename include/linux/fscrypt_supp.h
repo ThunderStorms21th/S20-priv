@@ -27,6 +27,10 @@ struct fscrypt_operations {
 	const char *key_prefix;
 	int (*get_context)(struct inode *, void *, size_t);
 	int (*set_context)(struct inode *, const void *, size_t, void *);
+#if defined(CONFIG_DDAR) || defined(CONFIG_FSCRYPT_SDP)
+	int (*get_knox_context)(struct inode *, const char *, void *, size_t);
+	int (*set_knox_context)(struct inode *, const char *, const void *, size_t, void *);
+#endif
 	bool (*dummy_context)(struct inode *);
 	bool (*empty_dir)(struct inode *);
 	unsigned int max_namelen;
@@ -58,35 +62,6 @@ static inline bool fscrypt_dummy_context_enabled(struct inode *inode)
 		inode->i_sb->s_cop->dummy_context(inode);
 }
 
-/**
- * fscrypt_is_nokey_name() - test whether a dentry is a no-key name
- * @dentry: the dentry to check
- *
- * This returns true if the dentry is a no-key dentry.  A no-key dentry is a
- * dentry that was created in an encrypted directory that hasn't had its
- * encryption key added yet.  Such dentries may be either positive or negative.
- *
- * When a filesystem is asked to create a new filename in an encrypted directory
- * and the new filename's dentry is a no-key dentry, it must fail the operation
- * with ENOKEY.  This includes ->create(), ->mkdir(), ->mknod(), ->symlink(),
- * ->rename(), and ->link().  (However, ->rename() and ->link() are already
- * handled by fscrypt_prepare_rename() and fscrypt_prepare_link().)
- *
- * This is necessary because creating a filename requires the directory's
- * encryption key, but just checking for the key on the directory inode during
- * the final filesystem operation doesn't guarantee that the key was available
- * during the preceding dentry lookup.  And the key must have already been
- * available during the dentry lookup in order for it to have been checked
- * whether the filename already exists in the directory and for the new file's
- * dentry not to be invalidated due to it incorrectly having the no-key flag.
- *
- * Return: %true if the dentry is a no-key name
- */
-static inline bool fscrypt_is_nokey_name(const struct dentry *dentry)
-{
-	return dentry->d_flags & DCACHE_ENCRYPTED_NAME;
-}
-
 /* crypto.c */
 extern void fscrypt_enqueue_decrypt_work(struct work_struct *);
 extern struct fscrypt_ctx *fscrypt_get_ctx(const struct inode *, gfp_t);
@@ -113,6 +88,16 @@ extern int fscrypt_inherit_context(struct inode *, struct inode *,
 /* keyinfo.c */
 extern int fscrypt_get_encryption_info(struct inode *);
 extern void fscrypt_put_encryption_info(struct inode *);
+#ifdef CONFIG_FSCRYPT_SDP
+extern int fscrypt_get_encryption_key(struct inode *inode,
+						struct fscrypt_key *key);
+extern int fscrypt_get_encryption_key_classified(struct inode *inode,
+						struct fscrypt_key *key);
+extern int fscrypt_get_encryption_kek(struct inode *inode,
+						struct fscrypt_info *crypt_info,
+						struct fscrypt_key *kek);
+
+#endif
 
 /* fname.c */
 extern int fscrypt_setup_filename(struct inode *, const struct qstr *,
@@ -210,18 +195,19 @@ extern void fscrypt_enqueue_decrypt_bio(struct fscrypt_ctx *ctx,
 extern void fscrypt_pullback_bio_page(struct page **, bool);
 extern int fscrypt_zeroout_range(const struct inode *, pgoff_t, sector_t,
 				 unsigned int);
+void fscrypt_set_bio(const struct inode *inode, struct bio *bio, u64 dun);
+void *fscrypt_get_diskcipher(const struct inode *inode);
+int fscrypt_disk_encrypted(const struct inode *inode);
 
 /* hooks.c */
 extern int fscrypt_file_open(struct inode *inode, struct file *filp);
-extern int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
-				  struct dentry *dentry);
+extern int __fscrypt_prepare_link(struct inode *inode, struct inode *dir);
 extern int __fscrypt_prepare_rename(struct inode *old_dir,
 				    struct dentry *old_dentry,
 				    struct inode *new_dir,
 				    struct dentry *new_dentry,
 				    unsigned int flags);
-extern int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
-				    struct fscrypt_name *fname);
+extern int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry);
 extern int __fscrypt_prepare_symlink(struct inode *dir, unsigned int len,
 				     unsigned int max_len,
 				     struct fscrypt_str *disk_link);
@@ -231,6 +217,19 @@ extern int __fscrypt_encrypt_symlink(struct inode *inode, const char *target,
 extern const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
 				       unsigned int max_size,
 				       struct delayed_call *done);
-int fscrypt_symlink_getattr(const struct path *path, struct kstat *stat);
+
+#ifdef CONFIG_DDAR
+extern int fscrypt_dd_decrypt_page(struct inode *inode, struct page *page);
+extern int fscrypt_dd_encrypted(struct bio *bio);
+extern int fscrypt_dd_encrypted_inode(const struct inode *inode);
+extern int fscrypt_dd_is_traced_inode(const struct inode *inode);
+extern void fscrypt_dd_trace_inode(const struct inode *inode);
+extern long fscrypt_dd_get_ino(struct bio *bio);
+extern long fscrypt_dd_ioctl(unsigned int cmd, unsigned long *arg, struct inode *inode);
+extern int fscrypt_dd_submit_bio(struct inode *inode, struct bio *bio);
+extern int fscrypt_dd_may_submit_bio(struct bio *bio);
+extern struct inode *fscrypt_bio_get_inode(const struct bio *bio);
+extern bool fscrypt_dd_can_merge_bio(struct bio *bio, struct address_space *mapping);
+#endif
 
 #endif	/* _LINUX_FSCRYPT_SUPP_H */

@@ -1747,7 +1747,6 @@ static int iwl_pcie_init_msix_handler(struct pci_dev *pdev,
 static int _iwl_trans_pcie_start_hw(struct iwl_trans *trans, bool low_power)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	u32 hpm;
 	int err;
 
 	lockdep_assert_held(&trans_pcie->mutex);
@@ -1756,17 +1755,6 @@ static int _iwl_trans_pcie_start_hw(struct iwl_trans *trans, bool low_power)
 	if (err) {
 		IWL_ERR(trans, "Error while preparing HW: %d\n", err);
 		return err;
-	}
-
-	hpm = iwl_trans_read_prph(trans, HPM_DEBUG);
-	if (hpm != 0xa5a5a5a0 && (hpm & PERSISTENCE_BIT)) {
-		if (iwl_trans_read_prph(trans, PREG_PRPH_WPROT_0) &
-		    PREG_WFPM_ACCESS) {
-			IWL_ERR(trans,
-				"Error, can not clear persistence bit\n");
-			return -EPERM;
-		}
-		iwl_trans_write_prph(trans, HPM_DEBUG, hpm & ~PERSISTENCE_BIT);
 	}
 
 	iwl_trans_pcie_sw_reset(trans);
@@ -2121,38 +2109,18 @@ static int iwl_trans_pcie_read_mem(struct iwl_trans *trans, u32 addr,
 				   void *buf, int dwords)
 {
 	unsigned long flags;
-	int offs = 0;
+	int offs, ret = 0;
 	u32 *vals = buf;
 
-	while (offs < dwords) {
-		/* limit the time we spin here under lock to 1/2s */
-		unsigned long end = jiffies + HZ / 2;
-		bool resched = false;
-
-		if (iwl_trans_grab_nic_access(trans, &flags)) {
-			iwl_write32(trans, HBUS_TARG_MEM_RADDR,
-				    addr + 4 * offs);
-
-			while (offs < dwords) {
-				vals[offs] = iwl_read32(trans,
-							HBUS_TARG_MEM_RDAT);
-				offs++;
-
-				if (time_after(jiffies, end)) {
-					resched = true;
-					break;
-				}
-			}
-			iwl_trans_release_nic_access(trans, &flags);
-
-			if (resched)
-				cond_resched();
-		} else {
-			return -EBUSY;
-		}
+	if (iwl_trans_grab_nic_access(trans, &flags)) {
+		iwl_write32(trans, HBUS_TARG_MEM_RADDR, addr);
+		for (offs = 0; offs < dwords; offs++)
+			vals[offs] = iwl_read32(trans, HBUS_TARG_MEM_RDAT);
+		iwl_trans_release_nic_access(trans, &flags);
+	} else {
+		ret = -EBUSY;
 	}
-
-	return 0;
+	return ret;
 }
 
 static int iwl_trans_pcie_write_mem(struct iwl_trans *trans, u32 addr,
@@ -3303,15 +3271,6 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 	spin_lock_init(&trans_pcie->reg_lock);
 	mutex_init(&trans_pcie->mutex);
 	init_waitqueue_head(&trans_pcie->ucode_write_waitq);
-
-	trans_pcie->rba.alloc_wq = alloc_workqueue("rb_allocator",
-						   WQ_HIGHPRI | WQ_UNBOUND, 1);
-	if (!trans_pcie->rba.alloc_wq) {
-		ret = -ENOMEM;
-		goto out_free_trans;
-	}
-	INIT_WORK(&trans_pcie->rba.rx_alloc, iwl_pcie_rx_allocator_work);
-
 	trans_pcie->tso_hdr_page = alloc_percpu(struct iwl_tso_hdr_page);
 	if (!trans_pcie->tso_hdr_page) {
 		ret = -ENOMEM;
@@ -3444,26 +3403,8 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 #if IS_ENABLED(CONFIG_IWLMVM)
 	trans->hw_rf_id = iwl_read32(trans, CSR_HW_RF_ID);
 
-	if (cfg == &iwl22000_2ax_cfg_hr) {
-		if (CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id) ==
-		    CSR_HW_RF_ID_TYPE_CHIP_ID(CSR_HW_RF_ID_TYPE_HR)) {
-			trans->cfg = &iwl22000_2ax_cfg_hr;
-		} else if (CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id) ==
-			   CSR_HW_RF_ID_TYPE_CHIP_ID(CSR_HW_RF_ID_TYPE_JF)) {
-			trans->cfg = &iwl22000_2ax_cfg_jf;
-		} else if (CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id) ==
-			   CSR_HW_RF_ID_TYPE_CHIP_ID(CSR_HW_RF_ID_TYPE_HRCDB)) {
-			IWL_ERR(trans, "RF ID HRCDB is not supported\n");
-			ret = -EINVAL;
-			goto out_no_pci;
-		} else {
-			IWL_ERR(trans, "Unrecognized RF ID 0x%08x\n",
-				CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id));
-			ret = -EINVAL;
-			goto out_no_pci;
-		}
-	} else if (CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id) ==
-		   CSR_HW_RF_ID_TYPE_CHIP_ID(CSR_HW_RF_ID_TYPE_HR)) {
+	if (CSR_HW_RF_ID_TYPE_CHIP_ID(trans->hw_rf_id) ==
+	    CSR_HW_RF_ID_TYPE_CHIP_ID(CSR_HW_RF_ID_TYPE_HR)) {
 		u32 hw_status;
 
 		hw_status = iwl_read_prph(trans, UMAG_GEN_HW_STATUS);
@@ -3514,6 +3455,10 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 		trans_pcie->inta_mask = CSR_INI_SET_MASK;
 	 }
 
+	trans_pcie->rba.alloc_wq = alloc_workqueue("rb_allocator",
+						   WQ_HIGHPRI | WQ_UNBOUND, 1);
+	INIT_WORK(&trans_pcie->rba.rx_alloc, iwl_pcie_rx_allocator_work);
+
 #ifdef CONFIG_IWLWIFI_PCIE_RTPM
 	trans->runtime_pm_mode = IWL_PLAT_PM_MODE_D0I3;
 #else
@@ -3526,8 +3471,6 @@ out_free_ict:
 	iwl_pcie_free_ict(trans);
 out_no_pci:
 	free_percpu(trans_pcie->tso_hdr_page);
-	destroy_workqueue(trans_pcie->rba.alloc_wq);
-out_free_trans:
 	iwl_trans_free(trans);
 	return ERR_PTR(ret);
 }

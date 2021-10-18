@@ -89,7 +89,7 @@ EXPORT_SYMBOL_GPL(cpu_pm_unregister_notifier);
  */
 int cpu_pm_enter(void)
 {
-	int nr_calls = 0;
+	int nr_calls;
 	int ret = 0;
 
 	ret = cpu_pm_notify(CPU_PM_ENTER, -1, &nr_calls);
@@ -103,6 +103,12 @@ int cpu_pm_enter(void)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(cpu_pm_enter);
+
+int cpu_pm_enter_pre(void)
+{
+	return cpu_pm_notify(CPU_PM_ENTER_PREPARE, -1, NULL);
+}
+EXPORT_SYMBOL_GPL(cpu_pm_enter_pre);
 
 /**
  * cpu_pm_exit - CPU low power exit notifier
@@ -122,6 +128,12 @@ int cpu_pm_exit(void)
 }
 EXPORT_SYMBOL_GPL(cpu_pm_exit);
 
+int cpu_pm_exit_post(void)
+{
+	return cpu_pm_notify(CPU_PM_EXIT_POST, -1, NULL);
+}
+EXPORT_SYMBOL_GPL(cpu_pm_exit_post);
+
 /**
  * cpu_cluster_pm_enter - CPU cluster low power entry notifier
  *
@@ -140,7 +152,7 @@ EXPORT_SYMBOL_GPL(cpu_pm_exit);
  */
 int cpu_cluster_pm_enter(void)
 {
-	int nr_calls = 0;
+	int nr_calls;
 	int ret = 0;
 
 	ret = cpu_pm_notify(CPU_CLUSTER_PM_ENTER, -1, &nr_calls);

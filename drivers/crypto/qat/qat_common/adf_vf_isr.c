@@ -203,7 +203,6 @@ static irqreturn_t adf_isr(int irq, void *privdata)
 	struct adf_bar *pmisc =
 			&GET_BARS(accel_dev)[hw_data->get_misc_bar_id(hw_data)];
 	void __iomem *pmisc_bar_addr = pmisc->virt_addr;
-	bool handled = false;
 	u32 v_int;
 
 	/* Read VF INT source CSR to determine the source of VF interrupt */
@@ -216,7 +215,7 @@ static irqreturn_t adf_isr(int irq, void *privdata)
 
 		/* Schedule tasklet to handle interrupt BH */
 		tasklet_hi_schedule(&accel_dev->vf.pf2vf_bh_tasklet);
-		handled = true;
+		return IRQ_HANDLED;
 	}
 
 	/* Check bundle interrupt */
@@ -228,10 +227,10 @@ static irqreturn_t adf_isr(int irq, void *privdata)
 		WRITE_CSR_INT_FLAG_AND_COL(bank->csr_addr, bank->bank_number,
 					   0);
 		tasklet_hi_schedule(&bank->resp_handler);
-		handled = true;
+		return IRQ_HANDLED;
 	}
 
-	return handled ? IRQ_HANDLED : IRQ_NONE;
+	return IRQ_NONE;
 }
 
 static int adf_request_msi_irq(struct adf_accel_dev *accel_dev)
@@ -305,26 +304,17 @@ int adf_vf_isr_resource_alloc(struct adf_accel_dev *accel_dev)
 		goto err_out;
 
 	if (adf_setup_pf2vf_bh(accel_dev))
-		goto err_disable_msi;
+		goto err_out;
 
 	if (adf_setup_bh(accel_dev))
-		goto err_cleanup_pf2vf_bh;
+		goto err_out;
 
 	if (adf_request_msi_irq(accel_dev))
-		goto err_cleanup_bh;
+		goto err_out;
 
 	return 0;
-
-err_cleanup_bh:
-	adf_cleanup_bh(accel_dev);
-
-err_cleanup_pf2vf_bh:
-	adf_cleanup_pf2vf_bh(accel_dev);
-
-err_disable_msi:
-	adf_disable_msi(accel_dev);
-
 err_out:
+	adf_vf_isr_resource_free(accel_dev);
 	return -EFAULT;
 }
 EXPORT_SYMBOL_GPL(adf_vf_isr_resource_alloc);

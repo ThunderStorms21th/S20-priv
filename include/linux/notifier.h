@@ -122,7 +122,8 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 
 #ifdef CONFIG_TREE_SRCU
 #define _SRCU_NOTIFIER_HEAD(name, mod)				\
-	static DEFINE_PER_CPU(struct srcu_data, name##_head_srcu_data); \
+	static DEFINE_PER_CPU(struct srcu_data,			\
+			name##_head_srcu_data);			\
 	mod struct srcu_notifier_head name =			\
 			SRCU_NOTIFIER_INIT(name, name##_head_srcu_data)
 
@@ -236,6 +237,11 @@ static inline int notifier_to_errno(int ret)
 #define KBD_POST_KEYSYM		0x0005 /* Called after keyboard keysym interpretation */
 
 extern struct blocking_notifier_head reboot_notifier_list;
+extern int show_mem_extra_notifier_register(struct notifier_block *nb);
+extern int show_mem_extra_notifier_unregister(struct notifier_block *nb);
+extern void show_mem_extra_call_notifiers(void);
 
+extern int am_app_launch_notifier_register(struct notifier_block *nb);
+extern int am_app_launch_notifier_unregister(struct notifier_block *nb);
 #endif /* __KERNEL__ */
 #endif /* _LINUX_NOTIFIER_H */

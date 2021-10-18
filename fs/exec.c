@@ -62,15 +62,30 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#include <linux/task_integrity.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 
 #include <trace/events/task.h>
+#ifdef CONFIG_KDP_NS
+#include "mount.h"
+#endif
 #include "internal.h"
 
 #include <trace/events/sched.h>
+
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
+#endif
+
+#ifdef CONFIG_KDP_CRED
+#define rkp_is_nonroot(x) ((x->cred->type)>>1 & 1)
+#ifdef CONFIG_LOD_SEC
+#define rkp_is_lod(x) ((x->cred->type)>>3 & 1)
+#endif
+#endif
 
 int suid_dumpable = 0;
 
@@ -311,6 +326,7 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
 	vma->vm_flags = VM_SOFTDIRTY | VM_STACK_FLAGS | VM_STACK_INCOMPLETE_SETUP;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+	INIT_VMA(vma);
 
 	err = insert_vm_struct(mm, vma);
 	if (err)
@@ -1011,7 +1027,7 @@ static int exec_mmap(struct mm_struct *mm)
 	/* Notify parent that we're no longer interested in the old VM */
 	tsk = current;
 	old_mm = current->mm;
-	exec_mm_release(tsk, old_mm);
+	mm_release(tsk, old_mm);
 
 	if (old_mm) {
 		sync_mm_rss(old_mm);
@@ -1028,25 +1044,16 @@ static int exec_mmap(struct mm_struct *mm)
 		}
 	}
 	task_lock(tsk);
-
-	local_irq_disable();
 	active_mm = tsk->active_mm;
-	tsk->active_mm = mm;
 	tsk->mm = mm;
-	/*
-	 * This prevents preemption while active_mm is being loaded and
-	 * it and mm are being updated, which could cause problems for
-	 * lazy tlb mm refcounting when these are updated by context
-	 * switches. Not all architectures can handle irqs off over
-	 * activate_mm yet.
-	 */
-	if (!IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
-		local_irq_enable();
+	tsk->active_mm = mm;
 	activate_mm(active_mm, mm);
-	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
-		local_irq_enable();
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
+#ifdef CONFIG_KDP_CRED
+	if(rkp_cred_enable)
+		uh_call(UH_APP_KDP, RKP_KDP_X43, (u64)current_cred(), (u64)mm->pgd, 0, 0);
+#endif 
 	task_unlock(tsk);
 	if (old_mm) {
 		up_read(&old_mm->mmap_sem);
@@ -1256,6 +1263,107 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
 }
+#ifdef CONFIG_KDP_NS
+extern int rkp_from_vfsmnt_cache(unsigned long addr);
+extern struct super_block *sys_sb;	/* pointer to superblock */
+extern struct super_block *odm_sb;	/* pointer to superblock */
+extern struct super_block *vendor_sb;	/* pointer to superblock */
+extern struct super_block *rootfs_sb;	/* pointer to superblock */
+extern struct super_block *art_sb;	/* pointer to superblock */
+extern int __is_kdp_recovery;
+extern int __check_verifiedboot;
+static int kdp_check_sb_mismatch(struct super_block *sb) 
+{	
+	if(__is_kdp_recovery || __check_verifiedboot) {
+		return 0;
+	}
+	if((sb != rootfs_sb) && (sb != sys_sb)
+		&& (sb != odm_sb) && (sb != vendor_sb) && (sb != art_sb)) {
+		return 1;
+	}
+	return 0;
+}
+
+static int kdp_check_path_mismatch(struct vfsmount *vfsmnt)
+{
+	int i = 0;
+	int ret = -1;
+	char *buf = NULL;
+	char *path_name = NULL;
+	const char* skip_path[] = {
+		"/com.android.runtime",
+		"/com.android.conscrypt",
+		"/com.android.art",
+		"/com.android.adbd",
+	};
+
+	if (!vfsmnt->bp_mount) {
+		printk(KERN_ERR "vfsmnt->bp_mount is NULL");
+		return -ENOMEM;
+	}
+
+	buf = kzalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	path_name = dentry_path_raw(vfsmnt->bp_mount->mnt_mountpoint, buf, PATH_MAX);
+	if (IS_ERR(path_name))
+		goto out;
+
+	for (; i < ARRAY_SIZE(skip_path); ++i) {
+		if (!strncmp(path_name, skip_path[i], strlen(skip_path[i]))) {
+			ret = 0;
+			break;
+		}
+	}
+out:
+	kfree(buf);
+
+	return ret;
+}
+
+static int invalid_drive(struct linux_binprm * bprm) 
+{
+	struct super_block *sb =  NULL;
+	struct vfsmount *vfsmnt = NULL;
+	
+	vfsmnt = bprm->file->f_path.mnt;
+#ifdef CONFIG_FASTUH_RKP
+	if(!vfsmnt || !rkp_from_vfsmnt_cache((unsigned long)vfsmnt)) {
+#else
+	if(!vfsmnt || !rkp_ro_page((unsigned long)vfsmnt)) {
+#endif
+		printk("\nInvalid Drive #%s# #%p#\n",bprm->filename, vfsmnt);
+		return 1;
+	}
+
+	if (!kdp_check_path_mismatch(vfsmnt)) {
+		return 0;
+	}
+
+	sb = vfsmnt->mnt_sb;
+
+	if(kdp_check_sb_mismatch(sb)) {
+		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p:%p:%p:%p#\n",
+					bprm->filename, vfsmnt, sb, rootfs_sb, sys_sb, odm_sb, vendor_sb, art_sb);
+		return 1;
+	}
+
+	return 0;
+}
+#define KDP_CRED_SYS_ID 1000
+
+static int is_kdp_priv_task(void)
+{
+	struct cred *cred = (struct cred *)current_cred();
+
+	if(cred->uid.val <= (uid_t)KDP_CRED_SYS_ID || cred->euid.val <= (uid_t)KDP_CRED_SYS_ID ||
+		cred->gid.val <= (gid_t)KDP_CRED_SYS_ID || cred->egid.val <= (gid_t)KDP_CRED_SYS_ID ){
+		return 1;
+	}
+	return 0;
+}
+#endif
 
 /*
  * Calling this is the point of no return. None of the failures will be
@@ -1282,12 +1390,17 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 */
 	set_mm_exe_file(bprm->mm, bprm->file);
 
-	would_dump(bprm, bprm->file);
-
 	/*
 	 * Release all of the old mmap stuff
 	 */
 	acct_arg_size(bprm, 0);
+#ifdef CONFIG_KDP_NS
+	if(rkp_cred_enable &&
+		is_kdp_priv_task() && 
+		invalid_drive(bprm)) {
+		panic("\n KDP_NS: Illegal Execution of file #%s#\n", bprm->filename);
+	}
+#endif 
 	retval = exec_mmap(bprm->mm);
 	if (retval)
 		goto out;
@@ -1323,7 +1436,7 @@ EXPORT_SYMBOL(flush_old_exec);
 void would_dump(struct linux_binprm *bprm, struct file *file)
 {
 	struct inode *inode = file_inode(file);
-	if (inode_permission(inode, MAY_READ) < 0) {
+	if (inode_permission2(file->f_path.mnt, inode, MAY_READ) < 0) {
 		struct user_namespace *old, *user_ns;
 		bprm->interp_flags |= BINPRM_FLAGS_ENFORCE_NONDUMP;
 
@@ -1393,7 +1506,7 @@ void setup_new_exec(struct linux_binprm * bprm)
 
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
-	WRITE_ONCE(current->self_exec_id, current->self_exec_id + 1);
+	current->self_exec_id++;
 	flush_signal_handlers(current, 0);
 }
 EXPORT_SYMBOL(setup_new_exec);
@@ -1686,7 +1799,8 @@ int search_binary_handler(struct linux_binprm *bprm)
 		if (printable(bprm->buf[0]) && printable(bprm->buf[1]) &&
 		    printable(bprm->buf[2]) && printable(bprm->buf[3]))
 			return retval;
-		if (request_module("binfmt-%04x", *(ushort *)(bprm->buf + 2)) < 0)
+		if (request_module("binfmt-%04x",
+					*(ushort *)(bprm->buf + 2)) < 0)
 			return retval;
 		need_retry = false;
 		goto retry;
@@ -1695,6 +1809,41 @@ int search_binary_handler(struct linux_binprm *bprm)
 	return retval;
 }
 EXPORT_SYMBOL(search_binary_handler);
+
+#ifdef CONFIG_KDP_CRED
+#define CHECK_ROOT_UID(x) (x->cred->uid.val == 0 || x->cred->gid.val == 0 || \
+			x->cred->euid.val == 0 || x->cred->egid.val == 0 || \
+			x->cred->suid.val == 0 || x->cred->sgid.val == 0)
+static int rkp_restrict_fork(struct filename *path)
+{
+	struct cred *shellcred;
+
+	if (!strcmp(path->name, "/system/bin/patchoat") ||
+	    !strcmp(path->name, "/system/bin/idmap2")) {
+		return 0 ;
+	}
+	/* If the Process is from Linux on Dex, 
+	then no need to reduce privilege */
+#ifdef CONFIG_LOD_SEC
+	if (rkp_is_lod(current)) {
+		return 0;
+	}
+#endif
+	if(rkp_is_nonroot(current)){
+		shellcred = prepare_creds();
+		if (!shellcred) {
+			return 1;
+		}
+		shellcred->uid.val = 2000;
+		shellcred->gid.val = 2000;
+		shellcred->euid.val = 2000;
+		shellcred->egid.val = 2000;
+
+		commit_creds(shellcred);
+	}
+	return 0;
+}
+#endif
 
 static int exec_binprm(struct linux_binprm *bprm)
 {
@@ -1713,6 +1862,8 @@ static int exec_binprm(struct linux_binprm *bprm)
 		trace_sched_process_exec(current, old_pid, bprm);
 		ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
 		proc_exec_connector(current);
+	} else {
+		task_integrity_delayed_reset(current, CAUSE_EXEC, bprm->file);
 	}
 
 	return ret;
@@ -1772,6 +1923,15 @@ static int __do_execve_file(int fd, struct filename *filename,
 	if (IS_ERR(file))
 		goto out_unmark;
 
+#ifdef CONFIG_SECURITY_DEFEX
+	retval = task_defex_enforce(current, file, -__NR_execve);
+	if (retval < 0) {
+		bprm->file = file;
+		retval = -EPERM;
+		goto out_unmark;
+	 }
+#endif
+
 	sched_exec();
 
 	bprm->file = file;
@@ -1828,6 +1988,8 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = copy_strings(bprm->argc, argv, bprm);
 	if (retval < 0)
 		goto out;
+
+	would_dump(bprm, bprm->file);
 
 	retval = exec_binprm(bprm);
 	if (retval < 0)
@@ -1974,6 +2136,29 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
+#ifdef CONFIG_KDP_CRED
+	struct filename *path = getname(filename);
+	int error = PTR_ERR(path);
+
+	if(IS_ERR(path))
+		return error;
+
+	if(rkp_cred_enable){
+		uh_call(UH_APP_KDP, RKP_KDP_X4B, (u64)path->name, (u64)current, 0, 0);
+	}
+
+	if(CHECK_ROOT_UID(current) && rkp_cred_enable) {
+		if(rkp_restrict_fork(path)){
+			pr_warn("RKP_KDP Restricted making process. PID = %d(%s) "
+							"PPID = %d(%s)\n",
+			current->pid, current->comm,
+			current->parent->pid, current->parent->comm);
+			putname(path);
+			return -EACCES;
+		}
+	}
+	putname(path);
+#endif
 	return do_execve(getname(filename), argv, envp);
 }
 

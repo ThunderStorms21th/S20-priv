@@ -500,12 +500,6 @@ static int fill_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 			if (err)
 				return err;
 		}
-		if (bth_pad(pkt)) {
-			u8 *pad = payload_addr(pkt) + paylen;
-
-			memset(pad, 0, bth_pad(pkt));
-			crc = rxe_crc32(rxe, crc, pad, bth_pad(pkt));
-		}
 	}
 	p = payload_addr(pkt) + paylen + bth_pad(pkt);
 
@@ -664,8 +658,7 @@ next_wqe:
 	}
 
 	if (unlikely(qp_type(qp) == IB_QPT_RC &&
-		psn_compare(qp->req.psn, (qp->comp.psn +
-				RXE_MAX_UNACKED_PSNS)) > 0)) {
+		     qp->req.psn > (qp->comp.psn + RXE_MAX_UNACKED_PSNS))) {
 		qp->req.wait_psn = 1;
 		goto exit;
 	}

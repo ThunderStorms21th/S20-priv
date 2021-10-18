@@ -530,12 +530,10 @@ lower_metapath:
 
 		/* Advance in metadata tree. */
 		(mp->mp_list[hgt])++;
-		if (hgt) {
-			if (mp->mp_list[hgt] >= sdp->sd_inptrs)
-				goto lower_metapath;
-		} else {
-			if (mp->mp_list[hgt] >= sdp->sd_diptrs)
+		if (mp->mp_list[hgt] >= sdp->sd_inptrs) {
+			if (!hgt)
 				break;
+			goto lower_metapath;
 		}
 
 fill_up_metapath:
@@ -881,9 +879,10 @@ static int gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 					ret = -ENOENT;
 					goto unlock;
 				} else {
+					/* report a hole */
 					iomap->offset = pos;
 					iomap->length = length;
-					goto hole_found;
+					goto do_alloc;
 				}
 			}
 			iomap->length = size;
@@ -937,6 +936,8 @@ unlock:
 	return ret;
 
 do_alloc:
+	iomap->addr = IOMAP_NULL_ADDR;
+	iomap->type = IOMAP_HOLE;
 	if (flags & IOMAP_REPORT) {
 		if (pos >= size)
 			ret = -ENOENT;
@@ -958,9 +959,6 @@ do_alloc:
 		if (pos < size && height == ip->i_height)
 			ret = gfs2_hole_size(inode, lblock, len, mp, iomap);
 	}
-hole_found:
-	iomap->addr = IOMAP_NULL_ADDR;
-	iomap->type = IOMAP_HOLE;
 	goto out;
 }
 
@@ -2124,8 +2122,6 @@ static int do_grow(struct inode *inode, u64 size)
 	}
 
 	error = gfs2_trans_begin(sdp, RES_DINODE + RES_STATFS + RES_RG_BIT +
-				 (unstuff &&
-				  gfs2_is_jdata(ip) ? RES_JDATA : 0) +
 				 (sdp->sd_args.ar_quota == GFS2_QUOTA_OFF ?
 				  0 : RES_QUOTA), 0);
 	if (error)

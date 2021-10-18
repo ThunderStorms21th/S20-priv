@@ -40,9 +40,50 @@ extern unsigned long loops_per_jiffy;
 #endif
 
 #ifndef mdelay
+#ifndef CONFIG_DELAY_CHECKER
 #define mdelay(n) (\
 	(__builtin_constant_p(n) && (n)<=MAX_UDELAY_MS) ? udelay((n)*1000) : \
 	({unsigned long __ms=(n); while (__ms--) udelay(1000);}))
+
+#define dev_mdelay(n)  mdelay(n)
+#else
+#include <linux/sched/debug.h>
+
+#define MAX_MDELAY	1000
+extern unsigned long sec_delay_check;
+
+#define MDELAY_CHECKER(n) do \
+    { \
+        if (unlikely(irqs_disabled() && (n) >= 2 && sec_delay_check)) { \
+            barrier_before_unreachable(); \
+            show_stack_auto_comment(NULL, NULL); \
+            panic("bad mdelay %dms with irq disabled", (n)); \
+        } \
+        if (unlikely(!in_atomic())) { \
+            barrier_before_unreachable(); \
+            show_stack_auto_comment(NULL, NULL); \
+            panic("bad mdelay %dms in non-atomic context", (n)); \
+        } \
+    } while (0)
+
+#define mdelay(n)  ({\
+    BUILD_BUG_ON(__builtin_constant_p(n) && (n) > MAX_MDELAY); \
+    if (__builtin_constant_p(n) && (n)<=MAX_UDELAY_MS) \
+        udelay((n)*1000); \
+    else {\
+        unsigned long __ms=(n); \
+	MDELAY_CHECKER((n));\
+        while (__ms--) \
+            udelay(1000); \
+    } })
+
+/* limit delay duration under 1000ms.
+ * if want use over 1000ms intentionally for dev, use dev_mdelay.
+ */
+#define dev_mdelay(n) (\
+	(__builtin_constant_p(n) && (n)<=MAX_UDELAY_MS) ? udelay((n)*1000) : \
+	({unsigned long __ms=(n); while (__ms--) udelay(1000);}))
+#endif
 #endif
 
 #ifndef ndelay

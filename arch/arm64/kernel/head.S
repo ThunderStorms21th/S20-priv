@@ -88,8 +88,16 @@ _head:
 	le64sym	_kernel_offset_le		// Image load offset from start of RAM, little-endian
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
+#if (defined CONFIG_UH_RKP || defined CONFIG_FASTUH_RKP)
+	.quad	rkp_init_data - .		// rkp init data
+#else
 	.quad	0				// reserved
-	.quad	0				// reserved
+#endif
+#ifdef CONFIG_PROCA
+	le64sym	_proca_conf_offset		// memory info for proca ta
+#else
+	.quad	0xecefecef			// Magic number for proca ta
+#endif
 	.quad	0				// reserved
 	.ascii	"ARM\x64"			// Magic number
 #ifdef CONFIG_EFI
@@ -137,8 +145,13 @@ preserve_boot_args:
 	mov	x21, x0				// x21=FDT
 
 	adr_l	x0, boot_args			// record the contents of
+#ifndef CONFIG_RANDOMIZE_BASE
 	stp	x21, x1, [x0]			// x0 .. x3 at kernel entry
 	stp	x2, x3, [x0, #16]
+#else
+	stp	x21, xzr, [x0]			// x0 .. x3 at kernel entry
+	stp	xzr, xzr, [x0, #16]
+#endif
 
 	dmb	sy				// needed before dc ivac with
 						// MMU off
@@ -202,7 +215,7 @@ ENDPROC(preserve_boot_args)
  * to be composed of multiple pages. (This effectively scales the end index).
  *
  *	vstart:	virtual address of start of range
- *	vend:	virtual address of end of range - we map [vstart, vend]
+ *	vend:	virtual address of end of range
  *	shift:	shift used to transform virtual address into index
  *	ptrs:	number of entries in page table
  *	istart:	index in table corresponding to vstart
@@ -239,18 +252,17 @@ ENDPROC(preserve_boot_args)
  *
  *	tbl:	location of page table
  *	rtbl:	address to be used for first level page table entry (typically tbl + PAGE_SIZE)
- *	vstart:	virtual address of start of range
- *	vend:	virtual address of end of range - we map [vstart, vend - 1]
+ *	vstart:	start address to map
+ *	vend:	end address to map - we map [vstart, vend]
  *	flags:	flags to use to map last level entries
  *	phys:	physical address corresponding to vstart - physical memory is contiguous
  *	pgds:	the number of pgd entries
  *
  * Temporaries:	istart, iend, tmp, count, sv - these need to be different registers
- * Preserves:	vstart, flags
- * Corrupts:	tbl, rtbl, vend, istart, iend, tmp, count, sv
+ * Preserves:	vstart, vend, flags
+ * Corrupts:	tbl, rtbl, istart, iend, tmp, count, sv
  */
 	.macro map_memory, tbl, rtbl, vstart, vend, flags, phys, pgds, istart, iend, tmp, count, sv
-	sub \vend, \vend, #1
 	add \rtbl, \tbl, #PAGE_SIZE
 	mov \sv, \rtbl
 	mov \count, #0
@@ -668,7 +680,7 @@ ENTRY(__boot_cpu_mode)
  * with MMU turned off.
  */
 ENTRY(__early_cpu_boot_status)
-	.quad 	0
+	.long 	0
 
 	.popsection
 
@@ -704,7 +716,6 @@ secondary_startup:
 	/*
 	 * Common entry point for secondary CPUs.
 	 */
-	bl	__cpu_secondary_check52bitva
 	bl	__cpu_setup			// initialise processor
 	bl	__enable_mmu
 	ldr	x8, =__secondary_switched
@@ -781,31 +792,6 @@ ENTRY(__enable_mmu)
 	ret
 ENDPROC(__enable_mmu)
 
-ENTRY(__cpu_secondary_check52bitva)
-#ifdef CONFIG_ARM64_52BIT_VA
-	ldr_l	x0, vabits_user
-	cmp	x0, #52
-	b.ne	2f
-
-	mrs_s	x0, SYS_ID_AA64MMFR2_EL1
-	and	x0, x0, #(0xf << ID_AA64MMFR2_LVA_SHIFT)
-	cbnz	x0, 2f
-
-	adr_l	x0, va52mismatch
-	mov	w1, #1
-	strb	w1, [x0]
-	dmb	sy
-	dc	ivac, x0	// Invalidate potentially stale cache line
-
-	update_early_cpu_boot_status CPU_STUCK_IN_KERNEL, x0, x1
-1:	wfe
-	wfi
-	b	1b
-
-#endif
-2:	ret
-ENDPROC(__cpu_secondary_check52bitva)
-
 __no_granule_support:
 	/* Indicate that this CPU can't boot and is stuck in the kernel */
 	update_early_cpu_boot_status CPU_STUCK_IN_KERNEL, x1, x2
@@ -868,7 +854,6 @@ __primary_switch:
 
 	tlbi	vmalle1				// Remove any stale TLB entries
 	dsb	nsh
-	isb
 
 	msr	sctlr_el1, x19			// re-enable the MMU
 	isb

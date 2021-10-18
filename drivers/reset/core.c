@@ -428,10 +428,7 @@ static struct reset_control *__reset_control_get_internal(
 	if (!rstc)
 		return ERR_PTR(-ENOMEM);
 
-	if (!try_module_get(rcdev->owner)) {
-		kfree(rstc);
-		return ERR_PTR(-ENODEV);
-	}
+	try_module_get(rcdev->owner);
 
 	rstc->rcdev = rcdev;
 	list_add(&rstc->list, &rcdev->reset_control_head);
@@ -610,7 +607,6 @@ static void reset_control_array_put(struct reset_control_array *resets)
 	for (i = 0; i < resets->num_rstcs; i++)
 		__reset_control_put_internal(resets->rstc[i]);
 	mutex_unlock(&reset_list_mutex);
-	kfree(resets);
 }
 
 /**

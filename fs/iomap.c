@@ -116,7 +116,6 @@ iomap_page_create(struct inode *inode, struct page *page)
 	iop = kmalloc(sizeof(*iop), GFP_NOFS | __GFP_NOFAIL);
 	atomic_set(&iop->read_count, 0);
 	atomic_set(&iop->write_count, 0);
-	spin_lock_init(&iop->uptodate_lock);
 	bitmap_zero(iop->uptodate, PAGE_SIZE / SECTOR_SIZE);
 
 	/*
@@ -151,14 +150,13 @@ static void
 iomap_adjust_read_range(struct inode *inode, struct iomap_page *iop,
 		loff_t *pos, loff_t length, unsigned *offp, unsigned *lenp)
 {
-	loff_t orig_pos = *pos;
-	loff_t isize = i_size_read(inode);
 	unsigned block_bits = inode->i_blkbits;
 	unsigned block_size = (1 << block_bits);
 	unsigned poff = offset_in_page(*pos);
 	unsigned plen = min_t(loff_t, PAGE_SIZE - poff, length);
 	unsigned first = poff >> block_bits;
 	unsigned last = (poff + plen - 1) >> block_bits;
+	unsigned end = offset_in_page(i_size_read(inode)) >> block_bits;
 
 	/*
 	 * If the block size is smaller than the page size we need to check the
@@ -193,50 +191,33 @@ iomap_adjust_read_range(struct inode *inode, struct iomap_page *iop,
 	 * handle both halves separately so that we properly zero data in the
 	 * page cache for blocks that are entirely outside of i_size.
 	 */
-	if (orig_pos <= isize && orig_pos + length > isize) {
-		unsigned end = offset_in_page(isize - 1) >> block_bits;
-
-		if (first <= end && last > end)
-			plen -= (last - end) * block_size;
-	}
+	if (first <= end && last > end)
+		plen -= (last - end) * block_size;
 
 	*offp = poff;
 	*lenp = plen;
 }
 
 static void
-iomap_iop_set_range_uptodate(struct page *page, unsigned off, unsigned len)
+iomap_set_range_uptodate(struct page *page, unsigned off, unsigned len)
 {
 	struct iomap_page *iop = to_iomap_page(page);
 	struct inode *inode = page->mapping->host;
 	unsigned first = off >> inode->i_blkbits;
 	unsigned last = (off + len - 1) >> inode->i_blkbits;
-	bool uptodate = true;
-	unsigned long flags;
 	unsigned int i;
+	bool uptodate = true;
 
-	spin_lock_irqsave(&iop->uptodate_lock, flags);
-	for (i = 0; i < PAGE_SIZE / i_blocksize(inode); i++) {
-		if (i >= first && i <= last)
-			set_bit(i, iop->uptodate);
-		else if (!test_bit(i, iop->uptodate))
-			uptodate = false;
+	if (iop) {
+		for (i = 0; i < PAGE_SIZE / i_blocksize(inode); i++) {
+			if (i >= first && i <= last)
+				set_bit(i, iop->uptodate);
+			else if (!test_bit(i, iop->uptodate))
+				uptodate = false;
+		}
 	}
 
-	if (uptodate)
-		SetPageUptodate(page);
-	spin_unlock_irqrestore(&iop->uptodate_lock, flags);
-}
-
-static void
-iomap_set_range_uptodate(struct page *page, unsigned off, unsigned len)
-{
-	if (PageError(page))
-		return;
-
-	if (page_has_private(page))
-		iomap_iop_set_range_uptodate(page, off, len);
-	else
+	if (uptodate && !PageError(page))
 		SetPageUptodate(page);
 }
 
@@ -1622,7 +1603,7 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 	struct bio *bio;
 	bool need_zeroout = false;
 	bool use_fua = false;
-	int nr_pages, ret = 0;
+	int nr_pages, ret;
 	size_t copied = 0;
 
 	if ((pos | length | align) & ((1 << blkbits) - 1))
@@ -1638,13 +1619,12 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 
 	if (iomap->flags & IOMAP_F_NEW) {
 		need_zeroout = true;
-	} else if (iomap->type == IOMAP_MAPPED) {
+	} else {
 		/*
-		 * Use a FUA write if we need datasync semantics, this is a pure
-		 * data IO that doesn't require any metadata updates (including
-		 * after IO completion such as unwritten extent conversion) and
-		 * the underlying device supports FUA. This allows us to avoid
-		 * cache flushes on IO completion.
+		 * Use a FUA write if we need datasync semantics, this
+		 * is a pure data IO that doesn't require any metadata
+		 * updates and the underlying device supports FUA. This
+		 * allows us to avoid cache flushes on IO completion.
 		 */
 		if (!(iomap->flags & (IOMAP_F_SHARED|IOMAP_F_DIRTY)) &&
 		    (dio->flags & IOMAP_DIO_WRITE_FUA) &&
@@ -1687,14 +1667,8 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 
 		ret = bio_iov_iter_get_pages(bio, &iter);
 		if (unlikely(ret)) {
-			/*
-			 * We have to stop part way through an IO. We must fall
-			 * through to the sub-block tail zeroing here, otherwise
-			 * this short IO may expose stale data in the tail of
-			 * the block we haven't written data to.
-			 */
 			bio_put(bio);
-			goto zero_tail;
+			return copied ? copied : ret;
 		}
 
 		n = bio->bi_iter.bi_size;
@@ -1725,21 +1699,13 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		dio->submit.cookie = submit_bio(bio);
 	} while (nr_pages);
 
-	/*
-	 * We need to zeroout the tail of a sub-block write if the extent type
-	 * requires zeroing or the write extends beyond EOF. If we don't zero
-	 * the block tail in the latter case, we can expose stale data via mmap
-	 * reads of the EOF block.
-	 */
-zero_tail:
-	if (need_zeroout ||
-	    ((dio->flags & IOMAP_DIO_WRITE) && pos >= i_size_read(inode))) {
+	if (need_zeroout) {
 		/* zero out from the end of the write to the end of the block */
 		pad = pos & (fs_block_size - 1);
 		if (pad)
 			iomap_dio_zero(dio, iomap, pos, fs_block_size - pad);
 	}
-	return copied ? copied : ret;
+	return copied;
 }
 
 static loff_t
@@ -1918,15 +1884,8 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		}
 		pos += ret;
 
-		if (iov_iter_rw(iter) == READ && pos >= dio->i_size) {
-			/*
-			 * We only report that we've read data up to i_size.
-			 * Revert iter to a state corresponding to that as
-			 * some callers (such as splice code) rely on it.
-			 */
-			iov_iter_revert(iter, pos - dio->i_size);
+		if (iov_iter_rw(iter) == READ && pos >= dio->i_size)
 			break;
-		}
 	} while ((count = iov_iter_count(iter)) > 0);
 	blk_finish_plug(&plug);
 

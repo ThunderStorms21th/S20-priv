@@ -47,3 +47,6 @@ obj-$(CONFIG_CRYPTO_DEV_BCM_SPU) += bcm/
 obj-$(CONFIG_CRYPTO_DEV_SAFEXCEL) += inside-secure/
 obj-$(CONFIG_CRYPTO_DEV_ARTPEC6) += axis/
 obj-y += hisilicon/
+ifeq ($(CONFIG_EXYNOS_FMP),y)
+obj-y += exynos-diskcipher.o fmp/
+endif

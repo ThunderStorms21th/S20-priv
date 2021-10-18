@@ -1107,8 +1107,7 @@ qla82xx_write_flash_dword(struct qla_hw_data *ha, uint32_t flashaddr,
 		return ret;
 	}
 
-	ret = qla82xx_flash_set_write_enable(ha);
-	if (ret < 0)
+	if (qla82xx_flash_set_write_enable(ha))
 		goto done_write;
 
 	qla82xx_wr_32(ha, QLA82XX_ROMUSB_ROM_WDATA, data);
@@ -1606,7 +1605,8 @@ qla82xx_get_bootld_offset(struct qla_hw_data *ha)
 	return (u8 *)&ha->hablob->fw->data[offset];
 }
 
-static u32 qla82xx_get_fw_size(struct qla_hw_data *ha)
+static __le32
+qla82xx_get_fw_size(struct qla_hw_data *ha)
 {
 	struct qla82xx_uri_data_desc *uri_desc = NULL;
 
@@ -1617,7 +1617,7 @@ static u32 qla82xx_get_fw_size(struct qla_hw_data *ha)
 			return cpu_to_le32(uri_desc->size);
 	}
 
-	return get_unaligned_le32(&ha->hablob->fw->data[FW_SIZE_OFFSET]);
+	return cpu_to_le32(*(u32 *)&ha->hablob->fw->data[FW_SIZE_OFFSET]);
 }
 
 static u8 *
@@ -1808,7 +1808,7 @@ qla82xx_fw_load_from_blob(struct qla_hw_data *ha)
 	}
 
 	flashaddr = FLASH_ADDR_START;
-	size = qla82xx_get_fw_size(ha) / 8;
+	size = (__force u32)qla82xx_get_fw_size(ha) / 8;
 	ptr64 = (u64 *)qla82xx_get_fw_offs(ha);
 
 	for (i = 0; i < size; i++) {

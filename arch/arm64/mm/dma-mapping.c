@@ -32,7 +32,14 @@
 
 #include <asm/cacheflush.h>
 
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+#include <soc/samsung/exynos-s2mpu.h>
+#endif
 static int swiotlb __ro_after_init;
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+static spinlock_t s2mpu_lock;
+#endif
 
 static pgprot_t __get_dma_pgprot(unsigned long attrs, pgprot_t prot,
 				 bool coherent)
@@ -44,7 +51,11 @@ static pgprot_t __get_dma_pgprot(unsigned long attrs, pgprot_t prot,
 
 static struct gen_pool *atomic_pool __ro_after_init;
 
-#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_256K
+#ifdef CONFIG_USB_XHCI_ALLOC_FROM_DMA_POOL
+#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_4M
+#else
+#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_2M
+#endif
 static size_t atomic_pool_size __initdata = DEFAULT_DMA_COHERENT_POOL_SIZE;
 
 static int __init early_coherent_pool(char *p)
@@ -345,6 +356,339 @@ static const struct dma_map_ops arm64_swiotlb_dma_ops = {
 	.mapping_error = __swiotlb_dma_mapping_error,
 };
 
+static void *arm_exynos_dma_mcode_alloc(struct device *dev, size_t size,
+	dma_addr_t *handle, gfp_t gfp, unsigned long attrs);
+static void arm_exynos_dma_mcode_free(struct device *dev, size_t size, void *cpu_addr,
+				  dma_addr_t handle, unsigned long attrs);
+
+struct dma_map_ops arm_exynos_dma_mcode_ops = {
+	.alloc			= arm_exynos_dma_mcode_alloc,
+	.free			= arm_exynos_dma_mcode_free,
+};
+EXPORT_SYMBOL(arm_exynos_dma_mcode_ops);
+
+static void *arm_exynos_dma_mcode_alloc(struct device *dev, size_t size,
+	dma_addr_t *handle, gfp_t gfp, unsigned long attrs)
+{
+	void *addr;
+
+	if (!*handle)
+		return NULL;
+
+	addr = ioremap(*handle, size);
+
+	return addr;
+}
+
+static void arm_exynos_dma_mcode_free(struct device *dev, size_t size, void *cpu_addr,
+				  dma_addr_t handle, unsigned long attrs)
+{
+	iounmap(cpu_addr);
+}
+
+#define to_pci_dev_from_dev(dev) container_of((dev), struct pci_dev, dev)
+
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+extern int pcie_iommu_map(int ch_num, unsigned long iova, phys_addr_t paddr,
+		size_t size, int prot);
+extern size_t pcie_iommu_unmap(int ch_num, unsigned long iova, size_t size);
+dma_addr_t dma_pool_start;
+#endif
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+static uint32_t refer_table[131200] = {0};//0~32800, 32801~131200
+
+uint64_t exynos_pcie_set_dev_stage2_ap(const char *s2mpu_name, uint32_t vid, uint64_t base,
+		uint64_t size, enum stage2_ap ap)
+{
+	uint64_t start_idx, num, i;
+	uint64_t ret = 0;
+	unsigned long flags;
+
+	/* Make sure start address align least 64KB */
+	if ((base & (SZ_64K - 1)) != 0) {
+		size += base & (SZ_64K - 1);
+		base &= ~(SZ_64K - 1);
+	}
+
+	/* Make sure size align least 64KB */
+	size = (size + SZ_64K - 1) & ~(SZ_64K - 1);
+
+	if (base < 0x100000000 && base >= 0x80000000) {
+		start_idx = (base - 0x80000000) / SZ_64K;
+		/* maybe, need to add condition (base + size >= 0x100000000) */
+	} else if (base < 0xa00000000 && base >= 0x880000000) {
+		start_idx = ((base - 0x880000000) / SZ_64K) + 32800;
+	} else {
+		pr_err("NO Normal Zone!(WiFi code)\n");
+		return 1;
+	}
+
+	/* num  */
+	num = size / SZ_64K;
+
+	spin_lock_irqsave(&s2mpu_lock, flags);
+
+	/* table set */
+	for (i = 0; i < num; i++) {
+		(refer_table[start_idx + i])++;
+
+		if (refer_table[start_idx + i] == 1) {
+			ret = exynos_set_dev_stage2_pcie_ap(s2mpu_name, vid, base + (i * SZ_64K), SZ_64K, ATTR_RW);
+			if (ret != 0) {
+				printk("[pcie_set] set_ap error return: %llu\n", ret);
+				goto map_finish;
+			}
+			/* Need to fix "goto map_finish" like "goto retry" for the other loop*/
+		}
+	}
+
+map_finish:
+	spin_unlock_irqrestore(&s2mpu_lock, flags);
+	return ret;
+}
+
+uint64_t exynos_pcie_unset_dev_stage2_ap(const char *s2mpu_name, uint32_t vid, uint64_t base,
+		uint64_t size, enum stage2_ap ap)
+{
+	uint64_t start_idx, num, i;
+	uint64_t ret = 0;
+	unsigned long flags;
+
+	/* Make sure start address align least 64KB */
+	if ((base & (SZ_64K - 1)) != 0) {
+		size += base & (SZ_64K - 1);
+		base &= ~(SZ_64K - 1);
+	}
+
+	/* Make sure size align least 64KB */
+	size = (size + SZ_64K - 1) & ~(SZ_64K - 1);
+
+	if (base < 0x100000000 && base >= 0x80000000) {
+		start_idx = (base - 0x80000000) / SZ_64K;
+		/* maybe, need to add condition (base + size >= 0x100000000) */
+	} else if (base < 0xa00000000 && base >= 0x880000000) {
+		start_idx = ((base - 0x880000000) / SZ_64K) + 32800;
+	} else {
+		pr_err("NO Normal Zone!(WiFi code)\n");
+		return 1;
+	}
+
+	num = size / SZ_64K;
+
+	spin_lock_irqsave(&s2mpu_lock, flags);
+
+	/* reference counter--  */
+	for (i = 0; i < num; i++) {
+		(refer_table[start_idx + i])--;
+
+		if (refer_table[start_idx + i] < 1) {
+			refer_table[start_idx + i] = 0;
+
+			ret = exynos_set_dev_stage2_pcie_ap(s2mpu_name, vid, base + (i * SZ_64K), SZ_64K, ATTR_NO_ACCESS);
+			if (ret != 0) {
+				printk("[pcie_unset] set_ap error return: %llu\n", ret);
+				goto unmap_finish;
+			}
+			/* Need to fix "goto map_finish" like "goto retry" for the other loop*/
+		}
+	}
+
+unmap_finish:
+	spin_unlock_irqrestore(&s2mpu_lock, flags);
+	return ret;
+}
+#endif
+
+static void *__exynos_pcie_dma_alloc(struct device *dev, size_t size,
+		dma_addr_t *dma_handle, gfp_t flags,
+		unsigned long attrs)
+{
+	void *coherent_ptr;
+	struct pci_dev *epdev = to_pci_dev_from_dev(dev);
+	int ch_num = 0;
+#if defined(CONFIG_EXYNOS_PCIE_IOMMU) || defined(CONFIG_EXYNOS_PCIE_S2MPU)
+	int ret;
+#endif
+
+	//dev_info(dev, "[%s] size: 0x%x\n", __func__, (unsigned int)size);
+	if (dev == NULL) {
+		pr_err("EP device is NULL!!!\n");
+		return NULL;
+	} else {
+		ch_num = pci_domain_nr(epdev->bus);
+	}
+	coherent_ptr = __dma_alloc(dev, size, dma_handle, flags, attrs);
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+	if (coherent_ptr != NULL) {
+		ret = pcie_iommu_map(ch_num, *dma_handle, *dma_handle, size,
+				DMA_BIDIRECTIONAL);
+		if (ret != 0) {
+			pr_err("DMA alloc - Can't map PCIe SysMMU table!!!\n");
+			__dma_free(dev, size, coherent_ptr, *dma_handle, attrs);
+
+			return NULL;
+		}
+	}
+#endif
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	if (coherent_ptr != NULL) {
+		ret = exynos_pcie_set_dev_stage2_ap("hsi1", 1, *dma_handle, size, ATTR_RW);
+		if (ret) {
+			pr_err("[harx] ATTR_RW setting fail\n");
+			__dma_free(dev, size, coherent_ptr, *dma_handle, attrs);
+			return NULL;
+		}
+	}
+#endif
+	return coherent_ptr;
+
+}
+
+static void __exynos_pcie_dma_free(struct device *dev, size_t size,
+		void *vaddr, dma_addr_t dma_handle,
+		unsigned long attrs)
+{
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+	struct pci_dev *epdev = to_pci_dev_from_dev(dev);
+#endif
+#if (defined(CONFIG_PCI_DOMAINS_GENERIC) || defined(CONFIG_EXYNOS_PCIE_IOMMU))
+	int ch_num = 0;
+#endif
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	int ret;
+#endif
+	if (dev == NULL) {
+		pr_err("EP device is NULL!!!\n");
+		return;
+	} else {
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+		ch_num = pci_domain_nr(epdev->bus);
+#endif
+	}
+
+	__dma_free(dev, size, vaddr, dma_handle, attrs);
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+	pcie_iommu_unmap(ch_num, dma_handle, size);
+#endif
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	ret = exynos_pcie_unset_dev_stage2_ap("hsi1", 1, dma_handle, size, ATTR_NO_ACCESS);
+	if (ret) {
+		pr_err("[harx] ATTR_NO_ACCESS setting fail\n");
+	}
+#endif
+}
+
+static dma_addr_t __exynos_pcie_swiotlb_map_page(struct device *dev,
+		struct page *page, unsigned long offset,
+		size_t size, enum dma_data_direction dir,
+		unsigned long attrs)
+{
+	dma_addr_t dev_addr;
+#if (defined(CONFIG_PCI_DOMAINS_GENERIC) || defined(CONFIG_EXYNOS_PCIE_IOMMU))
+	int ch_num = 0;
+#endif
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+	struct pci_dev *epdev = to_pci_dev_from_dev(dev);
+#endif
+#if defined(CONFIG_EXYNOS_PCIE_IOMMU) || defined(CONFIG_EXYNOS_PCIE_S2MPU)
+	int ret;
+#endif
+
+	//dev_info(dev, "[%s] size: 0x%x\n", __func__,(unsigned int)size);
+	if (dev == NULL) {
+		pr_err("EP device is NULL!!!\n");
+		return -EINVAL;
+	} else {
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+		ch_num = pci_domain_nr(epdev->bus);
+#endif
+	}
+
+	dev_addr = __swiotlb_map_page(dev, page, offset, size, dir, attrs);
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+	ret = pcie_iommu_map(ch_num, dev_addr, dev_addr, size, dir);
+	if (ret != 0) {
+		pr_err("DMA map - Can't map PCIe SysMMU table!!!\n");
+
+		return 0;
+	}
+#endif
+
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	ret = exynos_pcie_set_dev_stage2_ap("hsi1", 1, dev_addr, size, ATTR_RW);
+	if (ret) {
+		pr_err("[harx] ATTR_RW setting fail\n");
+	}
+#endif
+	return dev_addr;
+}
+
+static void __exynos_pcie_swiotlb_unmap_page(struct device *dev,
+		dma_addr_t dev_addr,
+		size_t size, enum dma_data_direction dir,
+		unsigned long attrs)
+{
+#if (defined(CONFIG_PCI_DOMAINS_GENERIC) || defined(CONFIG_EXYNOS_PCIE_IOMMU))
+	int ch_num = 0;
+#endif
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+	struct pci_dev *epdev = to_pci_dev_from_dev(dev);
+#endif
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	int ret;
+#endif
+	if (dev == NULL) {
+		pr_err("EP device is NULL!!!\n");
+		return;
+	} else {
+#ifdef CONFIG_PCI_DOMAINS_GENERIC
+		ch_num = pci_domain_nr(epdev->bus);
+#endif
+	}
+	__swiotlb_unmap_page(dev, dev_addr, size, dir, attrs);
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+	pcie_iommu_unmap(ch_num, dev_addr, size);
+#endif
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	ret = exynos_pcie_unset_dev_stage2_ap("hsi1", 1, dev_addr, size, ATTR_NO_ACCESS);
+	if (ret) {
+		pr_err("[harx] ATTR_NO_ACCESS setting fail\n");
+	}
+#endif
+	return;
+}
+
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+void get_atomic_pool_info(dma_addr_t *paddr, size_t *size)
+{
+	*paddr = dma_pool_start;
+	*size = gen_pool_size(atomic_pool);
+}
+EXPORT_SYMBOL(get_atomic_pool_info);
+#endif
+
+struct dma_map_ops exynos_pcie_dma_ops = {
+	.alloc = __exynos_pcie_dma_alloc,
+	.free = __exynos_pcie_dma_free,
+	.mmap = __swiotlb_mmap,
+	.get_sgtable = __swiotlb_get_sgtable,
+	.map_page = __exynos_pcie_swiotlb_map_page,
+	.unmap_page = __exynos_pcie_swiotlb_unmap_page,
+	.map_sg = __swiotlb_map_sg_attrs,
+	.unmap_sg = __swiotlb_unmap_sg_attrs,
+	.sync_single_for_cpu = __swiotlb_sync_single_for_cpu,
+	.sync_single_for_device = __swiotlb_sync_single_for_device,
+	.sync_sg_for_cpu = __swiotlb_sync_sg_for_cpu,
+	.sync_sg_for_device = __swiotlb_sync_sg_for_device,
+	.dma_supported = __swiotlb_dma_supported,
+	.mapping_error = __swiotlb_dma_mapping_error,
+};
+EXPORT_SYMBOL(exynos_pcie_dma_ops);
+
 static int __init atomic_pool_init(void)
 {
 	pgprot_t prot = __pgprot(PROT_NORMAL_NC);
@@ -385,6 +729,10 @@ static int __init atomic_pool_init(void)
 		gen_pool_set_algo(atomic_pool,
 				  gen_pool_first_fit_order_align,
 				  NULL);
+
+#ifdef CONFIG_EXYNOS_PCIE_IOMMU
+		dma_pool_start = page_to_phys(page);
+#endif
 
 		pr_info("DMA: preallocated %zu KiB pool for atomic allocations\n",
 			atomic_pool_size / 1024);
@@ -500,6 +848,9 @@ EXPORT_SYMBOL(dummy_dma_ops);
 
 static int __init arm64_dma_init(void)
 {
+#ifdef CONFIG_EXYNOS_PCIE_S2MPU
+	spin_lock_init(&s2mpu_lock);
+#endif
 	if (swiotlb_force == SWIOTLB_FORCE ||
 	    max_pfn > (arm64_dma_phys_limit >> PAGE_SHIFT))
 		swiotlb = 1;

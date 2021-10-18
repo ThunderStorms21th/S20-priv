@@ -13,10 +13,253 @@
 #include <linux/slab.h>
 #include <linux/dmapool.h>
 #include <linux/dma-mapping.h>
+#include <linux/types.h>
+#if defined(CONFIG_USB_HOST_CERTI)
+#include <linux/usb_notify.h>
+#define MAX_HC_SLOT_LIMIT 15
+#endif
 
 #include "xhci.h"
+#include "xhci-plat.h"
 #include "xhci-trace.h"
 #include "xhci-debugfs.h"
+
+static void *dma_pre_alloc_coherent(struct xhci_hcd *xhci, size_t size,
+			 dma_addr_t *dma_handle, gfp_t gfp)
+{
+	struct usb_xhci_pre_alloc *xhci_alloc = xhci->xhci_alloc;
+	u64 align = size % PAGE_SIZE;
+	u64 b_offset = xhci_alloc->offset;
+
+	if (align)
+		xhci_alloc->offset = xhci_alloc->offset + size + (PAGE_SIZE - align);
+	else
+		xhci_alloc->offset = xhci_alloc->offset + size;
+
+	*dma_handle = xhci_alloc->dma + b_offset;
+
+	return (void *)xhci_alloc->pre_dma_alloc + b_offset;
+}
+
+/* URAM Allocation Functions */
+static void xhci_segment_free(struct xhci_hcd *xhci, struct xhci_segment *seg);
+static void xhci_link_segments(struct xhci_hcd *xhci, struct xhci_segment *prev,
+		struct xhci_segment *next, enum xhci_ring_type type);
+static void xhci_initialize_ring_info(struct xhci_ring *ring,
+					unsigned int cycle_state);
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+static struct xhci_segment *xhci_segment_alloc_uram(struct xhci_hcd *xhci,
+					       unsigned int cycle_state,
+					       unsigned int max_packet,
+					       gfp_t flags)
+{
+	struct xhci_segment *seg;
+	dma_addr_t	dma;
+	int		i;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
+
+	seg = kzalloc_node(sizeof(*seg), flags, dev_to_node(dev));
+	if (!seg)
+		return NULL;
+
+	seg->trbs = ioremap(EXYNOS_URAM_ABOX_EVT_RING_ADDR, TRB_SEGMENT_SIZE);
+	if (!seg->trbs)
+		return NULL;
+
+	dma = EXYNOS_URAM_ABOX_EVT_RING_ADDR;
+
+	if (max_packet) {
+		seg->bounce_buf = kzalloc_node(max_packet, flags,
+					dev_to_node(dev));
+		if (!seg->bounce_buf) {
+			dma_pool_free(xhci->segment_pool, seg->trbs, dma);
+			kfree(seg);
+			return NULL;
+		}
+	}
+	/* If the cycle state is 0, set the cycle bit to 1 for all the TRBs */
+	if (cycle_state == 0) {
+		for (i = 0; i < TRBS_PER_SEGMENT; i++)
+			seg->trbs[i].link.control |= cpu_to_le32(TRB_CYCLE);
+	}
+	seg->dma = dma;
+	xhci_info(xhci, "ABOX Event Ring is allocated at 0x%x",
+					EXYNOS_URAM_ABOX_EVT_RING_ADDR);
+	seg->next = NULL;
+
+	return seg;
+}
+
+static struct xhci_segment *xhci_segment_alloc_uram_ep(struct xhci_hcd *xhci,
+					       unsigned int cycle_state,
+					       unsigned int max_packet,
+					       gfp_t flags, int seg_num,
+					       u32 endpoint_type)
+{
+	struct xhci_segment *seg;
+	dma_addr_t	dma;
+	int		i;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
+
+	seg = kzalloc_node(sizeof(*seg), flags, dev_to_node(dev));
+	if (!seg)
+		return NULL;
+
+	if (seg_num != 0) {
+		/* Support just one segment */
+		xhci_err(xhci, "%s : Unexpected SEG NUMBER!\n", __func__);
+		return NULL;
+	}
+
+	if (endpoint_type == ISOC_OUT_EP) {
+		seg->trbs = ioremap(EXYNOS_URAM_ISOC_OUT_RING_ADDR,
+							TRB_SEGMENT_SIZE);
+		if (!seg->trbs)
+			return NULL;
+
+		dma = EXYNOS_URAM_ISOC_OUT_RING_ADDR;
+		xhci_info(xhci, "First ISOC-OUT Ring is allocated at 0x%llx", dma);
+	} else if (endpoint_type == ISOC_IN_EP) {
+		seg->trbs = ioremap(EXYNOS_URAM_ISOC_IN_RING_ADDR,
+							TRB_SEGMENT_SIZE);
+		if (!seg->trbs)
+			return NULL;
+
+		dma = EXYNOS_URAM_ISOC_IN_RING_ADDR;
+		xhci_info(xhci, "First ISOC-IN Ring is allocated at 0x%llx", dma);
+	} else {
+		xhci_err(xhci, "%s : Unexpected EP Type!\n", __func__);
+		return NULL;
+	}
+
+	for (i = 0; i < 256; i++) {
+		seg->trbs[i].link.segment_ptr = 0;
+		seg->trbs[i].link.intr_target = 0;
+		seg->trbs[i].link.control = 0;
+	}
+
+
+	if (max_packet) {
+		seg->bounce_buf = kzalloc_node(max_packet, flags,
+					dev_to_node(dev));
+		if (!seg->bounce_buf) {
+			dma_pool_free(xhci->segment_pool, seg->trbs, dma);
+			kfree(seg);
+			return NULL;
+		}
+	}
+	/* If the cycle state is 0, set the cycle bit to 1 for all the TRBs */
+	if (cycle_state == 0) {
+		for (i = 0; i < TRBS_PER_SEGMENT; i++)
+			seg->trbs[i].link.control |= cpu_to_le32(TRB_CYCLE);
+	}
+	seg->dma = dma;
+	seg->next = NULL;
+
+	return seg;
+}
+
+static int xhci_alloc_segments_for_ring_uram(struct xhci_hcd *xhci,
+		struct xhci_segment **first, struct xhci_segment **last,
+		unsigned int num_segs, unsigned int cycle_state,
+		enum xhci_ring_type type, unsigned int max_packet, gfp_t flags,
+		u32 endpoint_type)
+{
+	struct xhci_segment *prev;
+
+	if (type == TYPE_ISOC) {
+		prev = xhci_segment_alloc_uram_ep(xhci, cycle_state,
+							max_packet, flags, 0,
+							endpoint_type);
+	} else if (type == TYPE_EVENT) {
+		prev = xhci_segment_alloc_uram(xhci, cycle_state, max_packet, flags);
+	} else {
+		xhci_err(xhci, "Unexpected TYPE for URAM allocation!\n");
+		return -ENOMEM;
+	}
+
+	if (!prev)
+		return -ENOMEM;
+	num_segs--;
+
+	*first = prev;
+	while (num_segs > 0) {
+		struct xhci_segment	*next;
+
+		if (type == TYPE_ISOC) {
+			prev = xhci_segment_alloc_uram_ep(xhci, cycle_state,
+							max_packet, flags, 1,
+							endpoint_type);
+		} else if (type == TYPE_EVENT) {
+			next = xhci_segment_alloc_uram(xhci, cycle_state,
+							max_packet, flags);
+		} else {
+			xhci_err(xhci, "Unexpected TYPE for URAM alloc(multi)!\n");
+			return -ENOMEM;
+		}
+
+		if (!next) {
+			prev = *first;
+			while (prev) {
+				next = prev->next;
+				xhci_segment_free(xhci, prev);
+				prev = next;
+			}
+			return -ENOMEM;
+		}
+		xhci_link_segments(xhci, prev, next, type);
+
+		prev = next;
+		num_segs--;
+	}
+	xhci_link_segments(xhci, prev, *first, type);
+	*last = prev;
+
+	return 0;
+}
+
+struct xhci_ring *xhci_ring_alloc_uram(struct xhci_hcd *xhci,
+		unsigned int num_segs, unsigned int cycle_state,
+		enum xhci_ring_type type, unsigned int max_packet, gfp_t flags,
+		u32 endpoint_type)
+{
+	struct xhci_ring	*ring;
+	int ret;
+	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
+
+	ring = kzalloc_node(sizeof(*ring), flags, dev_to_node(dev));
+	if (!ring)
+		return NULL;
+
+	ring->num_segs = num_segs;
+	ring->bounce_buf_len = max_packet;
+	INIT_LIST_HEAD(&ring->td_list);
+	ring->type = type;
+	if (num_segs == 0)
+		return ring;
+
+	ret = xhci_alloc_segments_for_ring_uram(xhci, &ring->first_seg,
+			&ring->last_seg, num_segs, cycle_state, type,
+			max_packet, flags, endpoint_type);
+	if (ret)
+		goto fail;
+
+	/* Only event ring does not use link TRB */
+	if (type != TYPE_EVENT) {
+		/* See section 4.9.2.1 and 6.4.4.1 */
+		ring->last_seg->trbs[TRBS_PER_SEGMENT - 1].link.control |=
+			cpu_to_le32(LINK_TOGGLE);
+	}
+	xhci_initialize_ring_info(ring, cycle_state);
+	trace_xhci_ring_alloc(ring);
+	return ring;
+
+fail:
+	kfree(ring);
+	return NULL;
+}
+#endif
 
 /*
  * Allocates a generic ring segment from the ring pool, sets the dma address,
@@ -39,6 +282,12 @@ static struct xhci_segment *xhci_segment_alloc(struct xhci_hcd *xhci,
 	if (!seg)
 		return NULL;
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	flags |= __GFP_NOWARN;
+#endif
+#ifdef CONFIG_USB_XHCI_ALLOC_FROM_DMA_POOL
+	flags &= ~(__GFP_DIRECT_RECLAIM);
+#endif
 	seg->trbs = dma_pool_zalloc(xhci->segment_pool, flags, &dma);
 	if (!seg->trbs) {
 		kfree(seg);
@@ -68,7 +317,33 @@ static struct xhci_segment *xhci_segment_alloc(struct xhci_hcd *xhci,
 static void xhci_segment_free(struct xhci_hcd *xhci, struct xhci_segment *seg)
 {
 	if (seg->trbs) {
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+		/* Check URAM address for memory free */
+		if (seg->dma == EXYNOS_URAM_ABOX_EVT_RING_ADDR) {
+			iounmap(seg->trbs);
+		} else if (seg->dma == EXYNOS_URAM_ISOC_OUT_RING_ADDR) {
+			xhci->exynos_uram_isoc_out_alloc = 0;
+			if (in_interrupt()) {
+				dump_stack();
+				xhci_err(xhci, "iounmap in unexpected context!\n");
+				/* It will be free at xhci_mem_cleanup. */
+				xhci->usb_audio_isoc_out_addr = (u8 *)seg->trbs;
+			} else
+				iounmap(seg->trbs);
+		} else if (seg->dma == EXYNOS_URAM_ISOC_IN_RING_ADDR) {
+			xhci->exynos_uram_isoc_in_alloc = 0;
+			if (in_interrupt()) {
+				dump_stack();
+				xhci_err(xhci, "iounmap in unexpected context!\n");
+				/* It will be free at xhci_mem_cleanup. */
+				xhci->usb_audio_isoc_in_addr = (u8 *)seg->trbs;
+			} else
+				iounmap(seg->trbs);
+		} else
+			dma_pool_free(xhci->segment_pool, seg->trbs, seg->dma);
+#else
 		dma_pool_free(xhci->segment_pool, seg->trbs, seg->dma);
+#endif
 		seg->trbs = NULL;
 	}
 	kfree(seg->bounce_buf);
@@ -475,11 +750,46 @@ struct xhci_container_ctx *xhci_alloc_container_ctx(struct xhci_hcd *xhci,
 	if (type == XHCI_CTX_TYPE_INPUT)
 		ctx->size += CTX_SIZE(xhci->hcc_params);
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	flags |= __GFP_NOWARN;
+#endif
+#ifdef CONFIG_USB_XHCI_ALLOC_FROM_DMA_POOL
+	flags &= ~(__GFP_DIRECT_RECLAIM);
+#endif
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	if (type != XHCI_CTX_TYPE_INPUT && xhci->exynos_uram_ctx_alloc == 0 &&
+			xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO) {
+		/* Only first Device Context uses URAM */
+		int i;
+		ctx->bytes = ioremap(EXYNOS_URAM_DEVICE_CTX_ADDR, 2112);
+		if (!ctx->bytes) {
+			kfree(ctx);
+			return NULL;
+		}
+
+		for (i = 0; i < 2112; i++)
+			ctx->bytes[i] = 0;
+
+		ctx->dma = EXYNOS_URAM_DEVICE_CTX_ADDR;
+		xhci->usb_audio_ctx_addr = ctx->bytes;
+		xhci->exynos_uram_ctx_alloc = 1;
+		xhci_info(xhci, "First device context allocated at URAM(%x)",
+					EXYNOS_URAM_DEVICE_CTX_ADDR);
+	} else {
+		ctx->bytes = dma_pool_zalloc(xhci->device_pool, flags, &ctx->dma);
+		if (!ctx->bytes) {
+			kfree(ctx);
+			return NULL;
+		}
+	}
+#else
 	ctx->bytes = dma_pool_zalloc(xhci->device_pool, flags, &ctx->dma);
 	if (!ctx->bytes) {
 		kfree(ctx);
 		return NULL;
 	}
+#endif
+
 	return ctx;
 }
 
@@ -488,7 +798,15 @@ void xhci_free_container_ctx(struct xhci_hcd *xhci,
 {
 	if (!ctx)
 		return;
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	/* Ignore dma_pool_free if it is allocated from URAM */
+	if (ctx->dma != EXYNOS_URAM_DEVICE_CTX_ADDR)
+		dma_pool_free(xhci->device_pool, ctx->bytes, ctx->dma);
+#else
 	dma_pool_free(xhci->device_pool, ctx->bytes, ctx->dma);
+#endif
+
 	kfree(ctx);
 }
 
@@ -531,13 +849,9 @@ static void xhci_free_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs,
 		struct xhci_stream_ctx *stream_ctx, dma_addr_t dma)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
-	if (size > MEDIUM_STREAM_ARRAY_SIZE)
-		dma_free_coherent(dev, size,
-				stream_ctx, dma);
-	else if (size <= SMALL_STREAM_ARRAY_SIZE)
+	if (size <= SMALL_STREAM_ARRAY_SIZE)
 		return dma_pool_free(xhci->small_streams_pool,
 				stream_ctx, dma);
 	else
@@ -559,11 +873,14 @@ static struct xhci_stream_ctx *xhci_alloc_stream_ctx(struct xhci_hcd *xhci,
 		unsigned int num_stream_ctxs, dma_addr_t *dma,
 		gfp_t mem_flags)
 {
-	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 	size_t size = sizeof(struct xhci_stream_ctx) * num_stream_ctxs;
 
+#ifdef CONFIG_USB_XHCI_ALLOC_FROM_DMA_POOL
+	mem_flags &= ~(__GFP_DIRECT_RECLAIM);
+#endif
+
 	if (size > MEDIUM_STREAM_ARRAY_SIZE)
-		return dma_alloc_coherent(dev, size,
+		return dma_pre_alloc_coherent(xhci, size,
 				dma, mem_flags);
 	else if (size <= SMALL_STREAM_ARRAY_SIZE)
 		return dma_pool_alloc(xhci->small_streams_pool,
@@ -974,12 +1291,24 @@ int xhci_alloc_virt_device(struct xhci_hcd *xhci, int slot_id,
 {
 	struct xhci_virt_device *dev;
 	int i;
+#if defined(CONFIG_USB_HOST_CERTI)
+	int count = 0;
+#endif
 
 	/* Slot ID 0 is reserved */
 	if (slot_id == 0 || xhci->devs[slot_id]) {
 		xhci_warn(xhci, "Bad Slot ID %d\n", slot_id);
 		return 0;
 	}
+
+#if defined(CONFIG_USB_HOST_CERTI)
+	for (i = 0; i < MAX_HC_SLOTS; i++) {
+		if (xhci->devs[i] && xhci->devs[i]->udev)
+			count++;
+	}
+	if (count >= MAX_HC_SLOT_LIMIT)
+		goto fail2;
+#endif
 
 	dev = kzalloc(sizeof(*dev), flags);
 	if (!dev)
@@ -1034,6 +1363,11 @@ fail:
 	if (dev->out_ctx)
 		xhci_free_container_ctx(xhci, dev->out_ctx);
 	kfree(dev);
+
+#if defined(CONFIG_USB_HOST_CERTI)
+fail2:
+	send_usb_certi_uevent(USB_CERTI_HOST_RESOURCE_EXCEED);
+#endif
 
 	return 0;
 }
@@ -1475,15 +1809,9 @@ int xhci_endpoint_init(struct xhci_hcd *xhci,
 	/* Allow 3 retries for everything but isoc, set CErr = 3 */
 	if (!usb_endpoint_xfer_isoc(&ep->desc))
 		err_count = 3;
-	/* HS bulk max packet should be 512, FS bulk supports 8, 16, 32 or 64 */
-	if (usb_endpoint_xfer_bulk(&ep->desc)) {
-		if (udev->speed == USB_SPEED_HIGH)
-			max_packet = 512;
-		if (udev->speed == USB_SPEED_FULL) {
-			max_packet = rounddown_pow_of_two(max_packet);
-			max_packet = clamp_val(max_packet, 8, 64);
-		}
-	}
+	/* Some devices get this wrong */
+	if (usb_endpoint_xfer_bulk(&ep->desc) && udev->speed == USB_SPEED_HIGH)
+		max_packet = 512;
 	/* xHCI 1.0 and 1.1 indicates that ctrl ep avg TRB Length should be 8 */
 	if (usb_endpoint_xfer_control(&ep->desc) && xhci->hci_version >= 0x100)
 		avg_trb_len = 8;
@@ -1492,10 +1820,52 @@ int xhci_endpoint_init(struct xhci_hcd *xhci,
 		mult = 0;
 
 	/* Set up the endpoint ring */
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	if (xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO) {
+		/* If URAM is not allocated, it try to allocate from URAM */
+		if (xhci->exynos_uram_isoc_out_alloc == 0 &&
+						endpoint_type == ISOC_OUT_EP) {
+			xhci_info(xhci, "First ISOC OUT ring is allocated from URAM.\n");
+			virt_dev->eps[ep_index].new_ring =
+				xhci_ring_alloc_uram(xhci, 1, 1, ring_type,
+							max_packet, mem_flags,
+							endpoint_type);
+			if (!virt_dev->eps[ep_index].new_ring)
+				return -ENOMEM;
+
+			xhci->exynos_uram_isoc_out_alloc = 1;
+		} else if (xhci->exynos_uram_isoc_in_alloc == 0 &&
+					endpoint_type == ISOC_IN_EP &&
+					EXYNOS_URAM_ISOC_IN_RING_ADDR != 0x0) {
+			xhci_info(xhci, "First ISOC IN ring is allocated from URAM.\n");
+			virt_dev->eps[ep_index].new_ring =
+				xhci_ring_alloc_uram(xhci, 1, 1, ring_type,
+							max_packet, mem_flags,
+							endpoint_type);
+			if (!virt_dev->eps[ep_index].new_ring)
+				return -ENOMEM;
+
+			xhci->exynos_uram_isoc_in_alloc = 1;
+		} else {
+			virt_dev->eps[ep_index].new_ring =
+				xhci_ring_alloc(xhci, 2, 1, ring_type,
+							max_packet, mem_flags);
+			if (!virt_dev->eps[ep_index].new_ring)
+				return -ENOMEM;
+		}
+
+	} else {
+		virt_dev->eps[ep_index].new_ring =
+			xhci_ring_alloc(xhci, 2, 1, ring_type, max_packet, mem_flags);
+		if (!virt_dev->eps[ep_index].new_ring)
+			return -ENOMEM;
+	}
+#else
 	virt_dev->eps[ep_index].new_ring =
 		xhci_ring_alloc(xhci, 2, 1, ring_type, max_packet, mem_flags);
 	if (!virt_dev->eps[ep_index].new_ring)
 		return -ENOMEM;
+#endif
 
 	virt_dev->eps[ep_index].skip = false;
 	ep_ring = virt_dev->eps[ep_index].new_ring;
@@ -1664,7 +2034,7 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 	if (!xhci->scratchpad)
 		goto fail_sp;
 
-	xhci->scratchpad->sp_array = dma_alloc_coherent(dev,
+	xhci->scratchpad->sp_array = dma_pre_alloc_coherent(xhci,
 				     num_sp * sizeof(u64),
 				     &xhci->scratchpad->sp_dma, flags);
 	if (!xhci->scratchpad->sp_array)
@@ -1673,13 +2043,13 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 	xhci->scratchpad->sp_buffers = kcalloc_node(num_sp, sizeof(void *),
 					flags, dev_to_node(dev));
 	if (!xhci->scratchpad->sp_buffers)
-		goto fail_sp3;
+		goto fail_sp2;
 
 	xhci->dcbaa->dev_context_ptrs[0] = cpu_to_le64(xhci->scratchpad->sp_dma);
 	for (i = 0; i < num_sp; i++) {
 		dma_addr_t dma;
-		void *buf = dma_zalloc_coherent(dev, xhci->page_size, &dma,
-				flags);
+		void *buf = dma_pre_alloc_coherent(xhci, xhci->page_size, &dma,
+				flags  | __GFP_ZERO);
 		if (!buf)
 			goto fail_sp4;
 
@@ -1690,18 +2060,7 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 	return 0;
 
  fail_sp4:
-	for (i = i - 1; i >= 0; i--) {
-		dma_free_coherent(dev, xhci->page_size,
-				    xhci->scratchpad->sp_buffers[i],
-				    xhci->scratchpad->sp_array[i]);
-	}
-
 	kfree(xhci->scratchpad->sp_buffers);
-
- fail_sp3:
-	dma_free_coherent(dev, num_sp * sizeof(u64),
-			    xhci->scratchpad->sp_array,
-			    xhci->scratchpad->sp_dma);
 
  fail_sp2:
 	kfree(xhci->scratchpad);
@@ -1714,23 +2073,14 @@ static int scratchpad_alloc(struct xhci_hcd *xhci, gfp_t flags)
 static void scratchpad_free(struct xhci_hcd *xhci)
 {
 	int num_sp;
-	int i;
-	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 
 	if (!xhci->scratchpad)
 		return;
 
 	num_sp = HCS_MAX_SCRATCHPAD(xhci->hcs_params2);
 
-	for (i = 0; i < num_sp; i++) {
-		dma_free_coherent(dev, xhci->page_size,
-				    xhci->scratchpad->sp_buffers[i],
-				    xhci->scratchpad->sp_array[i]);
-	}
 	kfree(xhci->scratchpad->sp_buffers);
-	dma_free_coherent(dev, num_sp * sizeof(u64),
-			    xhci->scratchpad->sp_array,
-			    xhci->scratchpad->sp_dma);
+
 	kfree(xhci->scratchpad);
 	xhci->scratchpad = NULL;
 }
@@ -1805,8 +2155,9 @@ int xhci_alloc_erst(struct xhci_hcd *xhci,
 	struct xhci_erst_entry *entry;
 
 	size = sizeof(struct xhci_erst_entry) * evt_ring->num_segs;
-	erst->entries = dma_zalloc_coherent(xhci_to_hcd(xhci)->self.sysdev,
-					    size, &erst->erst_dma_addr, flags);
+	xhci->erst.entries = dma_pre_alloc_coherent(xhci,
+			sizeof(struct xhci_erst_entry) * ERST_NUM_SEGS,
+			&erst->erst_dma_addr, flags);
 	if (!erst->entries)
 		return -ENOMEM;
 
@@ -1829,17 +2180,18 @@ void xhci_free_erst(struct xhci_hcd *xhci, struct xhci_erst *erst)
 	size_t size;
 	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 
+	erst->entries = NULL; /* For Free Allocation Feature */
+
 	size = sizeof(struct xhci_erst_entry) * (erst->num_entries);
 	if (erst->entries)
 		dma_free_coherent(dev, size,
 				erst->entries,
 				erst->erst_dma_addr);
-	erst->entries = NULL;
+	/* erst->entries = NULL; */
 }
 
 void xhci_mem_cleanup(struct xhci_hcd *xhci)
 {
-	struct device	*dev = xhci_to_hcd(xhci)->self.sysdev;
 	int i, j, num_ports;
 
 	cancel_delayed_work_sync(&xhci->cmd_timer);
@@ -1850,6 +2202,20 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 		xhci_ring_free(xhci, xhci->event_ring);
 	xhci->event_ring = NULL;
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Freed event ring");
+
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	if (xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO)
+		iounmap(xhci->erst_audio.entries);
+	else
+		xhci->erst_audio.entries = NULL;
+
+	xhci_info(xhci, "%s: Freed ERST for Audio offloading", __func__);
+
+	if (xhci->event_ring_audio)
+		xhci_ring_free(xhci, xhci->event_ring_audio);
+	xhci->event_ring_audio = NULL;
+	xhci_info(xhci, "%s: Freed event ring for Audio offloading", __func__);
+#endif
 
 	if (xhci->lpm_command)
 		xhci_free_command(xhci, xhci->lpm_command);
@@ -1891,10 +2257,29 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"Freed medium stream array pool");
 
-	if (xhci->dcbaa)
-		dma_free_coherent(dev, sizeof(*xhci->dcbaa),
-				xhci->dcbaa, xhci->dcbaa->dma);
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	if (xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO) {
+		iounmap(xhci->dcbaa);
+		if (xhci->usb_audio_ctx_addr != NULL) {
+			iounmap(xhci->usb_audio_ctx_addr);
+			xhci->usb_audio_ctx_addr = NULL;
+		}
+		if (xhci->usb_audio_isoc_out_addr != NULL) {
+			iounmap(xhci->usb_audio_isoc_out_addr);
+			xhci->usb_audio_isoc_out_addr = NULL;
+		}
+		if (xhci->usb_audio_isoc_in_addr != NULL) {
+			iounmap(xhci->usb_audio_isoc_in_addr);
+			xhci->usb_audio_isoc_in_addr = NULL;
+		}
+	} else
+		xhci->dcbaa = NULL;
+#else
 	xhci->dcbaa = NULL;
+#endif
+
+	/* init offset about pre alloc CMA */
+	xhci->xhci_alloc->offset = 0;
 
 	scratchpad_free(xhci);
 
@@ -1919,17 +2304,12 @@ no_bw:
 	kfree(xhci->hw_ports);
 	kfree(xhci->rh_bw);
 	kfree(xhci->ext_caps);
-	for (i = 0; i < xhci->num_port_caps; i++)
-		kfree(xhci->port_caps[i].psi);
-	kfree(xhci->port_caps);
-	xhci->num_port_caps = 0;
 
 	xhci->usb2_rhub.ports = NULL;
 	xhci->usb3_rhub.ports = NULL;
 	xhci->hw_ports = NULL;
 	xhci->rh_bw = NULL;
 	xhci->ext_caps = NULL;
-	xhci->port_caps = NULL;
 
 	xhci->page_size = 0;
 	xhci->page_shift = 0;
@@ -2095,6 +2475,32 @@ static int xhci_check_trb_in_td_math(struct xhci_hcd *xhci)
 	return 0;
 }
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+static void xhci_set_hc_event_deq_audio(struct xhci_hcd *xhci)
+{
+	u64 temp;
+	dma_addr_t deq;
+
+	deq = xhci_trb_virt_to_dma(xhci->event_ring_audio->deq_seg,
+			xhci->event_ring_audio->dequeue);
+	if (deq == 0 && !in_interrupt())
+		xhci_warn(xhci, "WARN something wrong with SW event ring "
+				"dequeue ptr.\n");
+	/* Update HC event ring dequeue pointer */
+	temp = xhci_read_64(xhci, &xhci->ir_set_audio->erst_dequeue);
+	temp &= ERST_PTR_MASK;
+	/* Don't clear the EHB bit (which is RW1C) because
+	 * there might be more events to service.
+	 */
+	temp &= ~ERST_EHB;
+	xhci_info(xhci,
+			"//[%s] Write event ring dequeue pointer = 0x%llx, "
+			"preserving EHB bit",__func__, ((u64) deq & (u64) ~ERST_PTR_MASK) | temp);
+	xhci_write_64(xhci, ((u64) deq & (u64) ~ERST_PTR_MASK) | temp,
+			&xhci->ir_set_audio->erst_dequeue);
+}
+#endif
+
 static void xhci_set_hc_event_deq(struct xhci_hcd *xhci)
 {
 	u64 temp;
@@ -2127,7 +2533,6 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 	u8 major_revision, minor_revision;
 	struct xhci_hub *rhub;
 	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
-	struct xhci_port_cap *port_cap;
 
 	temp = readl(addr);
 	major_revision = XHCI_EXT_PORT_MAJOR(temp);
@@ -2135,15 +2540,6 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 
 	if (major_revision == 0x03) {
 		rhub = &xhci->usb3_rhub;
-		/*
-		 * Some hosts incorrectly use sub-minor version for minor
-		 * version (i.e. 0x02 instead of 0x20 for bcdUSB 0x320 and 0x01
-		 * for bcdUSB 0x310). Since there is no USB release with sub
-		 * minor version 0x301 to 0x309, we can assume that they are
-		 * incorrect and fix it here.
-		 */
-		if (minor_revision > 0x00 && minor_revision < 0x10)
-			minor_revision <<= 4;
 	} else if (major_revision <= 0x02) {
 		rhub = &xhci->usb2_rhub;
 	} else {
@@ -2171,39 +2567,31 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 		/* WTF? "Valid values are ‘1’ to MaxPorts" */
 		return;
 
-	port_cap = &xhci->port_caps[xhci->num_port_caps++];
-	if (xhci->num_port_caps > max_caps)
-		return;
+	rhub->psi_count = XHCI_EXT_PORT_PSIC(temp);
+	if (rhub->psi_count) {
+		rhub->psi = kcalloc_node(rhub->psi_count, sizeof(*rhub->psi),
+				    GFP_KERNEL, dev_to_node(dev));
+		if (!rhub->psi)
+			rhub->psi_count = 0;
 
-	port_cap->maj_rev = major_revision;
-	port_cap->min_rev = minor_revision;
-	port_cap->psi_count = XHCI_EXT_PORT_PSIC(temp);
-
-	if (port_cap->psi_count) {
-		port_cap->psi = kcalloc_node(port_cap->psi_count,
-					     sizeof(*port_cap->psi),
-					     GFP_KERNEL, dev_to_node(dev));
-		if (!port_cap->psi)
-			port_cap->psi_count = 0;
-
-		port_cap->psi_uid_count++;
-		for (i = 0; i < port_cap->psi_count; i++) {
-			port_cap->psi[i] = readl(addr + 4 + i);
+		rhub->psi_uid_count++;
+		for (i = 0; i < rhub->psi_count; i++) {
+			rhub->psi[i] = readl(addr + 4 + i);
 
 			/* count unique ID values, two consecutive entries can
 			 * have the same ID if link is assymetric
 			 */
-			if (i && (XHCI_EXT_PORT_PSIV(port_cap->psi[i]) !=
-				  XHCI_EXT_PORT_PSIV(port_cap->psi[i - 1])))
-				port_cap->psi_uid_count++;
+			if (i && (XHCI_EXT_PORT_PSIV(rhub->psi[i]) !=
+				  XHCI_EXT_PORT_PSIV(rhub->psi[i - 1])))
+				rhub->psi_uid_count++;
 
 			xhci_dbg(xhci, "PSIV:%d PSIE:%d PLT:%d PFD:%d LP:%d PSIM:%d\n",
-				  XHCI_EXT_PORT_PSIV(port_cap->psi[i]),
-				  XHCI_EXT_PORT_PSIE(port_cap->psi[i]),
-				  XHCI_EXT_PORT_PLT(port_cap->psi[i]),
-				  XHCI_EXT_PORT_PFD(port_cap->psi[i]),
-				  XHCI_EXT_PORT_LP(port_cap->psi[i]),
-				  XHCI_EXT_PORT_PSIM(port_cap->psi[i]));
+				  XHCI_EXT_PORT_PSIV(rhub->psi[i]),
+				  XHCI_EXT_PORT_PSIE(rhub->psi[i]),
+				  XHCI_EXT_PORT_PLT(rhub->psi[i]),
+				  XHCI_EXT_PORT_PFD(rhub->psi[i]),
+				  XHCI_EXT_PORT_LP(rhub->psi[i]),
+				  XHCI_EXT_PORT_PSIM(rhub->psi[i]));
 		}
 	}
 	/* cache usb2 port capabilities */
@@ -2250,7 +2638,6 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 			continue;
 		}
 		hw_port->rhub = rhub;
-		hw_port->port_cap = port_cap;
 		rhub->num_ports++;
 	}
 	/* FIXME: Should we disable ports not in the Extended Capabilities? */
@@ -2341,11 +2728,6 @@ static int xhci_setup_port_arrays(struct xhci_hcd *xhci, gfp_t flags)
 	if (!xhci->ext_caps)
 		return -ENOMEM;
 
-	xhci->port_caps = kcalloc_node(cap_count, sizeof(*xhci->port_caps),
-				flags, dev_to_node(dev));
-	if (!xhci->port_caps)
-		return -ENOMEM;
-
 	offset = cap_start;
 
 	while (offset) {
@@ -2399,6 +2781,9 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	u64		val_64;
 	u32		page_size, temp;
 	int		i, ret;
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	struct xhci_segment	*seg;
+#endif
 
 	INIT_LIST_HEAD(&xhci->cmd_list);
 
@@ -2442,11 +2827,36 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	 * xHCI section 5.4.6 - doorbell array must be
 	 * "physically contiguous and 64-byte (cache line) aligned".
 	 */
-	xhci->dcbaa = dma_alloc_coherent(dev, sizeof(*xhci->dcbaa), &dma,
-			flags);
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	if (xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO) {
+		int i;
+
+		xhci_info(xhci, "DCBAA is allocated at 0x%x(URAM)",
+						EXYNOS_URAM_DCBAA_ADDR);
+		/* URAM allocation for DCBAA */
+		xhci->dcbaa = ioremap(EXYNOS_URAM_DCBAA_ADDR,
+						sizeof(*xhci->dcbaa));
+		if (!xhci->dcbaa)
+			goto fail;
+		/* Clear DCBAA */
+		for (i = 0; i < MAX_HC_SLOTS; i++)
+			xhci->dcbaa->dev_context_ptrs[i] = 0x0;
+
+		dma = EXYNOS_URAM_DCBAA_ADDR;
+	} else {
+		xhci->dcbaa = dma_pre_alloc_coherent(xhci, sizeof(*xhci->dcbaa),
+				&dma, flags);
+		if (!xhci->dcbaa)
+			goto fail;
+		memset(xhci->dcbaa, 0, sizeof *(xhci->dcbaa));
+	}
+#else
+	xhci->dcbaa = dma_pre_alloc_coherent(xhci, sizeof(*xhci->dcbaa),
+			&dma, flags);
 	if (!xhci->dcbaa)
 		goto fail;
 	memset(xhci->dcbaa, 0, sizeof *(xhci->dcbaa));
+#endif
 	xhci->dcbaa->dma = dma;
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"// Device context base array address = 0x%llx (DMA), %p (virt)",
@@ -2521,7 +2931,9 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	xhci->dba = (void __iomem *) xhci->cap_regs + val;
 	/* Set ir_set to interrupt register set 0 */
 	xhci->ir_set = &xhci->run_regs->ir_set[0];
-
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	xhci->ir_set_audio = &xhci->run_regs->ir_set[1];
+#endif
 	/*
 	 * Event ring setup: Allocate a normal ring, but also setup
 	 * the event ring segment table (ERST).  Section 4.9.3.
@@ -2563,6 +2975,93 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"Wrote ERST address to ir_set 0.");
 
+#ifdef CONFIG_SND_EXYNOS_USB_AUDIO
+	xhci->save_addr = dma_pre_alloc_coherent(xhci, sizeof(PAGE_SIZE), &dma,
+			flags);
+	xhci->save_dma = dma;
+	xhci_info(xhci, "// Save address = 0x%llx (DMA), %p (virt)",
+			(unsigned long long)xhci->save_dma, xhci->save_addr);
+	if (xhci->quirks & XHCI_USE_URAM_FOR_EXYNOS_AUDIO) {
+		/* for AUDIO erst */
+		xhci->event_ring_audio = xhci_ring_alloc_uram(xhci, ERST_NUM_SEGS,
+				1, TYPE_EVENT, 0, flags, 0);
+		if (!xhci->event_ring_audio)
+			goto fail;
+		if (xhci_check_trb_in_td_math(xhci) < 0)
+			goto fail;
+
+		xhci->erst_audio.entries = ioremap(EXYNOS_URAM_ABOX_ERST_SEG_ADDR,
+				sizeof(struct xhci_erst_entry) * ERST_NUM_SEGS);
+		if (!xhci->erst_audio.entries)
+			goto fail;
+
+		dma = EXYNOS_URAM_ABOX_ERST_SEG_ADDR;
+		xhci_info(xhci, "ABOX audio ERST allocated at 0x%x",
+					EXYNOS_URAM_ABOX_ERST_SEG_ADDR);
+	} else {
+		/* for AUDIO erst */
+		xhci->event_ring_audio = xhci_ring_alloc(xhci, ERST_NUM_SEGS, 1,
+					TYPE_EVENT, 0, flags);
+		if (!xhci->event_ring_audio)
+			goto fail;
+		if (xhci_check_trb_in_td_math(xhci) < 0)
+			goto fail;
+		xhci->erst_audio.entries = dma_pre_alloc_coherent(xhci,
+				sizeof(struct xhci_erst_entry) * ERST_NUM_SEGS, &dma,
+				flags);
+		if (!xhci->erst_audio.entries)
+			goto fail;
+	}
+	xhci_info(xhci,
+			"// Allocated event ring segment table at 0x%llx",
+			(unsigned long long)dma);
+
+
+	memset(xhci->erst_audio.entries, 0, sizeof(struct xhci_erst_entry) *
+							ERST_NUM_SEGS);
+	xhci->erst_audio.num_entries = ERST_NUM_SEGS;
+	xhci->erst_audio.erst_dma_addr = dma;
+	xhci_info(xhci,
+			"// Set ERST to 0; private num segs = %i, virt addr = %p, dma addr = 0x%llx",
+			xhci->erst.num_entries,
+			xhci->erst.entries,
+			(unsigned long long)xhci->erst.erst_dma_addr);
+
+	/* set ring base address and size for each segment table entry */
+	for (val = 0, seg = xhci->event_ring_audio->first_seg; val < ERST_NUM_SEGS; val++) {
+		struct xhci_erst_entry *entry = &xhci->erst_audio.entries[val];
+		entry->seg_addr = cpu_to_le64(seg->dma);
+		entry->seg_size = cpu_to_le32(TRBS_PER_SEGMENT);
+		entry->rsvd = 0;
+		seg = seg->next;
+	}
+
+	/* set ERST count with the number of entries in the segment table */
+	val = readl(&xhci->ir_set_audio->erst_size);
+	val &= ERST_SIZE_MASK;
+	val |= ERST_NUM_SEGS;
+	xhci_info(xhci,
+			"// Write ERST size = %i to ir_set 0 (some bits preserved)",
+			val);
+	writel(val, &xhci->ir_set_audio->erst_size);
+
+	xhci_info(xhci,
+			"// Set ERST entries to point to event ring.");
+	/* set the segment table base address */
+	xhci_info(xhci,
+			"// Set ERST base address for ir_set 0 = 0x%llx",
+			(unsigned long long)xhci->erst_audio.erst_dma_addr);
+	val_64 = xhci_read_64(xhci, &xhci->ir_set_audio->erst_base);
+	val_64 &= ERST_PTR_MASK;
+	val_64 |= (xhci->erst_audio.erst_dma_addr & (u64) ~ERST_PTR_MASK);
+	xhci_write_64(xhci, val_64, &xhci->ir_set_audio->erst_base);
+
+	/* Set the event ring dequeue address */
+	xhci_set_hc_event_deq_audio(xhci);
+	xhci_info(xhci,
+			"// Wrote ERST address to ir_set 1.");
+	/* xhci_print_ir_set(xhci, 1); */
+#endif
 	/*
 	 * XXX: Might need to set the Interrupter Moderation Register to
 	 * something other than the default (~1ms minimum between interrupts).

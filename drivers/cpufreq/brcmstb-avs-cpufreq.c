@@ -384,12 +384,12 @@ static int brcm_avs_set_pstate(struct private_data *priv, unsigned int pstate)
 	return __issue_avs_command(priv, AVS_CMD_SET_PSTATE, true, args);
 }
 
-static u32 brcm_avs_get_voltage(void __iomem *base)
+static unsigned long brcm_avs_get_voltage(void __iomem *base)
 {
 	return readl(base + AVS_MBOX_VOLTAGE1);
 }
 
-static u32 brcm_avs_get_frequency(void __iomem *base)
+static unsigned long brcm_avs_get_frequency(void __iomem *base)
 {
 	return readl(base + AVS_MBOX_FREQUENCY) * 1000;	/* in kHz */
 }
@@ -446,8 +446,8 @@ static bool brcm_avs_is_firmware_loaded(struct private_data *priv)
 	rc = brcm_avs_get_pmap(priv, NULL);
 	magic = readl(priv->base + AVS_MBOX_MAGIC);
 
-	return (magic == AVS_FIRMWARE_MAGIC) && ((rc != -ENOTSUPP) ||
-		(rc != -EINVAL));
+	return (magic == AVS_FIRMWARE_MAGIC) && (rc != -ENOTSUPP) &&
+		(rc != -EINVAL);
 }
 
 static unsigned int brcm_avs_cpufreq_get(unsigned int cpu)
@@ -566,16 +566,6 @@ unmap_base:
 	return ret;
 }
 
-static void brcm_avs_prepare_uninit(struct platform_device *pdev)
-{
-	struct private_data *priv;
-
-	priv = platform_get_drvdata(pdev);
-
-	iounmap(priv->avs_intr_base);
-	iounmap(priv->base);
-}
-
 static int brcm_avs_cpufreq_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_frequency_table *freq_table;
@@ -663,14 +653,14 @@ static ssize_t show_brcm_avs_voltage(struct cpufreq_policy *policy, char *buf)
 {
 	struct private_data *priv = policy->driver_data;
 
-	return sprintf(buf, "0x%08x\n", brcm_avs_get_voltage(priv->base));
+	return sprintf(buf, "0x%08lx\n", brcm_avs_get_voltage(priv->base));
 }
 
 static ssize_t show_brcm_avs_frequency(struct cpufreq_policy *policy, char *buf)
 {
 	struct private_data *priv = policy->driver_data;
 
-	return sprintf(buf, "0x%08x\n", brcm_avs_get_frequency(priv->base));
+	return sprintf(buf, "0x%08lx\n", brcm_avs_get_frequency(priv->base));
 }
 
 cpufreq_freq_attr_ro(brcm_avs_pstate);
@@ -711,21 +701,21 @@ static int brcm_avs_cpufreq_probe(struct platform_device *pdev)
 
 	brcm_avs_driver.driver_data = pdev;
 
-	ret = cpufreq_register_driver(&brcm_avs_driver);
-	if (ret)
-		brcm_avs_prepare_uninit(pdev);
-
-	return ret;
+	return cpufreq_register_driver(&brcm_avs_driver);
 }
 
 static int brcm_avs_cpufreq_remove(struct platform_device *pdev)
 {
+	struct private_data *priv;
 	int ret;
 
 	ret = cpufreq_unregister_driver(&brcm_avs_driver);
-	WARN_ON(ret);
+	if (ret)
+		return ret;
 
-	brcm_avs_prepare_uninit(pdev);
+	priv = platform_get_drvdata(pdev);
+	iounmap(priv->base);
+	iounmap(priv->avs_intr_base);
 
 	return 0;
 }

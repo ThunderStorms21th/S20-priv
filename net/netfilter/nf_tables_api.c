@@ -24,8 +24,6 @@
 #include <net/net_namespace.h>
 #include <net/sock.h>
 
-#define NFT_MODULE_AUTOLOAD_LIMIT (MODULE_NAME_LEN - sizeof("nft-expr-255-"))
-
 static LIST_HEAD(nf_tables_expressions);
 static LIST_HEAD(nf_tables_objects);
 static LIST_HEAD(nf_tables_flowtables);
@@ -472,68 +470,53 @@ static inline u64 nf_tables_alloc_handle(struct nft_table *table)
 static const struct nft_chain_type *chain_type[NFPROTO_NUMPROTO][NFT_CHAIN_T_MAX];
 
 static const struct nft_chain_type *
-__nft_chain_type_get(u8 family, enum nft_chain_types type)
-{
-	if (family >= NFPROTO_NUMPROTO ||
-	    type >= NFT_CHAIN_T_MAX)
-		return NULL;
-
-	return chain_type[family][type];
-}
-
-static const struct nft_chain_type *
 __nf_tables_chain_type_lookup(const struct nlattr *nla, u8 family)
 {
-	const struct nft_chain_type *type;
 	int i;
 
 	for (i = 0; i < NFT_CHAIN_T_MAX; i++) {
-		type = __nft_chain_type_get(family, i);
-		if (!type)
-			continue;
-		if (!nla_strcmp(nla, type->name))
-			return type;
+		if (chain_type[family][i] != NULL &&
+		    !nla_strcmp(nla, chain_type[family][i]->name))
+			return chain_type[family][i];
 	}
 	return NULL;
 }
 
 /*
- * Loading a module requires dropping mutex that guards the transaction.
- * A different client might race to start a new transaction meanwhile. Zap the
- * list of pending transaction and then restore it once the mutex is grabbed
- * again. Users of this function return EAGAIN which implicitly triggers the
- * transaction abort path to clean up the list of pending transactions.
+ * Loading a module requires dropping mutex that guards the
+ * transaction.
+ * We first need to abort any pending transactions as once
+ * mutex is unlocked a different client could start a new
+ * transaction.  It must not see any 'future generation'
+ * changes * as these changes will never happen.
  */
 #ifdef CONFIG_MODULES
+static int __nf_tables_abort(struct net *net);
+
 static void nft_request_module(struct net *net, const char *fmt, ...)
 {
 	char module_name[MODULE_NAME_LEN];
-	LIST_HEAD(commit_list);
 	va_list args;
 	int ret;
 
-	list_splice_init(&net->nft.commit_list, &commit_list);
+	__nf_tables_abort(net);
 
 	va_start(args, fmt);
 	ret = vsnprintf(module_name, MODULE_NAME_LEN, fmt, args);
 	va_end(args);
-	if (ret >= MODULE_NAME_LEN)
+	if (WARN(ret >= MODULE_NAME_LEN, "truncated: '%s' (len %d)", module_name, ret))
 		return;
 
 	mutex_unlock(&net->nft.commit_mutex);
 	request_module("%s", module_name);
 	mutex_lock(&net->nft.commit_mutex);
-
-	WARN_ON_ONCE(!list_empty(&net->nft.commit_list));
-	list_splice(&commit_list, &net->nft.commit_list);
 }
 #endif
 
 static void lockdep_nfnl_nft_mutex_not_held(void)
 {
 #ifdef CONFIG_PROVE_LOCKING
-	if (debug_locks)
-		WARN_ON_ONCE(lockdep_nfnl_is_held(NFNL_SUBSYS_NFTABLES));
+	WARN_ON_ONCE(lockdep_nfnl_is_held(NFNL_SUBSYS_NFTABLES));
 #endif
 }
 
@@ -719,11 +702,11 @@ static int nf_tables_gettable(struct net *net, struct sock *nlsk,
 					nlh->nlmsg_seq, NFT_MSG_NEWTABLE, 0,
 					family, table);
 	if (err < 0)
-		goto err_fill_table_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
 
-err_fill_table_info:
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -950,18 +933,12 @@ static int nft_flush_table(struct nft_ctx *ctx)
 	}
 
 	list_for_each_entry_safe(flowtable, nft, &ctx->table->flowtables, list) {
-		if (!nft_is_active_next(ctx->net, flowtable))
-			continue;
-
 		err = nft_delflowtable(ctx, flowtable);
 		if (err < 0)
 			goto out;
 	}
 
 	list_for_each_entry_safe(obj, ne, &ctx->table->objects, list) {
-		if (!nft_is_active_next(ctx->net, obj))
-			continue;
-
 		err = nft_delobj(ctx, obj);
 		if (err < 0)
 			goto out;
@@ -1064,8 +1041,11 @@ static void nf_tables_table_destroy(struct nft_ctx *ctx)
 
 void nft_register_chain_type(const struct nft_chain_type *ctype)
 {
+	if (WARN_ON(ctype->family >= NFPROTO_NUMPROTO))
+		return;
+
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
-	if (WARN_ON(__nft_chain_type_get(ctype->family, ctype->type))) {
+	if (WARN_ON(chain_type[ctype->family][ctype->type] != NULL)) {
 		nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 		return;
 	}
@@ -1149,8 +1129,7 @@ static const struct nla_policy nft_chain_policy[NFTA_CHAIN_MAX + 1] = {
 				    .len = NFT_CHAIN_MAXNAMELEN - 1 },
 	[NFTA_CHAIN_HOOK]	= { .type = NLA_NESTED },
 	[NFTA_CHAIN_POLICY]	= { .type = NLA_U32 },
-	[NFTA_CHAIN_TYPE]	= { .type = NLA_STRING,
-				    .len = NFT_MODULE_AUTOLOAD_LIMIT },
+	[NFTA_CHAIN_TYPE]	= { .type = NLA_STRING },
 	[NFTA_CHAIN_COUNTERS]	= { .type = NLA_NESTED },
 };
 
@@ -1384,11 +1363,11 @@ static int nf_tables_getchain(struct net *net, struct sock *nlsk,
 					nlh->nlmsg_seq, NFT_MSG_NEWCHAIN, 0,
 					family, table, chain);
 	if (err < 0)
-		goto err_fill_chain_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
 
-err_fill_chain_info:
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -1522,10 +1501,7 @@ static int nft_chain_parse_hook(struct net *net,
 	hook->num = ntohl(nla_get_be32(ha[NFTA_HOOK_HOOKNUM]));
 	hook->priority = ntohl(nla_get_be32(ha[NFTA_HOOK_PRIORITY]));
 
-	type = __nft_chain_type_get(family, NFT_CHAIN_T_DEFAULT);
-	if (!type)
-		return -EOPNOTSUPP;
-
+	type = chain_type[family][NFT_CHAIN_T_DEFAULT];
 	if (nla[NFTA_CHAIN_TYPE]) {
 		type = nf_tables_chain_type_lookup(net, nla[NFTA_CHAIN_TYPE],
 						   family, autoload);
@@ -2036,8 +2012,7 @@ static const struct nft_expr_type *nft_expr_type_get(struct net *net,
 }
 
 static const struct nla_policy nft_expr_policy[NFTA_EXPR_MAX + 1] = {
-	[NFTA_EXPR_NAME]	= { .type = NLA_STRING,
-				    .len = NFT_MODULE_AUTOLOAD_LIMIT },
+	[NFTA_EXPR_NAME]	= { .type = NLA_STRING },
 	[NFTA_EXPR_DATA]	= { .type = NLA_NESTED },
 };
 
@@ -2489,11 +2464,11 @@ static int nf_tables_getrule(struct net *net, struct sock *nlsk,
 				       nlh->nlmsg_seq, NFT_MSG_NEWRULE, 0,
 				       family, table, chain, rule);
 	if (err < 0)
-		goto err_fill_rule_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
 
-err_fill_rule_info:
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -2635,14 +2610,17 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 
 		if (chain->use == UINT_MAX)
 			return -EOVERFLOW;
+	}
 
-		if (nla[NFTA_RULE_POSITION]) {
-			pos_handle = be64_to_cpu(nla_get_be64(nla[NFTA_RULE_POSITION]));
-			old_rule = __nft_rule_lookup(chain, pos_handle);
-			if (IS_ERR(old_rule)) {
-				NL_SET_BAD_ATTR(extack, nla[NFTA_RULE_POSITION]);
-				return PTR_ERR(old_rule);
-			}
+	if (nla[NFTA_RULE_POSITION]) {
+		if (!(nlh->nlmsg_flags & NLM_F_CREATE))
+			return -EOPNOTSUPP;
+
+		pos_handle = be64_to_cpu(nla_get_be64(nla[NFTA_RULE_POSITION]));
+		old_rule = __nft_rule_lookup(chain, pos_handle);
+		if (IS_ERR(old_rule)) {
+			NL_SET_BAD_ATTR(extack, nla[NFTA_RULE_POSITION]);
+			return PTR_ERR(old_rule);
 		}
 	}
 
@@ -3205,8 +3183,7 @@ static int nf_tables_fill_set(struct sk_buff *skb, const struct nft_ctx *ctx,
 			goto nla_put_failure;
 	}
 
-	if (set->udata &&
-	    nla_put(skb, NFTA_SET_USERDATA, set->udlen, set->udata))
+	if (nla_put(skb, NFTA_SET_USERDATA, set->udlen, set->udata))
 		goto nla_put_failure;
 
 	desc = nla_nest_start(skb, NFTA_SET_DESC);
@@ -3378,11 +3355,11 @@ static int nf_tables_getset(struct net *net, struct sock *nlsk,
 
 	err = nf_tables_fill_set(skb2, &ctx, set, NFT_MSG_NEWSET, 0);
 	if (err < 0)
-		goto err_fill_set_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
 
-err_fill_set_info:
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -3452,7 +3429,7 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 			      NFT_SET_INTERVAL | NFT_SET_TIMEOUT |
 			      NFT_SET_MAP | NFT_SET_EVAL |
 			      NFT_SET_OBJECT))
-			return -EOPNOTSUPP;
+			return -EINVAL;
 		/* Only one of these operations is supported */
 		if ((flags & (NFT_SET_MAP | NFT_SET_OBJECT)) ==
 			     (NFT_SET_MAP | NFT_SET_OBJECT))
@@ -3490,7 +3467,7 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 		objtype = ntohl(nla_get_be32(nla[NFTA_SET_OBJ_TYPE]));
 		if (objtype == NFT_OBJECT_UNSPEC ||
 		    objtype > NFT_OBJECT_MAX)
-			return -EOPNOTSUPP;
+			return -EINVAL;
 	} else if (flags & NFT_SET_OBJECT)
 		return -EINVAL;
 	else
@@ -3822,8 +3799,7 @@ static const struct nla_policy nft_set_elem_policy[NFTA_SET_ELEM_MAX + 1] = {
 	[NFTA_SET_ELEM_USERDATA]	= { .type = NLA_BINARY,
 					    .len = NFT_USERDATA_MAXLEN },
 	[NFTA_SET_ELEM_EXPR]		= { .type = NLA_NESTED },
-	[NFTA_SET_ELEM_OBJREF]		= { .type = NLA_STRING,
-					    .len = NFT_OBJ_MAXNAMELEN - 1 },
+	[NFTA_SET_ELEM_OBJREF]		= { .type = NLA_STRING },
 };
 
 static const struct nla_policy nft_set_elem_list_policy[NFTA_SET_ELEM_LIST_MAX + 1] = {
@@ -4144,10 +4120,8 @@ static int nft_get_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 		return err;
 
 	err = -EINVAL;
-	if (desc.type != NFT_DATA_VALUE || desc.len != set->klen) {
-		nft_data_release(&elem.key.val, desc.type);
+	if (desc.type != NFT_DATA_VALUE || desc.len != set->klen)
 		return err;
-	}
 
 	priv = set->ops->get(ctx->net, set, &elem, flags);
 	if (IS_ERR(priv))
@@ -4158,18 +4132,24 @@ static int nft_get_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 	err = -ENOMEM;
 	skb = nlmsg_new(NLMSG_GOODSIZE, GFP_ATOMIC);
 	if (skb == NULL)
-		return err;
+		goto err1;
 
 	err = nf_tables_fill_setelem_info(skb, ctx, ctx->seq, ctx->portid,
 					  NFT_MSG_NEWSETELEM, 0, set, &elem);
 	if (err < 0)
-		goto err_fill_setelem;
+		goto err2;
 
-	return nfnetlink_unicast(skb, ctx->net, ctx->portid);
+	err = nfnetlink_unicast(skb, ctx->net, ctx->portid, MSG_DONTWAIT);
+	/* This avoids a loop in nfnetlink. */
+	if (err < 0)
+		goto err1;
 
-err_fill_setelem:
+	return 0;
+err2:
 	kfree_skb(skb);
-	return err;
+err1:
+	/* this avoids a loop in nfnetlink. */
+	return err == -EAGAIN ? -ENOBUFS : err;
 }
 
 /* called with rcu_read_lock held */
@@ -4374,19 +4354,13 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 		if (nla[NFTA_SET_ELEM_DATA] == NULL &&
 		    !(flags & NFT_SET_ELEM_INTERVAL_END))
 			return -EINVAL;
+		if (nla[NFTA_SET_ELEM_DATA] != NULL &&
+		    flags & NFT_SET_ELEM_INTERVAL_END)
+			return -EINVAL;
 	} else {
 		if (nla[NFTA_SET_ELEM_DATA] != NULL)
 			return -EINVAL;
 	}
-
-	if ((flags & NFT_SET_ELEM_INTERVAL_END) &&
-	     (nla[NFTA_SET_ELEM_DATA] ||
-	      nla[NFTA_SET_ELEM_OBJREF] ||
-	      nla[NFTA_SET_ELEM_TIMEOUT] ||
-	      nla[NFTA_SET_ELEM_EXPIRATION] ||
-	      nla[NFTA_SET_ELEM_USERDATA] ||
-	      nla[NFTA_SET_ELEM_EXPR]))
-		return -EINVAL;
 
 	timeout = 0;
 	if (nla[NFTA_SET_ELEM_TIMEOUT] != NULL) {
@@ -5268,11 +5242,10 @@ static int nf_tables_getobj(struct net *net, struct sock *nlsk,
 				      nlh->nlmsg_seq, NFT_MSG_NEWOBJ, 0,
 				      family, table, obj, reset);
 	if (err < 0)
-		goto err_fill_obj_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
-
-err_fill_obj_info:
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -5764,8 +5737,6 @@ static int nf_tables_fill_flowtable_info(struct sk_buff *skb, struct net *net,
 		goto nla_put_failure;
 
 	nest = nla_nest_start(skb, NFTA_FLOWTABLE_HOOK);
-	if (!nest)
-		goto nla_put_failure;
 	if (nla_put_be32(skb, NFTA_FLOWTABLE_HOOK_NUM, htonl(flowtable->hooknum)) ||
 	    nla_put_be32(skb, NFTA_FLOWTABLE_HOOK_PRIORITY, htonl(flowtable->priority)))
 		goto nla_put_failure;
@@ -5929,11 +5900,10 @@ static int nf_tables_getflowtable(struct net *net, struct sock *nlsk,
 					    NFT_MSG_NEWFLOWTABLE, 0, family,
 					    flowtable);
 	if (err < 0)
-		goto err_fill_flowtable_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
-
-err_fill_flowtable_info:
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
+err:
 	kfree_skb(skb2);
 	return err;
 }
@@ -6094,11 +6064,10 @@ static int nf_tables_getgen(struct net *net, struct sock *nlsk,
 	err = nf_tables_fill_gen_info(skb2, net, NETLINK_CB(skb).portid,
 				      nlh->nlmsg_seq);
 	if (err < 0)
-		goto err_fill_gen_info;
+		goto err;
 
-	return nfnetlink_unicast(skb2, net, NETLINK_CB(skb).portid);
-
-err_fill_gen_info:
+	return nlmsg_unicast(nlsk, skb2, NETLINK_CB(skb).portid);
+err:
 	kfree_skb(skb2);
 	return err;
 }

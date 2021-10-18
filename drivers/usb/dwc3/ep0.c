@@ -110,7 +110,9 @@ static int __dwc3_gadget_ep0_queue(struct dwc3_ep *dep,
 		direction = !!(dep->flags & DWC3_EP0_DIR_IN);
 
 		if (dwc->ep0state != EP0_DATA_PHASE) {
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 			dev_WARN(dwc->dev, "Unexpected pending request\n");
+#endif
 			return 0;
 		}
 
@@ -228,7 +230,8 @@ static void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 
 	/* stall is always issued on EP0 */
 	dep = dwc->eps[0];
-	__dwc3_gadget_ep_set_halt(dep, 1, false);
+	/* mtp reset signal issue */
+	__dwc3_gadget_ep_set_halt(dep, 1, true);
 	dep->flags = DWC3_EP_ENABLED;
 	dwc->delayed_status = false;
 
@@ -278,7 +281,9 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 	dwc3_ep0_prepare_one_trb(dep, dwc->ep0_trb_addr, 8,
 			DWC3_TRBCTL_CONTROL_SETUP, false);
 	ret = dwc3_ep0_start_trans(dep);
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 	WARN_ON(ret < 0);
+#endif
 }
 
 static struct dwc3_ep *dwc3_wIndex_to_dep(struct dwc3 *dwc, __le16 wIndex_le)
@@ -292,9 +297,6 @@ static struct dwc3_ep *dwc3_wIndex_to_dep(struct dwc3 *dwc, __le16 wIndex_le)
 		epnum |= 1;
 
 	dep = dwc->eps[epnum];
-	if (dep == NULL)
-		return NULL;
-
 	if (dep->flags & DWC3_EP_ENABLED)
 		return dep;
 
@@ -376,6 +378,9 @@ static int dwc3_ep0_handle_u1(struct dwc3 *dwc, enum usb_device_state state,
 		int set)
 {
 	u32 reg;
+	struct usb_composite_dev *cdev;
+
+	cdev = get_gadget_data(&dwc->gadget);
 
 	if (state != USB_STATE_CONFIGURED)
 		return -EINVAL;
@@ -383,8 +388,12 @@ static int dwc3_ep0_handle_u1(struct dwc3 *dwc, enum usb_device_state state,
 			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS))
 		return -EINVAL;
 
+	/* see NEGATIVE RX DETECTION comment */
+	if (set && dwc->revision < DWC3_REVISION_230A)
+		return 0;
+
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-	if (set)
+	if (set && !(cdev->is_rndis))
 		reg |= DWC3_DCTL_INITU1ENA;
 	else
 		reg &= ~DWC3_DCTL_INITU1ENA;
@@ -397,6 +406,9 @@ static int dwc3_ep0_handle_u2(struct dwc3 *dwc, enum usb_device_state state,
 		int set)
 {
 	u32 reg;
+	struct usb_composite_dev *cdev;
+
+	cdev = get_gadget_data(&dwc->gadget);
 
 
 	if (state != USB_STATE_CONFIGURED)
@@ -405,8 +417,12 @@ static int dwc3_ep0_handle_u2(struct dwc3 *dwc, enum usb_device_state state,
 			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS))
 		return -EINVAL;
 
+	/* see NEGATIVE RX DETECTION comment */
+	if (set && dwc->revision < DWC3_REVISION_230A)
+		return 0;
+
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-	if (set)
+	if (set && !(cdev->is_rndis))
 		reg |= DWC3_DCTL_INITU2ENA;
 	else
 		reg &= ~DWC3_DCTL_INITU2ENA;
@@ -599,9 +615,12 @@ static int dwc3_ep0_delegate_req(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 {
 	enum usb_device_state state = dwc->gadget.state;
+	struct usb_composite_dev *cdev;
 	u32 cfg;
 	int ret;
 	u32 reg;
+
+	cdev = get_gadget_data(&dwc->gadget);
 
 	cfg = le16_to_cpu(ctrl->wValue);
 
@@ -625,12 +644,27 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 						USB_STATE_CONFIGURED);
 
 			/*
-			 * Enable transition to U1/U2 state when
-			 * nothing is pending from application.
+			 * NEGATIVE RX DETECTION
+			 * Some host controllers (e.g. Intel) perform far-end
+			 * receiver termination _negative_ detection while link
+			 * is in U2 state. Synopsys PIPE PHY considers this
+			 * signalling as U2 LFPS exit, moves to Recovery state
+			 * and waits for training sequence which never comes.
+			 * This finally leads to reconnection. Starting from
+			 * DWC3 core 2.30a, GCTL register has bit U2EXIT_LFPS,
+			 * which improves interoperability with such HCs.
 			 */
-			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-			reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
-			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			if (dwc->revision >= DWC3_REVISION_230A) {
+				/*
+				 * Enable transition to U1/U2 state when
+				 * nothing is pending from application.
+				 */
+				if (!cdev->is_rndis) {
+					reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+					reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
+					dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+				}
+			}
 		}
 		break;
 
@@ -687,7 +721,9 @@ static void dwc3_ep0_set_sel_cmpl(struct usb_ep *ep, struct usb_request *req)
 	/* now that we have the time, issue DGCMD Set Sel */
 	ret = dwc3_send_gadget_generic_command(dwc,
 			DWC3_DGCMD_SET_PERIODIC_PAR, param);
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 	WARN_ON(ret < 0);
+#endif
 }
 
 static int dwc3_ep0_set_sel(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
@@ -760,6 +796,12 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		ret = dwc3_ep0_set_address(dwc, ctrl);
 		break;
 	case USB_REQ_SET_CONFIGURATION:
+		if (dwc->gadget.speed == USB_SPEED_SUPER)
+			dwc->vbus_current = USB_CURRENT_SUPER_SPEED;
+		else
+			dwc->vbus_current = USB_CURRENT_HIGH_SPEED;
+		schedule_work(&dwc->set_vbus_current_work);
+
 		ret = dwc3_ep0_set_config(dwc, ctrl);
 		break;
 	case USB_REQ_SET_SEL:
@@ -931,23 +973,22 @@ static void dwc3_ep0_xfer_complete(struct dwc3 *dwc,
 		dwc3_ep0_complete_status(dwc, event);
 		break;
 	default:
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 		WARN(true, "UNKNOWN ep0state %d\n", dwc->ep0state);
+#endif
+		break;
 	}
 }
 
 static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		struct dwc3_ep *dep, struct dwc3_request *req)
 {
-	unsigned int		trb_length = 0;
 	int			ret;
 
 	req->direction = !!dep->number;
 
 	if (req->request.length == 0) {
-		if (!req->direction)
-			trb_length = dep->endpoint.maxpacket;
-
-		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr, trb_length,
+		dwc3_ep0_prepare_one_trb(dep, dwc->ep0_trb_addr, 0,
 				DWC3_TRBCTL_CONTROL_DATA, false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
@@ -994,12 +1035,9 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		req->trb = &dwc->ep0_trb[dep->trb_enqueue - 1];
 
-		if (!req->direction)
-			trb_length = dep->endpoint.maxpacket;
-
 		/* Now prepare one extra TRB to align transfer size */
 		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr,
-					 trb_length, DWC3_TRBCTL_CONTROL_DATA,
+					 0, DWC3_TRBCTL_CONTROL_DATA,
 					 false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else {
@@ -1016,8 +1054,9 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		ret = dwc3_ep0_start_trans(dep);
 	}
-
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 	WARN_ON(ret < 0);
+#endif
 }
 
 static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
@@ -1034,7 +1073,11 @@ static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
 
 static void __dwc3_ep0_do_control_status(struct dwc3 *dwc, struct dwc3_ep *dep)
 {
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 	WARN_ON(dwc3_ep0_start_control_status(dep));
+#else
+	dwc3_ep0_start_control_status(dep);
+#endif
 }
 
 static void dwc3_ep0_do_control_status(struct dwc3 *dwc,
@@ -1059,7 +1102,9 @@ static void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
 	cmd |= DWC3_DEPCMD_PARAM(dep->resource_index);
 	memset(&params, 0, sizeof(params));
 	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 	WARN_ON_ONCE(ret);
+#endif
 	dep->resource_index = 0;
 }
 
@@ -1096,8 +1141,9 @@ static void dwc3_ep0_xfernotready(struct dwc3 *dwc,
 
 		if (dwc->delayed_status) {
 			struct dwc3_ep *dep = dwc->eps[0];
-
+#if IS_ENABLED(DWC3_GADGET_IRQ_ORG)
 			WARN_ON_ONCE(event->endpoint_number != 1);
+#endif
 			/*
 			 * We should handle the delay STATUS phase here if the
 			 * request for handling delay STATUS has been queued
@@ -1120,9 +1166,6 @@ static void dwc3_ep0_xfernotready(struct dwc3 *dwc,
 void dwc3_ep0_interrupt(struct dwc3 *dwc,
 		const struct dwc3_event_depevt *event)
 {
-	struct dwc3_ep	*dep = dwc->eps[event->endpoint_number];
-	u8		cmd;
-
 	switch (event->endpoint_event) {
 	case DWC3_DEPEVT_XFERCOMPLETE:
 		dwc3_ep0_xfer_complete(dwc, event);
@@ -1135,12 +1178,7 @@ void dwc3_ep0_interrupt(struct dwc3 *dwc,
 	case DWC3_DEPEVT_XFERINPROGRESS:
 	case DWC3_DEPEVT_RXTXFIFOEVT:
 	case DWC3_DEPEVT_STREAMEVT:
-		break;
 	case DWC3_DEPEVT_EPCMDCMPLT:
-		cmd = DEPEVT_PARAMETER_CMD(event->parameters);
-
-		if (cmd == DWC3_DEPCMD_ENDTRANSFER)
-			dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
 		break;
 	}
 }

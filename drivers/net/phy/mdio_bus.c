@@ -56,12 +56,11 @@ static int mdiobus_register_gpiod(struct mdio_device *mdiodev)
 		gpiod = fwnode_get_named_gpiod(&mdiodev->dev.of_node->fwnode,
 					       "reset-gpios", 0, GPIOD_OUT_LOW,
 					       "PHY reset");
-	if (IS_ERR(gpiod)) {
-		if (PTR_ERR(gpiod) == -ENOENT || PTR_ERR(gpiod) == -ENOSYS)
-			gpiod = NULL;
-		else
-			return PTR_ERR(gpiod);
-	}
+	if (PTR_ERR(gpiod) == -ENOENT ||
+	    PTR_ERR(gpiod) == -ENOSYS)
+		gpiod = NULL;
+	else if (IS_ERR(gpiod))
+		return PTR_ERR(gpiod);
 
 	mdiodev->reset = gpiod;
 
@@ -378,13 +377,6 @@ int __mdiobus_register(struct mii_bus *bus, struct module *owner)
 	bus->dev.groups = NULL;
 	dev_set_name(&bus->dev, "%s", bus->id);
 
-	/* We need to set state to MDIOBUS_UNREGISTERED to correctly release
-	 * the device in mdiobus_free()
-	 *
-	 * State will be updated later in this function in case of success
-	 */
-	bus->state = MDIOBUS_UNREGISTERED;
-
 	err = device_register(&bus->dev);
 	if (err) {
 		pr_err("mii_bus %s failed to register\n", bus->id);
@@ -453,8 +445,7 @@ void mdiobus_unregister(struct mii_bus *bus)
 	struct mdio_device *mdiodev;
 	int i;
 
-	if (WARN_ON_ONCE(bus->state != MDIOBUS_REGISTERED))
-		return;
+	BUG_ON(bus->state != MDIOBUS_REGISTERED);
 	bus->state = MDIOBUS_UNREGISTERED;
 
 	for (i = 0; i < PHY_MAX_ADDR; i++) {

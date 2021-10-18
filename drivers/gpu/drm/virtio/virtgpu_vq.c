@@ -566,13 +566,9 @@ static void virtio_gpu_cmd_get_capset_info_cb(struct virtio_gpu_device *vgdev,
 	int i = le32_to_cpu(cmd->capset_index);
 
 	spin_lock(&vgdev->display_info_lock);
-	if (vgdev->capsets) {
-		vgdev->capsets[i].id = le32_to_cpu(resp->capset_id);
-		vgdev->capsets[i].max_version = le32_to_cpu(resp->capset_max_version);
-		vgdev->capsets[i].max_size = le32_to_cpu(resp->capset_max_size);
-	} else {
-		DRM_ERROR("invalid capset memory.");
-	}
+	vgdev->capsets[i].id = le32_to_cpu(resp->capset_id);
+	vgdev->capsets[i].max_version = le32_to_cpu(resp->capset_max_version);
+	vgdev->capsets[i].max_size = le32_to_cpu(resp->capset_max_size);
 	spin_unlock(&vgdev->display_info_lock);
 	wake_up(&vgdev->resp_wq);
 }
@@ -654,11 +650,11 @@ int virtio_gpu_cmd_get_capset(struct virtio_gpu_device *vgdev,
 {
 	struct virtio_gpu_get_capset *cmd_p;
 	struct virtio_gpu_vbuffer *vbuf;
-	int max_size;
+	int max_size = vgdev->capsets[idx].max_size;
 	struct virtio_gpu_drv_cap_cache *cache_ent;
 	void *resp_buf;
 
-	if (idx >= vgdev->num_capsets)
+	if (idx > vgdev->num_capsets)
 		return -EINVAL;
 
 	if (version > vgdev->capsets[idx].max_version)
@@ -668,7 +664,6 @@ int virtio_gpu_cmd_get_capset(struct virtio_gpu_device *vgdev,
 	if (!cache_ent)
 		return -ENOMEM;
 
-	max_size = vgdev->capsets[idx].max_size;
 	cache_ent->caps_cache = kmalloc(max_size, GFP_KERNEL);
 	if (!cache_ent->caps_cache) {
 		kfree(cache_ent);
@@ -868,9 +863,9 @@ int virtio_gpu_object_attach(struct virtio_gpu_device *vgdev,
 	}
 
 	/* gets freed when the ring has consumed it */
-	ents = kvmalloc_array(obj->pages->nents,
-			      sizeof(struct virtio_gpu_mem_entry),
-			      GFP_KERNEL);
+	ents = kmalloc_array(obj->pages->nents,
+			     sizeof(struct virtio_gpu_mem_entry),
+			     GFP_KERNEL);
 	if (!ents) {
 		DRM_ERROR("failed to allocate ent list\n");
 		return -ENOMEM;

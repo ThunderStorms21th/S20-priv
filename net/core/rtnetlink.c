@@ -2875,17 +2875,8 @@ struct net_device *rtnl_create_link(struct net *net,
 	dev->rtnl_link_ops = ops;
 	dev->rtnl_link_state = RTNL_LINK_INITIALIZING;
 
-	if (tb[IFLA_MTU]) {
-		u32 mtu = nla_get_u32(tb[IFLA_MTU]);
-		int err;
-
-		err = dev_validate_mtu(dev, mtu, NULL);
-		if (err) {
-			free_netdev(dev);
-			return ERR_PTR(err);
-		}
-		dev->mtu = mtu;
-	}
+	if (tb[IFLA_MTU])
+		dev->mtu = nla_get_u32(tb[IFLA_MTU]);
 	if (tb[IFLA_ADDRESS]) {
 		memcpy(dev->dev_addr, nla_data(tb[IFLA_ADDRESS]),
 				nla_len(tb[IFLA_ADDRESS]));
@@ -3146,8 +3137,7 @@ replay:
 			 */
 			if (err < 0) {
 				/* If device is not registered at all, free it now */
-				if (dev->reg_state == NETREG_UNINITIALIZED ||
-				    dev->reg_state == NETREG_UNREGISTERED)
+				if (dev->reg_state == NETREG_UNINITIALIZED)
 					free_netdev(dev);
 				goto out;
 			}
@@ -4102,10 +4092,6 @@ static int rtnl_bridge_notify(struct net_device *dev)
 	if (err < 0)
 		goto errout;
 
-	/* Notification info is only filled for bridge ports, not the bridge
-	 * device itself. Therefore, a zero notification length is valid and
-	 * should not result in an error.
-	 */
 	if (!skb->len)
 		goto errout;
 
@@ -4512,7 +4498,7 @@ nla_put_failure:
 static size_t if_nlmsg_stats_size(const struct net_device *dev,
 				  u32 filter_mask)
 {
-	size_t size = NLMSG_ALIGN(sizeof(struct if_stats_msg));
+	size_t size = 0;
 
 	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_64, 0))
 		size += nla_total_size_64bit(sizeof(struct rtnl_link_stats64));

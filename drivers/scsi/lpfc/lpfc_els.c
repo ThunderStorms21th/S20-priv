@@ -1176,15 +1176,6 @@ stop_rr_fcf_flogi:
 			phba->fcf.fcf_redisc_attempted = 0; /* reset */
 			goto out;
 		}
-	} else if (vport->port_state > LPFC_FLOGI &&
-		   vport->fc_flag & FC_PT2PT) {
-		/*
-		 * In a p2p topology, it is possible that discovery has
-		 * already progressed, and this completion can be ignored.
-		 * Recheck the indicated topology.
-		 */
-		if (!sp->cmn.fPort)
-			goto out;
 	}
 
 flogifail:
@@ -1352,8 +1343,6 @@ lpfc_els_abort_flogi(struct lpfc_hba *phba)
 			Fabric_DID);
 
 	pring = lpfc_phba_elsring(phba);
-	if (unlikely(!pring))
-		return -EIO;
 
 	/*
 	 * Check the txcmplq for an iocb that matches the nport the driver is
@@ -4119,11 +4108,9 @@ lpfc_cmpl_els_rsp(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 		mempool_free(mbox, phba->mbox_mem_pool);
 	}
 out:
-	if (ndlp && NLP_CHK_NODE_ACT(ndlp) && shost) {
+	if (ndlp && NLP_CHK_NODE_ACT(ndlp)) {
 		spin_lock_irq(shost->host_lock);
-		if (mbox)
-			ndlp->nlp_flag &= ~NLP_ACC_REGLOGIN;
-		ndlp->nlp_flag &= ~NLP_RM_DFLT_RPI;
+		ndlp->nlp_flag &= ~(NLP_ACC_REGLOGIN | NLP_RM_DFLT_RPI);
 		spin_unlock_irq(shost->host_lock);
 
 		/* If the node is not being used by another discovery thread,
@@ -5570,7 +5557,7 @@ lpfc_els_rcv_rdp(struct lpfc_vport *vport, struct lpfc_iocbq *cmdiocb,
 	struct ls_rjt stat;
 
 	if (phba->sli_rev < LPFC_SLI_REV4 ||
-	    bf_get(lpfc_sli_intf_if_type, &phba->sli4_hba.sli_intf) <
+	    bf_get(lpfc_sli_intf_if_type, &phba->sli4_hba.sli_intf) !=
 						LPFC_SLI_INTF_IF_TYPE_2) {
 		rjt_err = LSRJT_UNABLE_TPC;
 		rjt_expl = LSEXP_REQ_UNSUPPORTED;
@@ -7960,8 +7947,6 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 	spin_lock_irq(shost->host_lock);
 	if (ndlp->nlp_flag & NLP_IN_DEV_LOSS) {
 		spin_unlock_irq(shost->host_lock);
-		if (newnode)
-			lpfc_nlp_put(ndlp);
 		goto dropit;
 	}
 	spin_unlock_irq(shost->host_lock);

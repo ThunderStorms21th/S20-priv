@@ -57,6 +57,7 @@ config ARM64
 	select ARCH_USE_QUEUED_RWLOCKS
 	select ARCH_USE_QUEUED_SPINLOCKS
 	select ARCH_SUPPORTS_MEMORY_FAILURE
+	select ARCH_SUPPORTS_LTO_CLANG
 	select ARCH_SUPPORTS_ATOMIC_RMW
 	select ARCH_SUPPORTS_INT128 if GCC_VERSION >= 50000 || CC_IS_CLANG
 	select ARCH_SUPPORTS_NUMA_BALANCING
@@ -68,7 +69,7 @@ config ARM64
 	select ARM_GIC
 	select AUDIT_ARCH_COMPAT_GENERIC
 	select ARM_GIC_V2M if PCI
-	select ARM_GIC_V3
+	select ARM_GIC_V3 if !ARCH_EXYNOS
 	select ARM_GIC_V3_ITS if PCI
 	select ARM_PSCI_FW
 	select BUILDTIME_EXTABLE_SORT
@@ -109,7 +110,7 @@ config ARM64
 	select HAVE_ARCH_KGDB
 	select HAVE_ARCH_MMAP_RND_BITS
 	select HAVE_ARCH_MMAP_RND_COMPAT_BITS if COMPAT
-	select HAVE_ARCH_PREL32_RELOCATIONS
+	select HAVE_ARCH_PREL32_RELOCATIONS if !LTO_CLANG
 	select HAVE_ARCH_SECCOMP_FILTER
 	select HAVE_ARCH_STACKLEAK
 	select HAVE_ARCH_THREAD_STRUCT_WHITELIST
@@ -256,6 +257,12 @@ config ZONE_DMA32
 	default y
 
 config HAVE_GENERIC_GUP
+	def_bool y
+
+config ARCH_ENABLE_MEMORY_HOTPLUG
+	def_bool y
+
+config ARCH_ENABLE_MEMORY_HOTREMOVE
 	def_bool y
 
 config SMP
@@ -473,7 +480,7 @@ config ARM64_ERRATUM_1024718
 	help
 	  This option adds work around for Arm Cortex-A55 Erratum 1024718.
 
-	  Affected Cortex-A55 cores (all revisions) could cause incorrect
+	  Affected Cortex-A55 cores (r0p0, r0p1, r1p0) could cause incorrect
 	  update of the hardware dirty bit when the DBM/AP bits are updated
 	  without a break-before-make. The work around is to disable the usage
 	  of hardware DBM locally on the affected cores. CPUs not affected by
@@ -496,22 +503,6 @@ config ARM64_ERRATUM_1463225
 	  Work around the erratum by triggering a dummy step exception
 	  when handling a system call from a task that is being stepped
 	  in a VHE configuration of the kernel.
-
-	  If unsure, say Y.
-
-config ARM64_ERRATUM_1542419
-	bool "Neoverse-N1: workaround mis-ordering of instruction fetches"
-	default y
-	help
-	  This option adds a workaround for ARM Neoverse-N1 erratum
-	  1542419.
-
-	  Affected Neoverse-N1 cores could execute a stale instruction when
-	  modified by another CPU. The workaround depends on a firmware
-	  counterpart.
-
-	  Workaround the issue by hiding the DIC feature from EL0. This
-	  forces user-space to perform cache maintenance.
 
 	  If unsure, say Y.
 
@@ -927,7 +918,7 @@ config FORCE_MAX_ZONEORDER
 
 config UNMAP_KERNEL_AT_EL0
 	bool "Unmap kernel when running in userspace (aka \"KAISER\")" if EXPERT
-	default y
+	default n
 	help
 	  Speculation attacks against some high-performance processors can
 	  be used to bypass MMU permission checks and leak kernel data to
@@ -939,7 +930,7 @@ config UNMAP_KERNEL_AT_EL0
 
 config HARDEN_BRANCH_PREDICTOR
 	bool "Harden the branch predictor against aliasing attacks" if EXPERT
-	default y
+	default n
 	help
 	  Speculation attacks against some high-performance processors rely on
 	  being able to manipulate the branch predictor for a victim context by
@@ -1275,6 +1266,23 @@ config CMDLINE
 	  entering them here. As a minimum, you should specify the the
 	  root device (e.g. root=/dev/nfs).
 
+choice
+	prompt "Kernel command line type" if CMDLINE != ""
+	default CMDLINE_FROM_BOOTLOADER
+
+config CMDLINE_FROM_BOOTLOADER
+	bool "Use bootloader kernel arguments if available"
+	help
+	  Uses the command-line options passed by the boot loader. If
+	  the boot loader doesn't provide any, the default kernel command
+	  string provided in CMDLINE will be used.
+
+config CMDLINE_EXTEND
+	bool "Extend bootloader kernel arguments"
+	help
+	  The command-line arguments provided by the boot loader will be
+	  appended to the default kernel command string.
+
 config CMDLINE_FORCE
 	bool "Always use the default kernel command string"
 	help
@@ -1282,6 +1290,7 @@ config CMDLINE_FORCE
 	  loader passes other arguments to the kernel.
 	  This is useful if you cannot or don't want to change the
 	  command-line options your boot loader passes to the kernel.
+endchoice
 
 config EFI_STUB
 	bool
@@ -1315,6 +1324,134 @@ config DMI
 	  This option is only useful on systems that have UEFI firmware.
 	  However, even with this option, the resultant kernel should
 	  continue to boot on existing non-UEFI platforms.
+
+config UH
+	bool "Enable micro hypervisor feature"
+	depends on !SEC_FACTORY
+	default n
+	help
+	  It enables a micro hypervisor.
+	  It's samsung's hypervisor.
+	  RKP and etc can be loaded on it.
+	  please check a memory map for it.
+
+config FASTUH_RKP
+	bool "
+	bool "Enable RKP (Realtime Kernel Protection) UH feature"
+	depends on UH && !UH_RKP
+	default n
+	help
+	  it protects a kernel text and etc.
+
+config UH_DEBUG
+    bool "Enable micro hypervisor debug feature"
+	depends on UH
+	default n
+	help
+	  It's for debugging uH.
+
+config UH_RKP
+	bool "Enable RKP (Realtime Kernel Protection) UH feature"
+	depends on UH
+	default n
+	help
+	  it protects a kernel text and etc.
+
+config RKP_TEST
+     bool "Enable RKP test"
+     depends on !SAMSUNG_PRODUCT_SHIP && (UH_RKP || FASTUH_RKP)
+     default n
+     help
+       enable RKP test.
+
+config UH_RKP_FIMC_CHECK
+    bool "Select FIMC type"
+    depends on (UH_RKP || FASTUH_RKP)
+    default n
+    help
+      it protects a kernel text and etc.
+
+config KDP_CRED
+	bool "KDP(Kernel Data Protection) for cred structure"
+	depends on !SEC_FACTORY
+	depends on !SEC_VTS_TEST
+	depends on UH_RKP || FASTUH_RKP
+	default n
+	help
+	  Prevents unauthorized cred modification.
+
+config KDP_NS
+	bool "KDP(Kernel Data Protection) for namespace structure"
+	depends on KDP_CRED
+	default n
+	help
+	  Prevents unauthorized namespace modification.
+
+config KDP_DMAP
+	bool "KDP(Kernel Data Protection) to prevent page Double MAPping"
+	depends on KDP_CRED
+	default n
+	help
+	  Prevents unauthorized mapping for page table.
+
+config KDP_TEST
+	bool "Enable KDP test"
+	depends on KDP_CRED && KDP_NS && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  enable KDP test.
+
+config UH_LKM_BLOCK
+	bool "Block LKM"
+	help
+	  LKM is not allowed by Samsung security policy.
+
+config UH_PDBT
+	bool "enables PDBT"
+	depends on UH
+	default n
+	help
+		this enables pDBT(pseudo Dynamic Binary Translation, previously a.k.a. harsh).
+
+		The exceptions raised by undefined instruction are handled by hypervisor.
+		Hypervisor decides if the instruction needs to be emulated by other existing instructions,
+		or the task pinned to other cpu clusters(i.e. big cores).
+
+config UH_PDBT_STATIC
+	bool "enables PDBT_STATIC"
+	depends on UH
+	default n
+	help
+		this enables pDBT static.
+
+		Emulatable instructions and migratable cores are determined at hypervisor's compile time.
+
+config RKP_CFP
+	bool "JOPP and ROPP"
+	default n
+	help
+	  Control flow protection, including both JOPP and ROPP. Please do NOT
+	  set this CONFIG, JOPP/ROPP will select it.
+
+config RKP_CFP_JOPP
+	bool "JOP Prevention"
+	select RKP_CFP
+	# depends on TIMA_RKP
+	default n
+	help
+	  Restrict function pointer jumps to function entry points only.
+
+config RKP_CFP_JOPP_MAGIC
+	hex
+	depends on RKP_CFP && RKP_CFP_JOPP
+	default "0x00be7bad"
+
+config RKP_CFP_TEST
+	bool "test file, only include in ENG build"
+	depends on RKP_CFP
+	default n
+	help
+	  For test only.
 
 endmenu
 

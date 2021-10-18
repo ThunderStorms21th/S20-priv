@@ -47,7 +47,7 @@
 #include <asm/udbg.h>
 #define DBG(fmt...) udbg_printf(fmt)
 #else
-#define DBG(fmt...) do { } while (0)
+#define DBG(fmt...)
 #endif
 
 static void pnv_smp_setup_cpu(int cpu)
@@ -171,6 +171,7 @@ static void pnv_smp_cpu_kill_self(void)
 	/* Standard hot unplug procedure */
 
 	idle_task_exit();
+	current->active_mm = NULL; /* for sanity */
 	cpu = smp_processor_id();
 	DBG("CPU%d offline\n", cpu);
 	generic_set_cpu_dead(cpu);
@@ -222,7 +223,7 @@ static void pnv_smp_cpu_kill_self(void)
 		 * for coming online, which are handled via
 		 * generic_check_cpu_restart() calls.
 		 */
-		kvmppc_clear_host_ipi(cpu);
+		kvmppc_set_host_ipi(cpu, 0);
 
 		srr1 = pnv_cpu_offline(cpu);
 

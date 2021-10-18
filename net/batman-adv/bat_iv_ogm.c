@@ -594,10 +594,8 @@ static void batadv_iv_ogm_emit(struct batadv_forw_packet *forw_packet)
 	if (WARN_ON(!forw_packet->if_outgoing))
 		return;
 
-	if (forw_packet->if_outgoing->soft_iface != soft_iface) {
-		pr_warn("%s: soft interface switch for queued OGM\n", __func__);
+	if (WARN_ON(forw_packet->if_outgoing->soft_iface != soft_iface))
 		return;
-	}
 
 	if (forw_packet->if_incoming->if_status != BATADV_IF_ACTIVE)
 		return;
@@ -971,10 +969,6 @@ static void batadv_iv_ogm_schedule_buff(struct batadv_hard_iface *hard_iface)
 	unsigned long send_time;
 
 	lockdep_assert_held(&hard_iface->bat_iv.ogm_buff_mutex);
-
-	/* interface already disabled by batadv_iv_ogm_iface_disable */
-	if (!*ogm_buff)
-		return;
 
 	/* the interface gets activated here to avoid race conditions between
 	 * the moment of activating the interface in

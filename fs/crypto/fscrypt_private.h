@@ -16,8 +16,16 @@
 #include <linux/fscrypt.h>
 #include <crypto/hash.h>
 
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+#include "fscrypt_knox_private.h"
+#endif
+
+#ifdef CONFIG_FSCRYPT_SDP
+#include "sdp/fscrypto_sdp_private.h"
+#include <sdp/fs_request.h>
+#endif
+
 /* Encryption parameters */
-#define FS_IV_SIZE			16
 #define FS_KEY_DERIVATION_NONCE_SIZE	16
 
 /**
@@ -38,6 +46,9 @@ struct fscrypt_context {
 	u8 flags;
 	u8 master_key_descriptor[FS_KEY_DESCRIPTOR_SIZE];
 	u8 nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+	u32 knox_flags;
+#endif
 } __packed;
 
 #define FS_ENCRYPTION_CONTEXT_FORMAT_V1		1
@@ -52,16 +63,53 @@ struct fscrypt_symlink_data {
 } __packed;
 
 /*
- * A pointer to this structure is stored in the file system's in-core
- * representation of an inode.
+ * fscrypt_info - the "encryption key" for an inode
+ *
+ * When an encrypted file's key is made available, an instance of this struct is
+ * allocated and stored in ->i_crypt_info.  Once created, it remains until the
+ * inode is evicted.
  */
 struct fscrypt_info {
+
+	/* The actual crypto transform used for encryption and decryption */
+	struct crypto_skcipher *ci_ctfm;
+
+	/* Cipher for inline encryption engine */
+#ifdef CONFIG_CRYPTO_DISKCIPHER
+	struct crypto_diskcipher *ci_dtfm;
+#endif
+	/*
+	 * Cipher for ESSIV IV generation.  Only set for CBC contents
+	 * encryption, otherwise is NULL.
+	 */
+	struct crypto_cipher *ci_essiv_tfm;
+
+	/*
+	 * Encryption mode used for this inode.  It corresponds to either
+	 * ci_data_mode or ci_filename_mode, depending on the inode type.
+	 */
+	struct fscrypt_mode *ci_mode;
+
+	/*
+	 * If non-NULL, then this inode uses a master key directly rather than a
+	 * derived key, and ci_ctfm will equal ci_master_key->mk_ctfm.
+	 * Otherwise, this inode uses a derived key.
+	 */
+	struct fscrypt_master_key *ci_master_key;
+
+	/* fields from the fscrypt_context */
 	u8 ci_data_mode;
 	u8 ci_filename_mode;
 	u8 ci_flags;
-	struct crypto_skcipher *ci_ctfm;
-	struct crypto_cipher *ci_essiv_tfm;
-	u8 ci_master_key[FS_KEY_DESCRIPTOR_SIZE];
+	u8 ci_master_key_descriptor[FS_KEY_DESCRIPTOR_SIZE];
+	u8 ci_nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+
+#ifdef CONFIG_DDAR
+	struct dd_info *ci_dd_info;
+#endif
+#ifdef CONFIG_FSCRYPT_SDP
+	struct sdp_info *ci_sdp_info;
+#endif
 };
 
 typedef enum {
@@ -81,6 +129,14 @@ static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
 
 	if (contents_mode == FS_ENCRYPTION_MODE_AES_256_XTS &&
 	    filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
+		return true;
+
+	if (contents_mode == FS_ENCRYPTION_MODE_ADIANTUM &&
+	    filenames_mode == FS_ENCRYPTION_MODE_ADIANTUM)
+		return true;
+
+	if (contents_mode == FS_ENCRYPTION_MODE_PRIVATE &&
+		filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
 		return true;
 
 	return false;
@@ -107,14 +163,57 @@ fscrypt_msg(struct super_block *sb, const char *level, const char *fmt, ...);
 #define fscrypt_err(sb, fmt, ...)		\
 	fscrypt_msg(sb, KERN_ERR, fmt, ##__VA_ARGS__)
 
+#define FSCRYPT_MAX_IV_SIZE	32
+
+union fscrypt_iv {
+	struct {
+		/* logical block number within the file */
+		__le64 lblk_num;
+
+		/* per-file nonce; only set in DIRECT_KEY mode */
+		u8 nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+	};
+	u8 raw[FSCRYPT_MAX_IV_SIZE];
+};
+
+void fscrypt_generate_iv(union fscrypt_iv *iv, u64 lblk_num,
+			 const struct fscrypt_info *ci);
+
 /* fname.c */
 extern int fname_encrypt(struct inode *inode, const struct qstr *iname,
 			 u8 *out, unsigned int olen);
 extern bool fscrypt_fname_encrypted_size(const struct inode *inode,
 					 u32 orig_len, u32 max_len,
 					 u32 *encrypted_len_ret);
+extern void fscrypt_free_bounce_page(void *pool);
 
 /* keyinfo.c */
+
+enum cipher_flags {
+	CRYPT_MODE_SKCIPHER,
+	CRYPT_MODE_ESSIV,
+	CRYPT_MODE_DISKCIPHER,
+};
+
+struct fscrypt_mode {
+	const char *friendly_name;
+	const char *cipher_str;
+	int keysize;
+	int ivsize;
+	bool logged_impl_name;
+	enum cipher_flags flags;
+};
+
 extern void __exit fscrypt_essiv_cleanup(void);
 
+static inline int __fscrypt_disk_encrypted(const struct inode *inode)
+{
+#if IS_ENABLED(CONFIG_FS_ENCRYPTION)
+#if IS_ENABLED(CONFIG_CRYPTO_DISKCIPHER)
+	if (inode && inode->i_crypt_info)
+		return S_ISREG(inode->i_mode) && (inode->i_crypt_info->ci_dtfm != NULL);
+#endif
+#endif
+	return 0;
+}
 #endif /* _FSCRYPT_PRIVATE_H */

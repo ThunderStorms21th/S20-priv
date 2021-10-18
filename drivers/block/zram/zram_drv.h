@@ -30,7 +30,7 @@
 
 
 /*
- * The lower ZRAM_FLAG_SHIFT bits of table.value is for
+ * The lower ZRAM_FLAG_SHIFT bits of table.flags is for
  * object size (excluding header), the higher bits is for
  * zram_pageflags.
  *
@@ -41,13 +41,17 @@
  */
 #define ZRAM_FLAG_SHIFT 24
 
-/* Flags for zram pages (table[page_no].value) */
+/* Flags for zram pages (table[page_no].flags) */
 enum zram_pageflags {
 	/* zram slot is locked */
 	ZRAM_LOCK = ZRAM_FLAG_SHIFT,
 	ZRAM_SAME,	/* Page consists the same element */
 	ZRAM_WB,	/* page is stored on backing_device */
+	ZRAM_UNDER_WB,	/* page is under writeback */
 	ZRAM_HUGE,	/* Incompressible page */
+	ZRAM_IDLE,	/* not accessed page since last idle marking */
+	ZRAM_EXPIRE,
+	ZRAM_READ_BDEV,
 
 	__NR_ZRAM_PAGEFLAGS,
 };
@@ -60,9 +64,12 @@ struct zram_table_entry {
 		unsigned long handle;
 		unsigned long element;
 	};
-	unsigned long value;
+	unsigned long flags;
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	ktime_t ac_time;
+#endif
+#ifdef CONFIG_ZRAM_LRU_WRITEBACK
+	struct list_head lru_list;
 #endif
 };
 
@@ -80,7 +87,43 @@ struct zram_stats {
 	atomic_long_t max_used_pages;	/* no. of maximum pages stored */
 	atomic64_t writestall;		/* no. of write slow paths */
 	atomic64_t miss_free;		/* no. of missed free */
+#ifdef	CONFIG_ZRAM_WRITEBACK
+	atomic64_t bd_count;		/* no. of pages in backing device */
+	atomic64_t bd_reads;		/* no. of reads from backing device */
+	atomic64_t bd_writes;		/* no. of writes from backing device */
+#endif
+#ifdef CONFIG_ZRAM_LRU_WRITEBACK
+	atomic64_t bd_expire;
+	atomic64_t bd_objcnt;
+#endif
 };
+
+#ifdef CONFIG_ZRAM_LRU_WRITEBACK
+struct zram_wb_header {
+	u32 index;
+	u32 size;
+};
+
+struct zram_wb_work {
+	struct work_struct work;
+	struct page *src_page;
+	struct page *dst_page;
+	struct bio *bio;
+	struct zram *zram;
+	unsigned long handle;
+};
+
+struct zram_wb_entry {
+	unsigned long index;
+	unsigned int offset;
+	unsigned int size;
+};
+
+static int zram_wbd(void *);
+static struct zram *g_zram;
+static struct notifier_block zram_app_launch_nb;
+static bool is_app_launch;
+#endif
 
 struct zram {
 	struct zram_table_entry *table;
@@ -105,8 +148,11 @@ struct zram {
 	 * zram is claimed so open request will be failed
 	 */
 	bool claim; /* Protected by bdev->bd_mutex */
-#ifdef CONFIG_ZRAM_WRITEBACK
 	struct file *backing_dev;
+#ifdef CONFIG_ZRAM_WRITEBACK
+	spinlock_t wb_limit_lock;
+	bool wb_limit_enable;
+	u64 bd_wb_limit;
 	struct block_device *bdev;
 	unsigned int old_block_size;
 	unsigned long *bitmap;
@@ -114,6 +160,16 @@ struct zram {
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
+#endif
+#ifdef CONFIG_ZRAM_LRU_WRITEBACK
+	struct task_struct *wbd;
+	wait_queue_head_t wbd_wait;
+	u8 *wb_table;
+	bool wbd_running;
+	bool io_complete;
+	struct list_head list;
+	spinlock_t list_lock;
+	spinlock_t wb_table_lock;
 #endif
 };
 #endif

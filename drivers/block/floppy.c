@@ -852,17 +852,14 @@ static void reset_fdc_info(int mode)
 /* selects the fdc and drive, and enables the fdc's input/dma. */
 static void set_fdc(int drive)
 {
-	unsigned int new_fdc = fdc;
-
 	if (drive >= 0 && drive < N_DRIVE) {
-		new_fdc = FDC(drive);
+		fdc = FDC(drive);
 		current_drive = drive;
 	}
-	if (new_fdc >= N_FDC) {
+	if (fdc != 1 && fdc != 0) {
 		pr_info("bad fdc value\n");
 		return;
 	}
-	fdc = new_fdc;
 	set_dor(fdc, ~0, 8);
 #if N_FDC > 1
 	set_dor(1 - fdc, ~8, 0);
@@ -4713,7 +4710,7 @@ static int __init do_floppy_init(void)
 		/* to be cleaned up... */
 		disks[drive]->private_data = (void *)(long)drive;
 		disks[drive]->flags |= GENHD_FL_REMOVABLE;
-		device_add_disk(&floppy_device[drive].dev, disks[drive], NULL);
+		device_add_disk(&floppy_device[drive].dev, disks[drive]);
 	}
 
 	return 0;

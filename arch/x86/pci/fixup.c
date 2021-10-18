@@ -572,10 +572,6 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x2fc0, pci_invalid_bar);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6f60, pci_invalid_bar);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fa0, pci_invalid_bar);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fc0, pci_invalid_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0xa1ec, pci_invalid_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0xa1ed, pci_invalid_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0xa26c, pci_invalid_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0xa26d, pci_invalid_bar);
 
 /*
  * Device [1022:7808]
@@ -591,17 +587,6 @@ static void pci_fixup_amd_ehci_pme(struct pci_dev *dev)
 		>> PCI_PM_CAP_PME_SHIFT);
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x7808, pci_fixup_amd_ehci_pme);
-
-/*
- * Device [1022:7914]
- * When in D0, PME# doesn't get asserted when plugging USB 2.0 device.
- */
-static void pci_fixup_amd_fch_xhci_pme(struct pci_dev *dev)
-{
-	dev_info(&dev->dev, "PME# does not work under D0, disabling it\n");
-	dev->pme_support &= ~(PCI_PM_CAP_PME_D0 >> PCI_PM_CAP_PME_SHIFT);
-}
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x7914, pci_fixup_amd_fch_xhci_pme);
 
 /*
  * Apple MacBook Pro: Avoid [mem 0x7fa00000-0x7fbfffff]
@@ -778,49 +763,5 @@ DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x141b, pci_amd_enable_64bit_bar);
 DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x1571, pci_amd_enable_64bit_bar);
 DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x15b1, pci_amd_enable_64bit_bar);
 DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x1601, pci_amd_enable_64bit_bar);
-
-#define RS690_LOWER_TOP_OF_DRAM2	0x30
-#define RS690_LOWER_TOP_OF_DRAM2_VALID	0x1
-#define RS690_UPPER_TOP_OF_DRAM2	0x31
-#define RS690_HTIU_NB_INDEX		0xA8
-#define RS690_HTIU_NB_INDEX_WR_ENABLE	0x100
-#define RS690_HTIU_NB_DATA		0xAC
-
-/*
- * Some BIOS implementations support RAM above 4GB, but do not configure the
- * PCI host to respond to bus master accesses for these addresses. These
- * implementations set the TOP_OF_DRAM_SLOT1 register correctly, so PCI DMA
- * works as expected for addresses below 4GB.
- *
- * Reference: "AMD RS690 ASIC Family Register Reference Guide" (pg. 2-57)
- * https://www.amd.com/system/files/TechDocs/43372_rs690_rrg_3.00o.pdf
- */
-static void rs690_fix_64bit_dma(struct pci_dev *pdev)
-{
-	u32 val = 0;
-	phys_addr_t top_of_dram = __pa(high_memory - 1) + 1;
-
-	if (top_of_dram <= (1ULL << 32))
-		return;
-
-	pci_write_config_dword(pdev, RS690_HTIU_NB_INDEX,
-				RS690_LOWER_TOP_OF_DRAM2);
-	pci_read_config_dword(pdev, RS690_HTIU_NB_DATA, &val);
-
-	if (val)
-		return;
-
-	pci_info(pdev, "Adjusting top of DRAM to %pa for 64-bit DMA support\n", &top_of_dram);
-
-	pci_write_config_dword(pdev, RS690_HTIU_NB_INDEX,
-		RS690_UPPER_TOP_OF_DRAM2 | RS690_HTIU_NB_INDEX_WR_ENABLE);
-	pci_write_config_dword(pdev, RS690_HTIU_NB_DATA, top_of_dram >> 32);
-
-	pci_write_config_dword(pdev, RS690_HTIU_NB_INDEX,
-		RS690_LOWER_TOP_OF_DRAM2 | RS690_HTIU_NB_INDEX_WR_ENABLE);
-	pci_write_config_dword(pdev, RS690_HTIU_NB_DATA,
-		top_of_dram | RS690_LOWER_TOP_OF_DRAM2_VALID);
-}
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_ATI, 0x7910, rs690_fix_64bit_dma);
 
 #endif

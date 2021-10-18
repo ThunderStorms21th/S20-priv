@@ -63,6 +63,7 @@ int iwl_pcie_ctxt_info_gen3_init(struct iwl_trans *trans,
 	struct iwl_prph_scratch *prph_scratch;
 	struct iwl_prph_scratch_ctrl_cfg *prph_sc_ctrl;
 	struct iwl_prph_info *prph_info;
+	void *iml_img;
 	u32 control_flags = 0;
 	int ret;
 
@@ -101,9 +102,13 @@ int iwl_pcie_ctxt_info_gen3_init(struct iwl_trans *trans,
 
 	/* allocate ucode sections in dram and set addresses */
 	ret = iwl_pcie_init_fw_sec(trans, fw, &prph_scratch->dram);
-	if (ret)
-		goto err_free_prph_scratch;
-
+	if (ret) {
+		dma_free_coherent(trans->dev,
+				  sizeof(*prph_scratch),
+				  prph_scratch,
+				  trans_pcie->prph_scratch_dma_addr);
+		return ret;
+	}
 
 	/* Allocate prph information
 	 * currently we don't assign to the prph info anything, but it would get
@@ -111,20 +116,16 @@ int iwl_pcie_ctxt_info_gen3_init(struct iwl_trans *trans,
 	prph_info = dma_alloc_coherent(trans->dev, sizeof(*prph_info),
 				       &trans_pcie->prph_info_dma_addr,
 				       GFP_KERNEL);
-	if (!prph_info) {
-		ret = -ENOMEM;
-		goto err_free_prph_scratch;
-	}
+	if (!prph_info)
+		return -ENOMEM;
 
 	/* Allocate context info */
 	ctxt_info_gen3 = dma_alloc_coherent(trans->dev,
 					    sizeof(*ctxt_info_gen3),
 					    &trans_pcie->ctxt_info_dma_addr,
 					    GFP_KERNEL);
-	if (!ctxt_info_gen3) {
-		ret = -ENOMEM;
-		goto err_free_prph_info;
-	}
+	if (!ctxt_info_gen3)
+		return -ENOMEM;
 
 	ctxt_info_gen3->prph_info_base_addr =
 		cpu_to_le64(trans_pcie->prph_info_dma_addr);
@@ -156,15 +157,12 @@ int iwl_pcie_ctxt_info_gen3_init(struct iwl_trans *trans,
 	trans_pcie->prph_scratch = prph_scratch;
 
 	/* Allocate IML */
-	trans_pcie->iml = dma_alloc_coherent(trans->dev, trans->iml_len,
-					     &trans_pcie->iml_dma_addr,
-					     GFP_KERNEL);
-	if (!trans_pcie->iml) {
-		ret = -ENOMEM;
-		goto err_free_ctxt_info;
-	}
+	iml_img = dma_alloc_coherent(trans->dev, trans->iml_len,
+				     &trans_pcie->iml_dma_addr, GFP_KERNEL);
+	if (!iml_img)
+		return -ENOMEM;
 
-	memcpy(trans_pcie->iml, trans->iml, trans->iml_len);
+	memcpy(iml_img, trans->iml, trans->iml_len);
 
 	iwl_enable_fw_load_int_ctx_info(trans);
 
@@ -178,25 +176,6 @@ int iwl_pcie_ctxt_info_gen3_init(struct iwl_trans *trans,
 	iwl_set_bit(trans, CSR_GP_CNTRL, CSR_AUTO_FUNC_INIT);
 
 	return 0;
-
-err_free_ctxt_info:
-	dma_free_coherent(trans->dev, sizeof(*trans_pcie->ctxt_info_gen3),
-			  trans_pcie->ctxt_info_gen3,
-			  trans_pcie->ctxt_info_dma_addr);
-	trans_pcie->ctxt_info_gen3 = NULL;
-err_free_prph_info:
-	dma_free_coherent(trans->dev,
-			  sizeof(*prph_info),
-			prph_info,
-			trans_pcie->prph_info_dma_addr);
-
-err_free_prph_scratch:
-	dma_free_coherent(trans->dev,
-			  sizeof(*prph_scratch),
-			prph_scratch,
-			trans_pcie->prph_scratch_dma_addr);
-	return ret;
-
 }
 
 void iwl_pcie_ctxt_info_gen3_free(struct iwl_trans *trans)
@@ -211,11 +190,6 @@ void iwl_pcie_ctxt_info_gen3_free(struct iwl_trans *trans)
 			  trans_pcie->ctxt_info_dma_addr);
 	trans_pcie->ctxt_info_dma_addr = 0;
 	trans_pcie->ctxt_info_gen3 = NULL;
-
-	dma_free_coherent(trans->dev, trans->iml_len, trans_pcie->iml,
-			  trans_pcie->iml_dma_addr);
-	trans_pcie->iml_dma_addr = 0;
-	trans_pcie->iml = NULL;
 
 	iwl_pcie_ctxt_info_free_fw_img(trans);
 

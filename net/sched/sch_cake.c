@@ -589,7 +589,7 @@ static void cake_update_flowkeys(struct flow_keys *keys,
 	struct nf_conntrack_tuple tuple = {};
 	bool rev = !skb->_nfct;
 
-	if (skb_protocol(skb, true) != htons(ETH_P_IP))
+	if (tc_skb_protocol(skb) != htons(ETH_P_IP))
 		return;
 
 	if (!nf_ct_get_tuple_skb(&tuple, skb))
@@ -900,7 +900,7 @@ static struct tcphdr *cake_get_tcphdr(const struct sk_buff *skb,
 	}
 
 	tcph = skb_header_pointer(skb, offset, sizeof(_tcph), &_tcph);
-	if (!tcph || tcph->doff < 5)
+	if (!tcph)
 		return NULL;
 
 	return skb_header_pointer(skb, offset,
@@ -924,8 +924,6 @@ static const void *cake_get_tcpopt(const struct tcphdr *tcph,
 			length--;
 			continue;
 		}
-		if (length < 2)
-			break;
 		opsize = *ptr++;
 		if (opsize < 2 || opsize > length)
 			break;
@@ -1063,8 +1061,6 @@ static bool cake_tcph_may_drop(const struct tcphdr *tcph,
 			length--;
 			continue;
 		}
-		if (length < 2)
-			break;
 		opsize = *ptr++;
 		if (opsize < 2 || opsize > length)
 			break;
@@ -1512,51 +1508,32 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 	return idx + (tin << 16);
 }
 
-static u8 cake_handle_diffserv(struct sk_buff *skb, bool wash)
+static u8 cake_handle_diffserv(struct sk_buff *skb, u16 wash)
 {
-	const int offset = skb_network_offset(skb);
-	u16 *buf, buf_;
+	int wlen = skb_network_offset(skb);
 	u8 dscp;
 
-	switch (skb_protocol(skb, true)) {
+	switch (tc_skb_protocol(skb)) {
 	case htons(ETH_P_IP):
-		buf = skb_header_pointer(skb, offset, sizeof(buf_), &buf_);
-		if (unlikely(!buf))
+		wlen += sizeof(struct iphdr);
+		if (!pskb_may_pull(skb, wlen) ||
+		    skb_try_make_writable(skb, wlen))
 			return 0;
 
-		/* ToS is in the second byte of iphdr */
-		dscp = ipv4_get_dsfield((struct iphdr *)buf) >> 2;
-
-		if (wash && dscp) {
-			const int wlen = offset + sizeof(struct iphdr);
-
-			if (!pskb_may_pull(skb, wlen) ||
-			    skb_try_make_writable(skb, wlen))
-				return 0;
-
+		dscp = ipv4_get_dsfield(ip_hdr(skb)) >> 2;
+		if (wash && dscp)
 			ipv4_change_dsfield(ip_hdr(skb), INET_ECN_MASK, 0);
-		}
-
 		return dscp;
 
 	case htons(ETH_P_IPV6):
-		buf = skb_header_pointer(skb, offset, sizeof(buf_), &buf_);
-		if (unlikely(!buf))
+		wlen += sizeof(struct ipv6hdr);
+		if (!pskb_may_pull(skb, wlen) ||
+		    skb_try_make_writable(skb, wlen))
 			return 0;
 
-		/* Traffic class is in the first and second bytes of ipv6hdr */
-		dscp = ipv6_get_dsfield((struct ipv6hdr *)buf) >> 2;
-
-		if (wash && dscp) {
-			const int wlen = offset + sizeof(struct ipv6hdr);
-
-			if (!pskb_may_pull(skb, wlen) ||
-			    skb_try_make_writable(skb, wlen))
-				return 0;
-
+		dscp = ipv6_get_dsfield(ipv6_hdr(skb)) >> 2;
+		if (wash && dscp)
 			ipv6_change_dsfield(ipv6_hdr(skb), INET_ECN_MASK, 0);
-		}
-
 		return dscp;
 
 	case htons(ETH_P_ARP):
@@ -1573,16 +1550,13 @@ static struct cake_tin_data *cake_select_tin(struct Qdisc *sch,
 {
 	struct cake_sched_data *q = qdisc_priv(sch);
 	u32 tin;
-	bool wash;
 	u8 dscp;
 
 	/* Tin selection: Default to diffserv-based selection, allow overriding
-	 * using firewall marks or skb->priority. Call DSCP parsing early if
-	 * wash is enabled, otherwise defer to below to skip unneeded parsing.
+	 * using firewall marks or skb->priority.
 	 */
-	wash = !!(q->rate_flags & CAKE_FLAG_WASH);
-	if (wash)
-		dscp = cake_handle_diffserv(skb, wash);
+	dscp = cake_handle_diffserv(skb,
+				    q->rate_flags & CAKE_FLAG_WASH);
 
 	if (q->tin_mode == CAKE_DIFFSERV_BESTEFFORT)
 		tin = 0;
@@ -1593,8 +1567,6 @@ static struct cake_tin_data *cake_select_tin(struct Qdisc *sch,
 		tin = q->tin_order[TC_H_MIN(skb->priority) - 1];
 
 	else {
-		if (!wash)
-			dscp = cake_handle_diffserv(skb, wash);
 		tin = q->tin_index[dscp];
 
 		if (unlikely(tin >= q->tin_cnt))
@@ -1694,7 +1666,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	if (skb_is_gso(skb) && q->rate_flags & CAKE_FLAG_SPLIT_GSO) {
 		struct sk_buff *segs, *nskb;
 		netdev_features_t features = netif_skb_features(skb);
-		unsigned int slen = 0, numsegs = 0;
+		unsigned int slen = 0;
 
 		segs = skb_gso_segment(skb, features & ~NETIF_F_GSO_MASK);
 		if (IS_ERR_OR_NULL(segs))
@@ -1710,7 +1682,6 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			flow_queue_add(flow, segs);
 
 			sch->q.qlen++;
-			numsegs++;
 			slen += segs->len;
 			q->buffer_used += segs->truesize;
 			b->packets++;
@@ -1724,7 +1695,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		sch->qstats.backlog += slen;
 		q->avg_window_bytes += slen;
 
-		qdisc_tree_reduce_backlog(sch, 1-numsegs, len-slen);
+		qdisc_tree_reduce_backlog(sch, 1, len);
 		consume_skb(skb);
 	} else {
 		/* not splitting */
@@ -1786,7 +1757,7 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 						      q->avg_window_begin));
 			u64 b = q->avg_window_bytes * (u64)NSEC_PER_SEC;
 
-			b = div64_u64(b, window_interval);
+			do_div(b, window_interval);
 			q->avg_peak_bandwidth =
 				cake_ewma(q->avg_peak_bandwidth, b,
 					  b > q->avg_peak_bandwidth ? 2 : 8);
@@ -2658,7 +2629,7 @@ static int cake_init(struct Qdisc *sch, struct nlattr *opt,
 	qdisc_watchdog_init(&q->watchdog, sch);
 
 	if (opt) {
-		err = cake_change(sch, opt, extack);
+		int err = cake_change(sch, opt, extack);
 
 		if (err)
 			return err;
@@ -2972,7 +2943,7 @@ static int cake_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 			PUT_STAT_S32(BLUE_TIMER_US,
 				     ktime_to_us(
 					     ktime_sub(now,
-						       flow->cvars.blue_timer)));
+						     flow->cvars.blue_timer)));
 		}
 		if (flow->cvars.dropping) {
 			PUT_STAT_S32(DROP_NEXT_US,

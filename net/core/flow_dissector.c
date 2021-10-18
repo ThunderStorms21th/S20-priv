@@ -630,10 +630,9 @@ bool __skb_flow_dissect(const struct sk_buff *skb,
 		nhoff = skb_network_offset(skb);
 		hlen = skb_headlen(skb);
 #if IS_ENABLED(CONFIG_NET_DSA)
-		if (unlikely(skb->dev && netdev_uses_dsa(skb->dev) &&
-			     proto == htons(ETH_P_XDSA))) {
+		if (unlikely(skb->dev && netdev_uses_dsa(skb->dev))) {
 			const struct dsa_device_ops *ops;
-			int offset = 0;
+			int offset;
 
 			ops = skb->dev->dsa_ptr->tag_ops;
 			if (ops->flow_dissect &&
@@ -694,10 +693,8 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_IPV4_ADDRS,
 							      target_container);
 
-			memcpy(&key_addrs->v4addrs.src, &iph->saddr,
-			       sizeof(key_addrs->v4addrs.src));
-			memcpy(&key_addrs->v4addrs.dst, &iph->daddr,
-			       sizeof(key_addrs->v4addrs.dst));
+			memcpy(&key_addrs->v4addrs, &iph->saddr,
+			       sizeof(key_addrs->v4addrs));
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		}
 
@@ -746,10 +743,8 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_IPV6_ADDRS,
 							      target_container);
 
-			memcpy(&key_addrs->v6addrs.src, &iph->saddr,
-			       sizeof(key_addrs->v6addrs.src));
-			memcpy(&key_addrs->v6addrs.dst, &iph->daddr,
-			       sizeof(key_addrs->v6addrs.dst));
+			memcpy(&key_addrs->v6addrs, &iph->saddr,
+			       sizeof(key_addrs->v6addrs));
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		}
 

@@ -1,5 +1,6 @@
 config WIRELESS_EXT
-	bool
+	default n
+	bool "WIRELESS_EXT"
 
 config WEXT_CORE
 	def_bool y
@@ -14,7 +15,8 @@ config WEXT_SPY
 	bool
 
 config WEXT_PRIV
-	bool
+	default n
+	bool "WEXT_PRIV"
 
 config CFG80211
 	tristate "cfg80211 - wireless configuration API"
@@ -228,3 +230,12 @@ config LIB80211_DEBUG
 	  from lib80211.
 
 	  If unsure, say N.
+
+config CFG80211_REG_NOT_UPDATED
+	bool "Do not update Regulatory configuration"
+	depends on CFG80211
+	default n
+	help
+	  Regulation should not updated even if device found other country
+	  Access Point Beacon once since device should find around other
+	  Access Points.

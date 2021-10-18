@@ -101,7 +101,7 @@ static inline bool has_acpi_companion(struct device *dev)
 static inline void acpi_preset_companion(struct device *dev,
 					 struct acpi_device *parent, u64 addr)
 {
-	ACPI_COMPANION_SET(dev, acpi_find_child_device(parent, addr, false));
+	ACPI_COMPANION_SET(dev, acpi_find_child_device(parent, addr, NULL));
 }
 
 static inline const char *acpi_dev_name(struct acpi_device *adev)
@@ -230,14 +230,10 @@ void __iomem *__acpi_map_table(unsigned long phys, unsigned long size);
 void __acpi_unmap_table(void __iomem *map, unsigned long size);
 int early_acpi_boot_init(void);
 int acpi_boot_init (void);
-void acpi_boot_table_prepare (void);
 void acpi_boot_table_init (void);
 int acpi_mps_check (void);
 int acpi_numa_init (void);
 
-int acpi_locate_initial_tables (void);
-void acpi_reserve_initial_tables (void);
-void acpi_table_init_complete (void);
 int acpi_table_init (void);
 int acpi_table_parse(char *id, acpi_tbl_table_handler handler);
 int __init acpi_table_parse_entries(char *id, unsigned long table_size,
@@ -738,12 +734,9 @@ static inline int acpi_boot_init(void)
 	return 0;
 }
 
-static inline void acpi_boot_table_prepare(void)
-{
-}
-
 static inline void acpi_boot_table_init(void)
 {
+	return;
 }
 
 static inline int acpi_mps_check(void)
@@ -817,13 +810,6 @@ static inline int acpi_device_modalias(struct device *dev,
 				char *buf, int size)
 {
 	return -ENODEV;
-}
-
-static inline struct platform_device *
-acpi_create_platform_device(struct acpi_device *adev,
-			    struct property_entry *properties)
-{
-	return NULL;
 }
 
 static inline bool acpi_dma_supported(struct acpi_device *adev)
@@ -931,18 +917,26 @@ int acpi_subsys_prepare(struct device *dev);
 void acpi_subsys_complete(struct device *dev);
 int acpi_subsys_suspend_late(struct device *dev);
 int acpi_subsys_suspend_noirq(struct device *dev);
+int acpi_subsys_resume_noirq(struct device *dev);
+int acpi_subsys_resume_early(struct device *dev);
 int acpi_subsys_suspend(struct device *dev);
 int acpi_subsys_freeze(struct device *dev);
-int acpi_subsys_poweroff(struct device *dev);
+int acpi_subsys_freeze_late(struct device *dev);
+int acpi_subsys_freeze_noirq(struct device *dev);
+int acpi_subsys_thaw_noirq(struct device *dev);
 #else
 static inline int acpi_dev_resume_early(struct device *dev) { return 0; }
 static inline int acpi_subsys_prepare(struct device *dev) { return 0; }
 static inline void acpi_subsys_complete(struct device *dev) {}
 static inline int acpi_subsys_suspend_late(struct device *dev) { return 0; }
 static inline int acpi_subsys_suspend_noirq(struct device *dev) { return 0; }
+static inline int acpi_subsys_resume_noirq(struct device *dev) { return 0; }
+static inline int acpi_subsys_resume_early(struct device *dev) { return 0; }
 static inline int acpi_subsys_suspend(struct device *dev) { return 0; }
 static inline int acpi_subsys_freeze(struct device *dev) { return 0; }
-static inline int acpi_subsys_poweroff(struct device *dev) { return 0; }
+static inline int acpi_subsys_freeze_late(struct device *dev) { return 0; }
+static inline int acpi_subsys_freeze_noirq(struct device *dev) { return 0; }
+static inline int acpi_subsys_thaw_noirq(struct device *dev) { return 0; }
 #endif
 
 #ifdef CONFIG_ACPI

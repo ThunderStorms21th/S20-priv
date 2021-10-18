@@ -1702,7 +1702,7 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 
 	down_read(&tty->termios_rwsem);
 
-	do {
+	while (1) {
 		/*
 		 * When PARMRK is set, each input char may take up to 3 chars
 		 * in the read buf; reduce the buffer space avail by 3x
@@ -1744,7 +1744,7 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 			fp += n;
 		count -= n;
 		rcvd += n;
-	} while (!test_bit(TTY_LDISC_CHANGING, &tty->flags));
+	}
 
 	tty->receive_room = room;
 
@@ -1933,8 +1933,12 @@ static inline int input_available_p(struct tty_struct *tty, int poll)
 
 	if (ldata->icanon && !L_EXTPROC(tty))
 		return ldata->canon_head != ldata->read_tail;
-	else
+	else {
+		if (amt == 0)
+			pr_err("%s WARNIGN: amt is zero! poll:%d TIME_CHAR:%d MIN_CHAR:%d\n",
+					__func__, poll, TIME_CHAR(tty), MIN_CHAR(tty));
 		return ldata->commit_head - ldata->read_tail >= amt;
+	}
 }
 
 /**
@@ -2211,7 +2215,7 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file,
 					break;
 				if (!timeout)
 					break;
-				if (tty_io_nonblock(tty, file)) {
+				if (file->f_flags & O_NONBLOCK) {
 					retval = -EAGAIN;
 					break;
 				}
@@ -2365,7 +2369,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 		}
 		if (!nr)
 			break;
-		if (tty_io_nonblock(tty, file)) {
+		if (file->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
 			break;
 		}

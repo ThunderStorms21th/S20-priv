@@ -437,6 +437,10 @@ extern bool events_check_enabled;
 extern unsigned int pm_wakeup_irq;
 extern suspend_state_t pm_suspend_target_state;
 
+#ifdef CONFIG_SEC_PM_DEBUG
+extern bool pm_system_wakeup_without_irq_num;
+#endif
+
 extern bool pm_wakeup_pending(void);
 extern void pm_system_wakeup(void);
 extern void pm_system_cancel_wakeup(void);
@@ -446,6 +450,7 @@ extern bool pm_get_wakeup_count(unsigned int *count, bool block);
 extern bool pm_save_wakeup_count(unsigned int count);
 extern void pm_wakep_autosleep_enabled(bool set);
 extern void pm_print_active_wakeup_sources(void);
+extern void pm_get_active_wakeup_sources(char *pending_sources, size_t max);
 
 extern void lock_system_sleep(void);
 extern void unlock_system_sleep(void);
@@ -468,6 +473,8 @@ static inline bool pm_wakeup_pending(void) { return false; }
 static inline void pm_system_wakeup(void) {}
 static inline void pm_wakeup_clear(bool reset) {}
 static inline void pm_system_irq_wakeup(unsigned int irq_number) {}
+static inline bool pm_get_wakeup_count(unsigned int *count, bool block) { return true; }
+static inline void pm_print_active_wakeup_sources(void) {}
 
 static inline void lock_system_sleep(void) {}
 static inline void unlock_system_sleep(void) {}

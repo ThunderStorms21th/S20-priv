@@ -21,7 +21,6 @@
 #include <linux/spinlock.h>
 #include <linux/io.h>
 #include <linux/gpio/driver.h>
-#include <linux/gpio/consumer.h> /* GPIO descriptor enum */
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <linux/platform_device.h>
@@ -951,7 +950,7 @@ static int gpmc_cs_remap(int cs, u32 base)
 	int ret;
 	u32 old_base, size;
 
-	if (cs >= gpmc_cs_num) {
+	if (cs > gpmc_cs_num) {
 		pr_err("%s: requested chip-select is disabled\n", __func__);
 		return -ENODEV;
 	}
@@ -986,7 +985,7 @@ int gpmc_cs_request(int cs, unsigned long size, unsigned long *base)
 	struct resource *res = &gpmc->mem;
 	int r = -1;
 
-	if (cs >= gpmc_cs_num) {
+	if (cs > gpmc_cs_num) {
 		pr_err("%s: requested chip-select is disabled\n", __func__);
 		return -ENODEV;
 	}
@@ -1028,8 +1027,8 @@ EXPORT_SYMBOL(gpmc_cs_request);
 
 void gpmc_cs_free(int cs)
 {
-	struct gpmc_cs_data *gpmc;
-	struct resource *res;
+	struct gpmc_cs_data *gpmc = &gpmc_cs[cs];
+	struct resource *res = &gpmc->mem;
 
 	spin_lock(&gpmc_mem_lock);
 	if (cs >= gpmc_cs_num || cs < 0 || !gpmc_cs_reserved(cs)) {
@@ -1038,9 +1037,6 @@ void gpmc_cs_free(int cs)
 		spin_unlock(&gpmc_mem_lock);
 		return;
 	}
-	gpmc = &gpmc_cs[cs];
-	res = &gpmc->mem;
-
 	gpmc_cs_disable_mem(cs);
 	if (res->flags)
 		release_resource(res);
@@ -2281,10 +2277,6 @@ static void gpmc_probe_dt_children(struct platform_device *pdev)
 	}
 }
 #else
-void gpmc_read_settings_dt(struct device_node *np, struct gpmc_settings *p)
-{
-	memset(p, 0, sizeof(*p));
-}
 static int gpmc_probe_dt(struct platform_device *pdev)
 {
 	return 0;

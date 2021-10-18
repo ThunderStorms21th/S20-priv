@@ -95,7 +95,6 @@ config TOUCHSCREEN_AD7879_SPI
 config TOUCHSCREEN_ADC
 	tristate "Generic ADC based resistive touchscreen"
 	depends on IIO
-	select IIO_BUFFER
 	select IIO_BUFFER_CB
 	help
 	  Say Y here if you want to use the generic ADC
@@ -1300,4 +1299,18 @@ config TOUCHSCREEN_ROHM_BU21023
 	  To compile this driver as a module, choose M here: the
 	  module will be called bu21023_ts.
 
+config TOUCHSCREEN_DUAL_FOLDABLE
+	tristate "Dual TSP IC for Foldable"
+	depends on I2C
+	help
+	  This enables support for Dual TSP.
+
+source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+source "drivers/input/touchscreen/sec_ts_univ/Kconfig"
+source "drivers/input/touchscreen/sec_ts/y79a/Kconfig"
+source "drivers/input/touchscreen/sec_ts/y79a_c/Kconfig"
+source "drivers/input/touchscreen/sec_ts/y761_sub/Kconfig"
+source "drivers/input/touchscreen/stm/fts9cu80f/Kconfig"
+source "drivers/input/touchscreen/zinitix/zt7650/Kconfig"
+source "drivers/input/touchscreen/stm/fts5cu56a/Kconfig"
 endif

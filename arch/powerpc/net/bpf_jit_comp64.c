@@ -597,12 +597,6 @@ emit_clear:
 			break;
 
 		/*
-		 * BPF_ST NOSPEC (speculation barrier)
-		 */
-		case BPF_ST | BPF_NOSPEC:
-			break;
-
-		/*
 		 * BPF_ST(X)
 		 */
 		case BPF_STX | BPF_MEM | BPF_B: /* *(u8 *)(dst + off) = src */
@@ -953,19 +947,6 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *fp)
 		/* We hit something illegal or unsupported. */
 		fp = org_fp;
 		goto out_addrs;
-	}
-
-	/*
-	 * If we have seen a tail call, we need a second pass.
-	 * This is because bpf_jit_emit_common_epilogue() is called
-	 * from bpf_jit_emit_tail_call() with a not yet stable ctx->seen.
-	 */
-	if (cgctx.seen & SEEN_TAILCALL) {
-		cgctx.idx = 0;
-		if (bpf_jit_build_body(fp, 0, &cgctx, addrs, false)) {
-			fp = org_fp;
-			goto out_addrs;
-		}
 	}
 
 	/*

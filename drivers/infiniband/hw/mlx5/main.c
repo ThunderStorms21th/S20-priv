@@ -1070,10 +1070,12 @@ static int mlx5_ib_query_device(struct ib_device *ibdev,
 		if (MLX5_CAP_ETH(mdev, tunnel_stateless_gre))
 			resp.tunnel_offloads_caps |=
 				MLX5_IB_TUNNELED_OFFLOADS_GRE;
-		if (MLX5_CAP_ETH(mdev, tunnel_stateless_mpls_over_gre))
+		if (MLX5_CAP_GEN(mdev, flex_parser_protocols) &
+		    MLX5_FLEX_PROTO_CW_MPLS_GRE)
 			resp.tunnel_offloads_caps |=
 				MLX5_IB_TUNNELED_OFFLOADS_MPLS_GRE;
-		if (MLX5_CAP_ETH(mdev, tunnel_stateless_mpls_over_udp))
+		if (MLX5_CAP_GEN(mdev, flex_parser_protocols) &
+		    MLX5_FLEX_PROTO_CW_MPLS_UDP)
 			resp.tunnel_offloads_caps |=
 				MLX5_IB_TUNNELED_OFFLOADS_MPLS_UDP;
 	}
@@ -2388,29 +2390,10 @@ static u8 get_match_criteria_enable(u32 *match_criteria)
 	return match_criteria_enable;
 }
 
-static int set_proto(void *outer_c, void *outer_v, u8 mask, u8 val)
+static void set_proto(void *outer_c, void *outer_v, u8 mask, u8 val)
 {
-	u8 entry_mask;
-	u8 entry_val;
-	int err = 0;
-
-	if (!mask)
-		goto out;
-
-	entry_mask = MLX5_GET(fte_match_set_lyr_2_4, outer_c,
-			      ip_protocol);
-	entry_val = MLX5_GET(fte_match_set_lyr_2_4, outer_v,
-			     ip_protocol);
-	if (!entry_mask) {
-		MLX5_SET(fte_match_set_lyr_2_4, outer_c, ip_protocol, mask);
-		MLX5_SET(fte_match_set_lyr_2_4, outer_v, ip_protocol, val);
-		goto out;
-	}
-	/* Don't override existing ip protocol */
-	if (mask != entry_mask || val != entry_val)
-		err = -EINVAL;
-out:
-	return err;
+	MLX5_SET(fte_match_set_lyr_2_4, outer_c, ip_protocol, mask);
+	MLX5_SET(fte_match_set_lyr_2_4, outer_v, ip_protocol, val);
 }
 
 static void set_flow_label(void *misc_c, void *misc_v, u32 mask, u32 val,
@@ -2614,10 +2597,8 @@ static int parse_flow_attr(struct mlx5_core_dev *mdev, u32 *match_c,
 		set_tos(headers_c, headers_v,
 			ib_spec->ipv4.mask.tos, ib_spec->ipv4.val.tos);
 
-		if (set_proto(headers_c, headers_v,
-			      ib_spec->ipv4.mask.proto,
-			      ib_spec->ipv4.val.proto))
-			return -EINVAL;
+		set_proto(headers_c, headers_v,
+			  ib_spec->ipv4.mask.proto, ib_spec->ipv4.val.proto);
 		break;
 	case IB_FLOW_SPEC_IPV6:
 		if (FIELDS_NOT_SUPPORTED(ib_spec->ipv6.mask, LAST_IPV6_FIELD))
@@ -2656,10 +2637,9 @@ static int parse_flow_attr(struct mlx5_core_dev *mdev, u32 *match_c,
 			ib_spec->ipv6.mask.traffic_class,
 			ib_spec->ipv6.val.traffic_class);
 
-		if (set_proto(headers_c, headers_v,
-			      ib_spec->ipv6.mask.next_hdr,
-			      ib_spec->ipv6.val.next_hdr))
-			return -EINVAL;
+		set_proto(headers_c, headers_v,
+			  ib_spec->ipv6.mask.next_hdr,
+			  ib_spec->ipv6.val.next_hdr);
 
 		set_flow_label(misc_params_c, misc_params_v,
 			       ntohl(ib_spec->ipv6.mask.flow_label),
@@ -2680,8 +2660,10 @@ static int parse_flow_attr(struct mlx5_core_dev *mdev, u32 *match_c,
 					 LAST_TCP_UDP_FIELD))
 			return -EOPNOTSUPP;
 
-		if (set_proto(headers_c, headers_v, 0xff, IPPROTO_TCP))
-			return -EINVAL;
+		MLX5_SET(fte_match_set_lyr_2_4, headers_c, ip_protocol,
+			 0xff);
+		MLX5_SET(fte_match_set_lyr_2_4, headers_v, ip_protocol,
+			 IPPROTO_TCP);
 
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, tcp_sport,
 			 ntohs(ib_spec->tcp_udp.mask.src_port));
@@ -2698,8 +2680,10 @@ static int parse_flow_attr(struct mlx5_core_dev *mdev, u32 *match_c,
 					 LAST_TCP_UDP_FIELD))
 			return -EOPNOTSUPP;
 
-		if (set_proto(headers_c, headers_v, 0xff, IPPROTO_UDP))
-			return -EINVAL;
+		MLX5_SET(fte_match_set_lyr_2_4, headers_c, ip_protocol,
+			 0xff);
+		MLX5_SET(fte_match_set_lyr_2_4, headers_v, ip_protocol,
+			 IPPROTO_UDP);
 
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, udp_sport,
 			 ntohs(ib_spec->tcp_udp.mask.src_port));
@@ -2714,9 +2698,6 @@ static int parse_flow_attr(struct mlx5_core_dev *mdev, u32 *match_c,
 	case IB_FLOW_SPEC_GRE:
 		if (ib_spec->gre.mask.c_ks_res0_ver)
 			return -EOPNOTSUPP;
-
-		if (set_proto(headers_c, headers_v, 0xff, IPPROTO_GRE))
-			return -EINVAL;
 
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, ip_protocol,
 			 0xff);
@@ -3305,6 +3286,10 @@ static struct mlx5_ib_flow_handler *_create_flow_rule(struct mlx5_ib_dev *dev,
 	}
 
 	INIT_LIST_HEAD(&handler->list);
+	if (dst) {
+		memcpy(&dest_arr[0], dst, sizeof(*dst));
+		dest_num++;
+	}
 
 	for (spec_index = 0; spec_index < flow_attr->num_of_specs; spec_index++) {
 		err = parse_flow_attr(dev->mdev, spec->match_criteria,
@@ -3316,11 +3301,6 @@ static struct mlx5_ib_flow_handler *_create_flow_rule(struct mlx5_ib_dev *dev,
 
 		prev_type = ((union ib_flow_spec *)ib_flow)->type;
 		ib_flow += ((union ib_flow_spec *)ib_flow)->size;
-	}
-
-	if (dst && !(flow_act.action & MLX5_FLOW_CONTEXT_ACTION_DROP)) {
-		memcpy(&dest_arr[0], dst, sizeof(*dst));
-		dest_num++;
 	}
 
 	if (!flow_is_multicast_only(flow_attr))
@@ -3360,8 +3340,10 @@ static struct mlx5_ib_flow_handler *_create_flow_rule(struct mlx5_ib_dev *dev,
 	}
 
 	if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_DROP) {
-		if (!dest_num)
+		if (!(flow_act.action & MLX5_FLOW_CONTEXT_ACTION_COUNT)) {
 			rule_dst = NULL;
+			dest_num = 0;
+		}
 	} else {
 		if (is_egress)
 			flow_act.action |= MLX5_FLOW_CONTEXT_ACTION_ALLOW;
@@ -5374,6 +5356,8 @@ static void mlx5_ib_unbind_slave_port(struct mlx5_ib_dev *ibdev,
 
 	port->mp.mpi = NULL;
 
+	list_add_tail(&mpi->list, &mlx5_ib_unaffiliated_port_list);
+
 	spin_unlock(&port->mp.mpi_lock);
 
 	err = mlx5_nic_vport_unaffiliate_multiport(mpi->mdev);
@@ -5522,8 +5506,6 @@ static void mlx5_ib_cleanup_multiport_master(struct mlx5_ib_dev *dev)
 				dev->port[i].mp.mpi = NULL;
 			} else {
 				mlx5_ib_dbg(dev, "unbinding port_num: %d\n", i + 1);
-				list_add_tail(&dev->port[i].mp.mpi->list,
-					      &mlx5_ib_unaffiliated_port_list);
 				mlx5_ib_unbind_slave_port(dev, dev->port[i].mp.mpi);
 			}
 		}
@@ -6094,7 +6076,7 @@ int mlx5_ib_stage_bfrag_init(struct mlx5_ib_dev *dev)
 
 	err = mlx5_alloc_bfreg(dev->mdev, &dev->fp_bfreg, false, true);
 	if (err)
-		mlx5_free_bfreg(dev->mdev, &dev->bfreg);
+		mlx5_free_bfreg(dev->mdev, &dev->fp_bfreg);
 
 	return err;
 }
@@ -6339,7 +6321,6 @@ static void *mlx5_ib_add_slave_port(struct mlx5_core_dev *mdev)
 
 		if (bound) {
 			rdma_roce_rescan_device(&dev->ib_dev);
-			mpi->ibdev->ib_active = true;
 			break;
 		}
 	}

@@ -153,7 +153,9 @@ static void rsi_handle_interrupt(struct sdio_func *function)
 	if (adapter->priv->fsm_state == FSM_FW_NOT_LOADED)
 		return;
 
-	rsi_set_event(&dev->rx_thread.event);
+	dev->sdio_irq_task = current;
+	rsi_interrupt_handler(adapter);
+	dev->sdio_irq_task = NULL;
 }
 
 /**
@@ -971,6 +973,8 @@ static int rsi_probe(struct sdio_func *pfunction,
 		rsi_dbg(ERR_ZONE, "%s: Unable to init rx thrd\n", __func__);
 		goto fail_kill_thread;
 	}
+	skb_queue_head_init(&sdev->rx_q.head);
+	sdev->rx_q.num_rx_pkts = 0;
 
 	sdio_claim_host(pfunction);
 	if (sdio_claim_irq(pfunction, rsi_handle_interrupt)) {
@@ -1124,12 +1128,6 @@ static void rsi_disconnect(struct sdio_func *pfunction)
 
 	rsi_mac80211_detach(adapter);
 	mdelay(10);
-
-	if (IS_ENABLED(CONFIG_RSI_COEX) && adapter->priv->coex_mode > 1 &&
-	    adapter->priv->bt_adapter) {
-		rsi_bt_ops.detach(adapter->priv->bt_adapter);
-		adapter->priv->bt_adapter = NULL;
-	}
 
 	/* Reset Chip */
 	rsi_reset_chip(adapter);
@@ -1307,12 +1305,6 @@ static int rsi_freeze(struct device *dev)
 		rsi_dbg(ERR_ZONE,
 			"##### Device can not wake up through WLAN\n");
 
-	if (IS_ENABLED(CONFIG_RSI_COEX) && common->coex_mode > 1 &&
-	    common->bt_adapter) {
-		rsi_bt_ops.detach(common->bt_adapter);
-		common->bt_adapter = NULL;
-	}
-
 	ret = rsi_sdio_disable_interrupts(pfunction);
 
 	if (sdev->write_fail)
@@ -1360,12 +1352,6 @@ static void rsi_shutdown(struct device *dev)
 	if (rsi_config_wowlan(adapter, wowlan))
 		rsi_dbg(ERR_ZONE, "Failed to configure WoWLAN\n");
 
-	if (IS_ENABLED(CONFIG_RSI_COEX) && adapter->priv->coex_mode > 1 &&
-	    adapter->priv->bt_adapter) {
-		rsi_bt_ops.detach(adapter->priv->bt_adapter);
-		adapter->priv->bt_adapter = NULL;
-	}
-
 	rsi_sdio_disable_interrupts(sdev->pfunction);
 
 	if (sdev->write_fail)
@@ -1400,7 +1386,7 @@ static int rsi_restore(struct device *dev)
 }
 static const struct dev_pm_ops rsi_pm_ops = {
 	.suspend = rsi_suspend,
-	.resume_noirq = rsi_resume,
+	.resume = rsi_resume,
 	.freeze = rsi_freeze,
 	.thaw = rsi_thaw,
 	.restore = rsi_restore,

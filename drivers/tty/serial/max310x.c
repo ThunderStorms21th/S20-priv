@@ -844,9 +844,12 @@ static void max310x_wq_proc(struct work_struct *ws)
 
 static unsigned int max310x_tx_empty(struct uart_port *port)
 {
-	u8 lvl = max310x_port_read(port, MAX310X_TXFIFOLVL_REG);
+	unsigned int lvl, sts;
 
-	return lvl ? 0 : TIOCSER_TEMT;
+	lvl = max310x_port_read(port, MAX310X_TXFIFOLVL_REG);
+	sts = max310x_port_read(port, MAX310X_IRQSTS_REG);
+
+	return ((sts & MAX310X_IRQ_TXEMPTY_BIT) && !lvl) ? TIOCSER_TEMT : 0;
 }
 
 static unsigned int max310x_get_mctrl(struct uart_port *port)
@@ -1480,12 +1483,10 @@ static int __init max310x_uart_init(void)
 		return ret;
 
 #ifdef CONFIG_SPI_MASTER
-	ret = spi_register_driver(&max310x_spi_driver);
-	if (ret)
-		uart_unregister_driver(&max310x_uart);
+	spi_register_driver(&max310x_spi_driver);
 #endif
 
-	return ret;
+	return 0;
 }
 module_init(max310x_uart_init);
 

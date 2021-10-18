@@ -148,14 +148,6 @@ static bool is_thresh_cmp_valid(u64 event)
 	return true;
 }
 
-static unsigned int dc_ic_rld_quad_l1_sel(u64 event)
-{
-	unsigned int cache;
-
-	cache = (event >> EVENT_CACHE_SEL_SHIFT) & MMCR1_DC_IC_QUAL_MASK;
-	return cache;
-}
-
 static inline u64 isa207_find_source(u64 idx, u32 sub_idx)
 {
 	u64 ret = PERF_MEM_NA;
@@ -273,15 +265,6 @@ int isa207_get_constraint(u64 event, unsigned long *maskp, unsigned long *valp)
 
 		mask  |= CNST_PMC_MASK(pmc);
 		value |= CNST_PMC_VAL(pmc);
-
-		/*
-		 * PMC5 and PMC6 are used to count cycles and instructions and
-		 * they do not support most of the constraint bits. Add a check
-		 * to exclude PMC5/6 from most of the constraints except for
-		 * EBB/BHRB.
-		 */
-		if (pmc >= 5)
-			goto ebb_bhrb;
 	}
 
 	if (pmc <= 4) {
@@ -305,10 +288,10 @@ int isa207_get_constraint(u64 event, unsigned long *maskp, unsigned long *valp)
 		 * have a cache selector of zero. The bank selector (bit 3) is
 		 * irrelevant, as long as the rest of the value is 0.
 		 */
-		if (!cpu_has_feature(CPU_FTR_ARCH_300) && (cache & 0x7))
+		if (cache & 0x7)
 			return -1;
 
-	} else if (cpu_has_feature(CPU_FTR_ARCH_300) || (event & EVENT_IS_L1)) {
+	} else if (event & EVENT_IS_L1) {
 		mask  |= CNST_L1_QUAL_MASK;
 		value |= CNST_L1_QUAL_VAL(cache);
 	}
@@ -340,7 +323,6 @@ int isa207_get_constraint(u64 event, unsigned long *maskp, unsigned long *valp)
 		}
 	}
 
-ebb_bhrb:
 	if (!pmc && ebb)
 		/* EBB events must specify the PMC */
 		return -1;
@@ -359,8 +341,8 @@ ebb_bhrb:
 	 * EBB events are pinned & exclusive, so this should never actually
 	 * hit, but we leave it as a fallback in case.
 	 */
-	mask  |= CNST_EBB_MASK;
-	value |= CNST_EBB_VAL(ebb);
+	mask  |= CNST_EBB_VAL(ebb);
+	value |= CNST_EBB_MASK;
 
 	*maskp = mask;
 	*valp = value;
@@ -412,14 +394,11 @@ int isa207_compute_mmcr(u64 event[], int n_ev,
 		/* In continuous sampling mode, update SDAR on TLB miss */
 		mmcra_sdar_mode(event[i], &mmcra);
 
-		if (cpu_has_feature(CPU_FTR_ARCH_300)) {
-			cache = dc_ic_rld_quad_l1_sel(event[i]);
-			mmcr1 |= (cache) << MMCR1_DC_IC_QUAL_SHIFT;
-		} else {
-			if (event[i] & EVENT_IS_L1) {
-				cache = dc_ic_rld_quad_l1_sel(event[i]);
-				mmcr1 |= (cache) << MMCR1_DC_IC_QUAL_SHIFT;
-			}
+		if (event[i] & EVENT_IS_L1) {
+			cache = event[i] >> EVENT_CACHE_SEL_SHIFT;
+			mmcr1 |= (cache & 1) << MMCR1_IC_QUAL_SHIFT;
+			cache >>= 1;
+			mmcr1 |= (cache & 1) << MMCR1_DC_QUAL_SHIFT;
 		}
 
 		if (is_event_marked(event[i])) {

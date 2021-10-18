@@ -47,7 +47,7 @@ EXPORT_SYMBOL_GPL(ahci_platform_ops);
  * RETURNS:
  * 0 on success otherwise a negative error code
  */
-int ahci_platform_enable_phys(struct ahci_host_priv *hpriv)
+static int ahci_platform_enable_phys(struct ahci_host_priv *hpriv)
 {
 	int rc, i;
 
@@ -72,7 +72,6 @@ disable_phys:
 	}
 	return rc;
 }
-EXPORT_SYMBOL_GPL(ahci_platform_enable_phys);
 
 /**
  * ahci_platform_disable_phys - Disable PHYs
@@ -80,7 +79,7 @@ EXPORT_SYMBOL_GPL(ahci_platform_enable_phys);
  *
  * This function disables all PHYs found in hpriv->phys.
  */
-void ahci_platform_disable_phys(struct ahci_host_priv *hpriv)
+static void ahci_platform_disable_phys(struct ahci_host_priv *hpriv)
 {
 	int i;
 
@@ -89,7 +88,6 @@ void ahci_platform_disable_phys(struct ahci_host_priv *hpriv)
 		phy_exit(hpriv->phys[i]);
 	}
 }
-EXPORT_SYMBOL_GPL(ahci_platform_disable_phys);
 
 /**
  * ahci_platform_enable_clks - Enable platform clocks
@@ -544,13 +542,11 @@ int ahci_platform_init_host(struct platform_device *pdev,
 	int i, irq, n_ports, rc;
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
+	if (irq <= 0) {
 		if (irq != -EPROBE_DEFER)
 			dev_err(dev, "no irq\n");
 		return irq;
 	}
-	if (!irq)
-		return -EINVAL;
 
 	hpriv->irq = irq;
 

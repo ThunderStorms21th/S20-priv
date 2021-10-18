@@ -613,14 +613,6 @@ static void sci_stop_tx(struct uart_port *port)
 	ctrl &= ~SCSCR_TIE;
 
 	serial_port_out(port, SCSCR, ctrl);
-
-#ifdef CONFIG_SERIAL_SH_SCI_DMA
-	if (to_sci_port(port)->chan_tx &&
-	    !dma_submit_error(to_sci_port(port)->cookie_tx)) {
-		dmaengine_terminate_async(to_sci_port(port)->chan_tx);
-		to_sci_port(port)->cookie_tx = -EINVAL;
-	}
-#endif
 }
 
 static void sci_start_rx(struct uart_port *port)
@@ -881,16 +873,9 @@ static void sci_receive_chars(struct uart_port *port)
 				tty_insert_flip_char(tport, c, TTY_NORMAL);
 		} else {
 			for (i = 0; i < count; i++) {
-				char c;
+				char c = serial_port_in(port, SCxRDR);
 
-				if (port->type == PORT_SCIF ||
-				    port->type == PORT_HSCIF) {
-					status = serial_port_in(port, SCxSR);
-					c = serial_port_in(port, SCxRDR);
-				} else {
-					c = serial_port_in(port, SCxRDR);
-					status = serial_port_in(port, SCxSR);
-				}
+				status = serial_port_in(port, SCxSR);
 				if (uart_handle_sysrq_char(port, c)) {
 					count--; i--;
 					continue;
@@ -1034,10 +1019,10 @@ static int scif_set_rtrg(struct uart_port *port, int rx_trig)
 {
 	unsigned int bits;
 
-	if (rx_trig >= port->fifosize)
-		rx_trig = port->fifosize - 1;
 	if (rx_trig < 1)
 		rx_trig = 1;
+	if (rx_trig >= port->fifosize)
+		rx_trig = port->fifosize;
 
 	/* HSCIF can be set to an arbitrary level. */
 	if (sci_getreg(port, HSRTRGR)->size) {
@@ -1374,7 +1359,7 @@ fail:
 		dmaengine_terminate_async(chan);
 	for (i = 0; i < 2; i++)
 		s->cookie_rx[i] = -EINVAL;
-	s->active_rx = 0;
+	s->active_rx = -EINVAL;
 	s->chan_rx = NULL;
 	sci_start_rx(port);
 	if (!port_lock_held)
@@ -1750,10 +1735,6 @@ static irqreturn_t sci_br_interrupt(int irq, void *ptr)
 
 	/* Handle BREAKs */
 	sci_handle_breaks(port);
-
-	/* drop invalid character received before break was detected */
-	serial_port_in(port, SCxRDR);
-
 	sci_clear_SCxSR(port, SCxSR_BREAK_CLEAR(port));
 
 	return IRQ_HANDLED;
@@ -1833,8 +1814,7 @@ static irqreturn_t sci_mpxed_interrupt(int irq, void *ptr)
 		ret = sci_er_interrupt(irq, ptr);
 
 	/* Break Interrupt */
-	if (s->irqs[SCIx_ERI_IRQ] != s->irqs[SCIx_BRI_IRQ] &&
-	    (ssr_status & SCxSR_BRK(port)) && err_enabled)
+	if ((ssr_status & SCxSR_BRK(port)) && err_enabled)
 		ret = sci_br_interrupt(irq, ptr);
 
 	/* Overrun Interrupt */

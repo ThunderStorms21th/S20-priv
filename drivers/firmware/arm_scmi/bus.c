@@ -100,9 +100,6 @@ int scmi_driver_register(struct scmi_driver *driver, struct module *owner,
 {
 	int retval;
 
-	if (!driver->probe)
-		return -EINVAL;
-
 	driver->driver.bus = &scmi_bus_type;
 	driver->driver.name = driver->name;
 	driver->driver.owner = owner;
@@ -138,10 +135,8 @@ scmi_device_create(struct device_node *np, struct device *parent, int protocol)
 		return NULL;
 
 	id = ida_simple_get(&scmi_bus_id, 1, 0, GFP_KERNEL);
-	if (id < 0) {
-		kfree(scmi_dev);
-		return NULL;
-	}
+	if (id < 0)
+		goto free_mem;
 
 	scmi_dev->id = id;
 	scmi_dev->protocol_id = protocol;
@@ -159,6 +154,8 @@ scmi_device_create(struct device_node *np, struct device *parent, int protocol)
 put_dev:
 	put_device(&scmi_dev->dev);
 	ida_simple_remove(&scmi_bus_id, id);
+free_mem:
+	kfree(scmi_dev);
 	return NULL;
 }
 

@@ -125,9 +125,50 @@ int rtc_read_time(struct rtc_device *rtc, struct rtc_time *tm)
 }
 EXPORT_SYMBOL_GPL(rtc_read_time);
 
+#ifdef CONFIG_RTC_HIGH_RES
+static int __rtc_read_hrtime(struct rtc_device *rtc, struct rtc_hrtime *tm)
+{
+	int err;
+	if (!rtc->ops)
+		err = -ENODEV;
+	else if (!rtc->ops->read_hrtime)
+		err = -EINVAL;
+	else {
+		memset(tm, 0, sizeof(struct rtc_hrtime));
+		err = rtc->ops->read_hrtime(rtc->dev.parent, tm);
+		if (err < 0) {
+			dev_dbg(&rtc->dev, "read_hrtime: fail to read: %d\n",
+				err);
+			return err;
+		}
+
+		err = rtc_valid_hrtm(tm);
+		if (err < 0)
+			dev_dbg(&rtc->dev,
+				"read_hrtime: rtc_hrtime isn't valid\n");
+	}
+	return err;
+}
+
+int rtc_read_hrtime(struct rtc_device *rtc, struct rtc_hrtime *tm)
+{
+	int err;
+
+	err = mutex_lock_interruptible(&rtc->ops_lock);
+	if (err)
+		return err;
+
+	err = __rtc_read_hrtime(rtc, tm);
+	mutex_unlock(&rtc->ops_lock);
+
+	trace_rtc_read_hrtime(rtc_hrtm_to_time64(tm), err);
+	return err;
+}
+#endif /* CONFIG_RTC_HIGH_RES*/
+
 int rtc_set_time(struct rtc_device *rtc, struct rtc_time *tm)
 {
-	int err, uie;
+	int err;
 
 	err = rtc_valid_tm(tm);
 	if (err != 0)
@@ -138,17 +179,6 @@ int rtc_set_time(struct rtc_device *rtc, struct rtc_time *tm)
 		return err;
 
 	rtc_subtract_offset(rtc, tm);
-
-#ifdef CONFIG_RTC_INTF_DEV_UIE_EMUL
-	uie = rtc->uie_rtctimer.enabled || rtc->uie_irq_active;
-#else
-	uie = rtc->uie_rtctimer.enabled;
-#endif
-	if (uie) {
-		err = rtc_update_irq_enable(rtc, 0);
-		if (err)
-			return err;
-	}
 
 	err = mutex_lock_interruptible(&rtc->ops_lock);
 	if (err)
@@ -172,12 +202,6 @@ int rtc_set_time(struct rtc_device *rtc, struct rtc_time *tm)
 	mutex_unlock(&rtc->ops_lock);
 	/* A timer might have just expired */
 	schedule_work(&rtc->irqwork);
-
-	if (uie) {
-		err = rtc_update_irq_enable(rtc, 1);
-		if (err)
-			return err;
-	}
 
 	trace_rtc_set_time(rtc_tm_to_time64(tm), err);
 	return err;

@@ -5,9 +5,11 @@
  * (NOTE: these are not related to SCHED_IDLE batch scheduled
  *        tasks which are handled in sched/fair.c )
  */
+#include <linux/cpu_pm.h>
 #include "sched.h"
 
 #include <trace/events/power.h>
+#include <linux/sec_perf.h>
 
 /* Linker adds these: start and end of __cpuidle functions */
 extern char __cpuidle_text_start[], __cpuidle_text_end[];
@@ -16,9 +18,10 @@ extern char __cpuidle_text_start[], __cpuidle_text_end[];
  * sched_idle_set_state - Record idle state for the current CPU.
  * @idle_state: State to record.
  */
-void sched_idle_set_state(struct cpuidle_state *idle_state)
+void sched_idle_set_state(struct cpuidle_state *idle_state, int index)
 {
 	idle_set_state(this_rq(), idle_state);
+	idle_set_state_idx(this_rq(), index);
 }
 
 static int __read_mostly cpu_idle_force_poll;
@@ -234,6 +237,7 @@ static void do_idle(void)
 	 */
 
 	__current_set_polling();
+	cpu_pm_enter_pre();
 	tick_nohz_idle_enter();
 
 	while (!need_resched()) {
@@ -249,6 +253,9 @@ static void do_idle(void)
 		}
 
 		arch_cpu_idle_enter();
+#ifdef CONFIG_SEC_PERF_LATENCYCHECKER
+		sec_perf_latencychecker_disable(smp_processor_id());
+#endif
 
 		/*
 		 * In poll mode we reenable interrupts and spin. Also if we
@@ -262,6 +269,11 @@ static void do_idle(void)
 		} else {
 			cpuidle_idle_call();
 		}
+
+#ifdef CONFIG_SEC_PERF_LATENCYCHECKER
+		sec_perf_latencychecker_enable(smp_processor_id());
+#endif
+
 		arch_cpu_idle_exit();
 	}
 
@@ -272,6 +284,7 @@ static void do_idle(void)
 	 * This is required because for polling idle loops we will not have had
 	 * an IPI to fold the state for us.
 	 */
+	cpu_pm_exit_post();
 	preempt_set_need_resched();
 	tick_nohz_idle_exit();
 	__current_clr_polling();
@@ -375,7 +388,8 @@ void cpu_startup_entry(enum cpuhp_state state)
 
 #ifdef CONFIG_SMP
 static int
-select_task_rq_idle(struct task_struct *p, int cpu, int sd_flag, int flags)
+select_task_rq_idle(struct task_struct *p, int cpu, int sd_flag, int flags,
+		    int sibling_count_hint)
 {
 	return task_cpu(p); /* IDLE tasks as never migrated */
 }
