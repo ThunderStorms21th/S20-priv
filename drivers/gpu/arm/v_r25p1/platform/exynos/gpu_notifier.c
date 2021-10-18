@@ -62,7 +62,7 @@ int g3d_unregister_peak_mode_notifier(struct notifier_block *nb)
 
 #include <linux/oom.h>
 
-#define G3D_DVFS_MIDDLE_CLOCK 377000
+#define G3D_DVFS_MIDDLE_CLOCK 455000    // default 377000
 
 extern struct kbase_device *pkbdev;
 
