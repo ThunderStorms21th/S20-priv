@@ -2896,6 +2896,7 @@ done:
 		bus->dhd->tx_ctlpkts++;
 
 	if (bus->dhd->txcnt_timeout >= MAX_CNTL_TX_TIMEOUT) {
+		bus->dhd->iovar_timeout_occured = TRUE;
 #ifdef DHD_PM_CONTROL_FROM_FILE
 		if (g_pm_control == TRUE) {
 			return -BCME_ERROR;
@@ -2969,7 +2970,7 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 #ifdef DHD_FW_COREDUMP
 		/* Dump the ram image */
 		if (bus->dhd->memdump_enabled && !bus->dhd->dongle_trap_occured)
-			dhdsdio_mem_dump(bus);
+			dhd_bus_mem_dump(bus->dhd);
 #endif /* DHD_FW_COREDUMP */
 	}
 	if (timeleft == 0) {
@@ -2994,6 +2995,7 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 		bus->dhd->rx_ctlerrs++;
 
 	if (bus->dhd->rxcnt_timeout >= MAX_CNTL_RX_TIMEOUT) {
+		bus->dhd->iovar_timeout_occured = TRUE;
 #ifdef DHD_PM_CONTROL_FROM_FILE
 		if (g_pm_control == TRUE) {
 			return -BCME_ERROR;
@@ -3736,7 +3738,7 @@ printbuf:
 		  * code walkthrough is needed.
 		  */
 		dhd_os_sdunlock(bus->dhd);
-		dhdsdio_mem_dump(bus);
+		dhd_bus_mem_dump(bus->dhd);
 		dhd_os_sdlock(bus->dhd);
 	}
 #endif /* #if defined(DHD_FW_COREDUMP) */
@@ -3833,6 +3835,11 @@ dhdsdio_mem_dump(dhd_bus_t *bus)
 	dhdp = bus->dhd;
 	if (!dhdp) {
 		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
+		return ret;
+	}
+
+	if (dhd_memdump_is_scheduled(dhdp)) {
+		DHD_ERROR(("%s: memdump is in progress\n", __FUNCTION__));
 		return ret;
 	}
 

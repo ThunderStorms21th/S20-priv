@@ -2758,6 +2758,7 @@ extern s32 wl_cfg80211_set_p2p_resp_ap_chn(struct net_device *net, s32 enable);
 /* btcoex functions */
 void* wl_cfg80211_btcoex_init(struct net_device *ndev);
 void wl_cfg80211_btcoex_deinit(void);
+void wl_cfg80211_btcoex_kill_handler(void);
 
 extern chanspec_t wl_chspec_from_legacy(chanspec_t legacy_chspec);
 extern chanspec_t wl_chspec_driver_to_host(chanspec_t chanspec);
@@ -3132,4 +3133,8 @@ extern void wl_android_roamoff_dbg_dump(struct bcm_cfg80211 *cfg);
 #define ROAMOFF_DBG_SAVE(dev, rsn, var)
 #define ROAMOFF_DBG_DUMP(cfg)
 #endif /* DEBUG_SETROAMMODE */
+#ifdef DHD_PERIODIC_CNTRS
+extern void wl_cfgdbg_periodic_cntrs(struct net_device *ndev, struct bcm_cfg80211 *cfg);
+extern uint32 wl_cfgdbg_current_timestamp(void);
+#endif /* DHD_PERIODIC_CNTRS */
 #endif /* _wl_cfg80211_h_ */
