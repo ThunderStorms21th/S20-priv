@@ -96,7 +96,7 @@ rm -f $LOG
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
     echo "442000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq
-    echo "1846000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+    echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
     #echo "2000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/down_rate_limit_us
     #echo "4000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/up_rate_limit_us
     #echo "1" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/fb_legacy
@@ -137,8 +137,8 @@ rm -f $LOG
     # VM
     echo "95" > /proc/sys/vm/vfs_cache_pressure
     echo "100" > /proc/sys/vm/swappiness
-    echo "600" > /proc/sys/vm/dirty_writeback_centisecs
-    echo "600" > /proc/sys/vm/dirty_expire_centisecs
+    echo "1000" > /proc/sys/vm/dirty_writeback_centisecs
+    echo "1000" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
 
     # ZRAM
@@ -146,10 +146,11 @@ rm -f $LOG
     swapoff /dev/block/zram0 > /dev/null 2>&1
     echo "1" > /sys/block/zram0/reset
     # echo "1073741824" > /sys/block/zram0/disksize  # 1,0 GB
-    echo "1610612736" > /sys/block/zram0/disksize  # 1,5 GB
-    # echo "2147483648" > /sys/block/zram0/disksize  # 2,0 GB
+    # echo "1610612736" > /sys/block/zram0/disksize  # 1,5 GB
+    echo "2147483648" > /sys/block/zram0/disksize  # 2,0 GB
     # echo "2684354560" > /sys/block/zram0/disksize  # 2,5 GB
     # echo "3221225472" > /sys/block/zram0/disksize  # 3,0 GB
+    # echo "4194304000" > /sys/block/zram0/disksize  # 4,0 GB
     chmod 644 /dev/block/zram0
     mkswap /dev/block/zram0 > /dev/null 2>&1
     swapon /dev/block/zram0 > /dev/null 2>&1
@@ -162,7 +163,7 @@ rm -f $LOG
     echo "377000" > /sys/devices/platform/18500000.mali/highspeed_clock
     echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
     echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
-    echo "1" > /sys/kernel/gpu/gpu_cl_boost_disable
+    echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable
 
 
    # Misc settings : bbr2, bbr, cubic or westwood
@@ -172,7 +173,7 @@ rm -f $LOG
    echo "0" > /sys/kernel/sched/gentle_fair_sleepers
 
    # I/O sched settings
-   echo "zen" > /sys/block/sda/queue/scheduler
+   echo "cfq" > /sys/block/sda/queue/scheduler
    # echo "256" > /sys/block/sda/queue/read_ahead_kb
    echo "cfq" > /sys/block/mmcblk0/queue/scheduler
    # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
@@ -182,6 +183,8 @@ rm -f $LOG
    echo "1" > /sys/block/mmcblk0/queue/rq_affinity
    echo "128" > /sys/block/sda/queue/nr_requests
    echo "256" > /sys/block/mmcblk0/queue/nr_requests
+   echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
+   echo "500" > /sys/block/sda/queue/iosched/target_latency
 
    # Initial ThundeRStormS Stune and CPU set settings
    echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
@@ -265,13 +268,13 @@ rm -f $LOG
 
 
    ## Kernel Scheduler
-   echo "4000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
+   echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
    #echo "10000000" > /proc/sys/kernel/sched_latency_ns
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "0" > /sys/module/cpuidle/parameters/off
-   echo "performance" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
+   echo "1" > /sys/module/cpuidle/parameters/off
+   echo "powersupersave" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
    echo "0f" > /proc/irq/default_smp_affinity
    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask
 

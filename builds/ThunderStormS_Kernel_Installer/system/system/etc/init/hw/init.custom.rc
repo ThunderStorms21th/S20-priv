@@ -28,12 +28,12 @@ on boot
 
    # I/O sched settings
    write /sys/block/sda/queue/nr_requests 128
-   write /sys/block/mmcblk0/queue/nr_requests 256
+   write /sys/block/mmcblk0/queue/nr_requests 128
    write /sys/block/sda/queue/iostats 0
    write /sys/block/mmcblk0/queue/iostats 0
    # VM
-   write /proc/sys/vm/dirty_expire_centisecs 600
-   write /proc/sys/vm/dirty_writeback_centisecs 600
+   write /proc/sys/vm/dirty_expire_centisecs 1000
+   write /proc/sys/vm/dirty_writeback_centisecs 1000
    write /proc/sys/vm/vfs_cache_pressure 95
    # MISC
    write > /sys/module/mmc_core/parameters/use_spi_crc N
@@ -51,8 +51,8 @@ on boot
     # setprop debug.sf.hw 1
     # setprop ro.debuggable 0
     # setprop hwui.render_dirty_regions false
-    # setprop debug.gr.numframebuffers 3
-    # setprop debug.egl.swapinterval -60
+    setprop debug.gr.numframebuffers 3
+    setprop debug.egl.swapinterval -60
     setprop debug.gr.swapinterval 0
     setprop ro.config.hw_power_saving 1
     setprop persist.sys.ui.hw 1
