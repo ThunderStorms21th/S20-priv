@@ -76,6 +76,9 @@ long stui_process_cmd(struct device *dev, struct file *f, unsigned int cmd, unsi
 		}
 		stui_set_mask(STUI_MODE_TOUCH_SEC);
 
+		buffer.touch_type = stui_get_touch_type();
+		pr_info("[STUI] tsp_type %d\n", buffer.touch_type);
+
 		if (copy_to_user(argp, &buffer, sizeof(struct tui_hw_buffer))) {
 			pr_err("[STUI] copy_to_user failed\n");
 			goto clean_touch_lock;
@@ -137,7 +140,10 @@ clean_fb_prepare:
 			break;
 		}
 
-		if (copy_to_user(argp, &buffer, sizeof(struct tui_hw_buffer)))
+		buffer.touch_type = stui_get_touch_type();
+		pr_info("[STUI] tsp_type %d\n", buffer.touch_type);
+
+		if (copy_to_user(argp, &buffer, sizeof(struct tui_hw_buffer))) 
 			pr_err("[STUI] copy_to_user failed\n");
 		break;
 	}

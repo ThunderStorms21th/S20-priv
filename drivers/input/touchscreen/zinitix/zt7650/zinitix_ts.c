@@ -77,8 +77,9 @@ extern unsigned int lpcharge;
 #include <linux/t-base-tui.h>
 #endif
 
-#ifdef CONFIG_SAMSUNG_TUI
-#include "stui_inf.h"
+#if defined(CONFIG_SAMSUNG_TUI)
+static int stui_tsp_enter(void);
+static int stui_tsp_exit(void);
 #endif
 
 #define ZINITIX_DEBUG					0
@@ -728,6 +729,7 @@ struct zt_ts_info {
 	u8 finger_cnt1;
 	unsigned int move_count[MAX_SUPPORTED_FINGER_NUM];
 	struct mutex set_reg_lock;
+	struct mutex set_lpmode_lock;
 	struct mutex modechange;
 	struct mutex work_lock;
 	struct mutex raw_data_lock;
@@ -1417,7 +1419,7 @@ static void zt_set_lp_mode(struct zt_ts_info *info, int event, bool enable)
 {
 	int ret;
 
-	mutex_lock(&info->set_reg_lock);
+	mutex_lock(&info->set_lpmode_lock);
 
 	if (enable)
 		zinitix_bit_set(info->lpm_mode, event);
@@ -1428,7 +1430,7 @@ static void zt_set_lp_mode(struct zt_ts_info *info, int event, bool enable)
 	if (ret < 0)
 		input_err(true, &info->client->dev, "%s: fail to write sponge\n", __func__);
 
-	mutex_unlock(&info->set_reg_lock);
+	mutex_unlock(&info->set_lpmode_lock);
 }
 
 #ifdef CONFIG_INPUT_SEC_SECURE_TOUCH
@@ -9880,6 +9882,7 @@ static int zt_ts_probe(struct i2c_client *client,
 
 	mutex_init(&info->modechange);
 	mutex_init(&info->set_reg_lock);
+	mutex_init(&info->set_lpmode_lock);
 	mutex_init(&info->work_lock);
 	mutex_init(&info->raw_data_lock);
 	mutex_init(&info->i2c_mutex);
@@ -10069,6 +10072,12 @@ static int zt_ts_probe(struct i2c_client *client,
 #endif
 #ifdef CONFIG_SAMSUNG_TUI
 	tui_tsp_info = info;
+	ret = stui_set_info(stui_tsp_enter, stui_tsp_exit, STUI_TSP_TYPE_ZINITIX);
+	if (ret < 0) {
+			input_err(true, &info->client->dev,
+					"%s: Failed to register stui tsp type\n", __func__);
+	}
+	input_info(true, &info->client->dev, "%s: stui tsp vendor zt7650 register\n", __func__);
 #endif
 #ifdef CONFIG_INPUT_SEC_SECURE_TOUCH
 	if (sysfs_create_group(&info->input_dev->dev.kobj, &secure_attr_group) < 0)
@@ -10232,7 +10241,7 @@ void zt_ts_shutdown(struct i2c_client *client)
 extern int stui_i2c_lock(struct i2c_adapter *adap);
 extern int stui_i2c_unlock(struct i2c_adapter *adap);
 
-int stui_tsp_enter(void)
+static int stui_tsp_enter(void)
 {
 	int ret = 0;
 
@@ -10257,7 +10266,7 @@ int stui_tsp_enter(void)
 	return 0;
 }
 
-int stui_tsp_exit(void)
+static int stui_tsp_exit(void)
 {
 	int ret = 0;
 

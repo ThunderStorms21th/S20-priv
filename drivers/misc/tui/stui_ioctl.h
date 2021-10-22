@@ -29,6 +29,7 @@ struct tui_hw_buffer {
 	uint64_t wb_size;
 	uint64_t disp_physical;
 	uint64_t disp_size;
+	uint32_t touch_type;
 } __packed;
 
 #define STUI_RET_OK                   0x00030000
