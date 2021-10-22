@@ -28,6 +28,7 @@
 
 static int tui_mode = STUI_MODE_OFF;
 static int tui_blank_cnt;
+static uint32_t stui_touch_type;
 static DEFINE_SPINLOCK(tui_lock);
 
 #ifdef USE_TEE_CLIENT_API
@@ -340,4 +341,15 @@ void stui_unregister_from_events(void)
 	fb_unregister_client(&stui_fb_notif);
 	unregister_reboot_notifier(&stui_reboot_nb);
 	pr_debug("[STUI] %s (finish)\n", __func__);
+}
+
+void stui_set_touch_type(uint32_t type)
+{
+	stui_touch_type = type;
+	pr_info("[STUI] tsp_type %d\n", stui_touch_type);
+}
+
+uint32_t stui_get_touch_type(void)
+{
+	return stui_touch_type;
 }
