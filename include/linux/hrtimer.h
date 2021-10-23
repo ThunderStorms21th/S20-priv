@@ -201,6 +201,7 @@ enum  hrtimer_base_type {
  */
 struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;
+	struct hrtimer			*running;
 	unsigned int			cpu;
 	unsigned int			active_bases;
 	unsigned int			clock_was_set_seq;
