@@ -697,6 +697,14 @@ endif
 KBUILD_CFLAGS += $(call cc-ifversion, -lt, 0409, \
 			$(call cc-disable-warning,maybe-uninitialized,))
 
+polly-flags-$(CONFIG_LLVM_POLLY) += -mllvm -polly \
+				-mllvm -polly-run-inliner \
+				-mllvm -polly-run-dce \
+				-mllvm -polly-opt-fusion=max \
+				-mllvm -polly-vectorizer=stripmine
+
+KBUILD_CFLAGS += $(polly-flags-y)
+
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
 
