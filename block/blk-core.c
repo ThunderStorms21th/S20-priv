@@ -440,7 +440,7 @@ int blk_alloc_turbo_write(struct request_queue *q)
 
 	set_tw_state(new, TW_OFF);
 
-	new->up_threshold_bytes = (12 * 1024 * 1024);
+	new->up_threshold_bytes = (2 * 1024 * 1024);
 	new->up_threshold_rqs = 50;
 	new->down_threshold_bytes = (10 * 1024 * 1024);
 	new->down_threshold_rqs= 40;
