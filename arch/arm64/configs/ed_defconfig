@@ -184,4 +184,7 @@ CONFIG_NET_UDP_TUNNEL=y
 # CONFIG_GENEVE is not set
 # CONFIG_GTP is not set
 
+## CFS_BANDWITH - can makes too much cpu's throttling
+# CONFIG_CFS_BANDWIDTH is not set
+
 CONFIG_DEBUG_SECTION_MISMATCH=y
