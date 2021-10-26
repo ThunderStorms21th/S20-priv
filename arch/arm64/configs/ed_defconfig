@@ -190,4 +190,7 @@ CONFIG_THINLTO=y
 CONFIG_LTO_CLANG=y
 # CONFIG_LTO_NONE is not set
 
+## CFS_BANDWITH - can makes too much cpu's throttling
+# CONFIG_CFS_BANDWIDTH is not set
+
 CONFIG_DEBUG_SECTION_MISMATCH=y
