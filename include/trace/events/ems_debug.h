@@ -393,7 +393,7 @@ TRACE_EVENT(esg_migov_boost,
  * Tracepoint for util in ESG
  */
 TRACE_EVENT(esg_cpu_util,
-
+#ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP
 	TP_PROTO(int cpu, int nr_diff, int pelt_util_diff, int org_io_util, int io_util,
 		int org_step_util, int step_util, int org_pelt_util, int pelt_util, int max, int util),
 
@@ -434,6 +434,104 @@ TRACE_EVENT(esg_cpu_util,
 			__entry->org_step_util, __entry->step_util,
 			__entry->org_pelt_util, __entry->pelt_util,
 			__entry->max, __entry->util)
+#endif
+
+#ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP_S21
+	TP_PROTO(int cpu, int nr_diff, int org_io_util, int io_util,
+		int org_step_util, int step_util, int org_pelt_util, int pelt_util,
+		int pelt_margin, int pelt_boost, int max, int util),
+
+	TP_ARGS(cpu, nr_diff, org_io_util, io_util,
+		org_step_util, step_util, org_pelt_util, pelt_util, pelt_margin, pelt_boost, max, util),
+
+	TP_STRUCT__entry(
+		__field( int,		cpu				)
+		__field( int,		nr_diff				)
+		__field( int,		org_io_util			)
+		__field( int,		io_util				)
+		__field( int,		org_step_util			)
+		__field( int,		step_util			)
+		__field( int,		org_pelt_util			)
+		__field( int,		pelt_util			)
+		__field( int,		pelt_margin			)
+		__field( int,		pelt_boost			)
+		__field( int,		max				)
+		__field( int,		util				)
+	),
+
+	TP_fast_assign(
+		__entry->cpu			= cpu;
+		__entry->nr_diff		= nr_diff;
+		__entry->org_io_util		= org_io_util;
+		__entry->io_util		= io_util;
+		__entry->org_step_util		= org_step_util;
+		__entry->step_util		= step_util;
+		__entry->org_pelt_util		= org_pelt_util;
+		__entry->pelt_util		= pelt_util;
+		__entry->pelt_margin		= pelt_margin;
+		__entry->pelt_boost		= pelt_boost;
+		__entry->max			= max;
+		__entry->util			= util;
+	),
+
+	TP_printk("cpu=%d nr_dif=%d, io_ut=%d->%d, step_ut=%d->%d pelt_ut=%d->%d(mg=%d boost=%d) max=%d, ut=%d",
+			__entry->cpu, __entry->nr_diff,
+			__entry->org_io_util, __entry->io_util,
+			__entry->org_step_util, __entry->step_util,
+			__entry->org_pelt_util, __entry->pelt_util,
+			__entry->pelt_margin, __entry->pelt_boost,
+			__entry->max, __entry->util)
+#endif
+);
+
+/*
+ * Tracepoint for slack timer func called
+ */
+TRACE_EVENT(esgov_slack_func,
+
+	TP_PROTO(int cpu),
+
+	TP_ARGS(cpu),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+	),
+
+	TP_printk("cpu=%d SLACK EXPIRED", __entry->cpu)
+);
+
+/*
+ * Tracepoint for detalis of slack timer func called
+ */
+TRACE_EVENT(esgov_slack,
+
+	TP_PROTO(int cpu, unsigned long util,
+		unsigned long min, unsigned long action, int ret),
+
+	TP_ARGS(cpu, util, min, action, ret),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(unsigned long, util)
+		__field(unsigned long, min)
+		__field(unsigned long, action)
+		__field(int, ret)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+		__entry->util = util;
+		__entry->min = min;
+		__entry->action = action;
+		__entry->ret = ret;
+	),
+
+	TP_printk("cpu=%d util=%ld min=%ld action=%ld ret=%d", __entry->cpu,
+			__entry->util, __entry->min, __entry->action, __entry->ret)
 );
 
 /*
