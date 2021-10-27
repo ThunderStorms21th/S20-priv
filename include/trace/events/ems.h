@@ -141,6 +141,7 @@ TRACE_EVENT(esg_update_limit,
  */
 TRACE_EVENT(esg_req_freq,
 
+#ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP
 	TP_PROTO(int cpu, int util, int freq),
 
 	TP_ARGS(cpu, util, freq),
@@ -159,6 +160,30 @@ TRACE_EVENT(esg_req_freq,
 
 	TP_printk("cpu=%d util=%d, freq=%d",
 		__entry->cpu, __entry->util, __entry->freq)
+#endif
+
+#ifdef CONFIG_CPU_FREQ_GOV_ENERGYSTEP_S21
+	TP_PROTO(int cpu, int util, int freq, int rapid_scale),
+
+	TP_ARGS(cpu, util, freq, rapid_scale),
+
+	TP_STRUCT__entry(
+		__field( int,		cpu				)
+		__field( int,		util				)
+		__field( int,		freq				)
+		__field( int,		rapid_scale			)
+	),
+
+	TP_fast_assign(
+		__entry->cpu			= cpu;
+		__entry->util			= util;
+		__entry->freq			= freq;
+		__entry->rapid_scale		= rapid_scale;
+	),
+
+	TP_printk("cpu=%d util=%d freq=%d rapid_scale=%d",
+		__entry->cpu, __entry->util, __entry->freq, __entry->rapid_scale)
+#endif
 );
 
 /*

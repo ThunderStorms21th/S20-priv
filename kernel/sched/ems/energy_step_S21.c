@@ -17,16 +17,16 @@
 #include <linux/pm_qos.h>
 #include <linux/sched/cpufreq.h>
 
+#include <trace/events/ems.h>
+#include <trace/events/ems_debug.h>
+
+// #include <trace/events/ems.h>
+// #include <trace/events/ems_debug.h>
+
 #include "../sched.h"
 #include "ems.h"
 
-#include <trace/events/ems.h>
-// #include <trace/events/ems_debug.h>
-
-#include <trace/events/ems_S21.h>
-#include <trace/events/ems_debug_S21.h>
-
-struct esgov_policy_S21 {
+struct esgov_policy {
 	struct cpufreq_policy	*policy;
 	struct cpumask		cpus;
 	struct kobject		kobj;
@@ -82,7 +82,7 @@ struct esgov_policy_S21 {
 struct esgov_cpu {
 	struct update_util_data	update_util;
 
-	struct esgov_policy_S21	*esg_policy;
+	struct esgov_policy	*esg_policy;
 	unsigned int		cpu;
 	int			util;		/* target util */
 	int			pelt_util;	/* pelt util */
@@ -115,7 +115,7 @@ struct esgov_param {
 };
 
 struct kobject *esg_kobj;
-DEFINE_PER_CPU(struct esgov_policy_S21 *, esgov_policy_S21);
+DEFINE_PER_CPU(struct esgov_policy *, esgov_policy);
 DEFINE_PER_CPU(struct esgov_cpu, esgov_cpu);
 DEFINE_PER_CPU(struct esgov_param *, esgov_param);
 
@@ -125,7 +125,7 @@ DEFINE_PER_CPU(struct esgov_param *, esgov_param);
 static void esg_update_freq_range(struct cpufreq_policy *data)
 {
 	unsigned int new_min, new_max, new_min_idx, new_max_idx;
-	struct esgov_policy_S21 *esg_policy = per_cpu(esgov_policy_S21, data->cpu);
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, data->cpu);
 	struct cpufreq_policy *policy = esg_policy->policy;
 
 	if (unlikely((!esg_policy) || !esg_policy->enabled))
@@ -155,7 +155,7 @@ static void esg_update_freq_range(struct cpufreq_policy *data)
 	trace_esg_update_limit(policy->cpu, esg_policy->min_cap, esg_policy->max_cap);
 }
 
-static void esg_update_step(struct esgov_policy_S21 *esg_policy, int step)
+static void esg_update_step(struct esgov_policy *esg_policy, int step)
 {
 	int cpu = cpumask_first(&esg_policy->cpus);
 
@@ -164,7 +164,7 @@ static void esg_update_step(struct esgov_policy_S21 *esg_policy, int step)
 }
 
 static void
-esg_sync_param(struct esgov_policy_S21 *esg_policy, struct esgov_param *param)
+esg_sync_param(struct esgov_policy *esg_policy, struct esgov_param *param)
 {
 	esg_update_step(esg_policy, param->step);
 
@@ -182,7 +182,7 @@ static int esg_mode_update_callback(struct notifier_block *nb,
 				unsigned long val, void *v)
 {
 	struct emstune_set *cur_set = (struct emstune_set *)v;
-	struct esgov_policy_S21 *esg_policy;
+	struct esgov_policy *esg_policy;
 	struct esgov_param *param;
 	int cpu;
 
@@ -203,7 +203,7 @@ static int esg_mode_update_callback(struct notifier_block *nb,
 		param->rapid_scale_up = cur_set->esg.rapid_scale_up;
 		param->rapid_scale_down = cur_set->esg.rapid_scale_down;
 
-		esg_policy = per_cpu(esgov_policy_S21, cpu);
+		esg_policy = per_cpu(esgov_policy, cpu);
 		if (unlikely((!esg_policy) || !esg_policy->enabled))
 			continue;
 
@@ -271,7 +271,7 @@ static void slack_nop_timer(struct timer_list *timer)
 	 * This is important for platforms where CPU with higher frequencies
 	 * consume higher power even at IDLE.
 	 */
-	// trace_esgov_slack_func(smp_processor_id());
+	trace_esgov_slack_func(smp_processor_id());
 }
 
 static int esgov_cpu_pm_callback(struct notifier_block *nb,
@@ -296,14 +296,14 @@ static int esgov_cpu_pm_callback(struct notifier_block *nb,
 				 msecs_to_jiffies(esg_cpu->esg_policy->slack_expired_time_ms);
 			add_timer_on(timer, cpu);
 
-			// trace_esgov_slack(cpu, util, slack_timer->min, event, 1);
+			trace_esgov_slack(cpu, util, slack_timer->min, event, 1);
 		}
 		break;
 	case CPU_PM_EXIT:
 		if (timer_pending(timer)) {
 			del_timer_sync(timer);
 
-			// trace_esgov_slack(cpu, util, slack_timer->min, event, -1);
+			trace_esgov_slack(cpu, util, slack_timer->min, event, -1);
 		}
 		break;
 	}
@@ -470,8 +470,8 @@ __ATTR(name, 0644, show_##name, store_##name)
 #define esg_show_step(name, related_val)						\
 static ssize_t show_##name(struct kobject *k, char *buf)			\
 {										\
-	struct esgov_policy_S21 *esg_policy =					\
-			container_of(k, struct esgov_policy_S21, kobj);		\
+	struct esgov_policy *esg_policy =					\
+			container_of(k, struct esgov_policy, kobj);		\
 										\
 	return sprintf(buf, "step: %d (energy: %lu)\n",				\
 			esg_policy->name, esg_policy->related_val);		\
@@ -480,8 +480,8 @@ static ssize_t show_##name(struct kobject *k, char *buf)			\
 #define esg_store_step(name)								\
 static ssize_t store_##name(struct kobject *k, const char *buf, size_t count)	\
 {										\
-	struct esgov_policy_S21 *esg_policy =					\
-			container_of(k, struct esgov_policy_S21, kobj);		\
+	struct esgov_policy *esg_policy =					\
+			container_of(k, struct esgov_policy, kobj);		\
 	int data;								\
 										\
 	if (!sscanf(buf, "%d", &data))						\
@@ -495,8 +495,8 @@ static ssize_t store_##name(struct kobject *k, const char *buf, size_t count)	\
 #define esg_show(name)								\
 static ssize_t show_##name(struct kobject *k, char *buf)			\
 {										\
-	struct esgov_policy_S21 *esg_policy =					\
-			container_of(k, struct esgov_policy_S21, kobj);		\
+	struct esgov_policy *esg_policy =					\
+			container_of(k, struct esgov_policy, kobj);		\
 										\
 	return sprintf(buf, "%d\n", esg_policy->name);				\
 }										\
@@ -504,8 +504,8 @@ static ssize_t show_##name(struct kobject *k, char *buf)			\
 #define esg_store(name)								\
 static ssize_t store_##name(struct kobject *k, const char *buf, size_t count)	\
 {										\
-	struct esgov_policy_S21 *esg_policy =					\
-			container_of(k, struct esgov_policy_S21, kobj);		\
+	struct esgov_policy *esg_policy =					\
+			container_of(k, struct esgov_policy, kobj);		\
 	int data;								\
 										\
 	if (!sscanf(buf, "%d", &data))						\
@@ -582,13 +582,13 @@ static struct kobj_type ktype_esg = {
 	.default_attrs	= esg_attrs,
 };
 
-static struct esgov_policy_S21 *esgov_policy_S21_alloc(struct cpufreq_policy *policy)
+static struct esgov_policy *esgov_policy_alloc(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy;
+	struct esgov_policy *esg_policy;
 	struct esgov_param *param;
 
-	/* allocate esgov_policy_S21 */
-	esg_policy = kzalloc(sizeof(struct esgov_policy_S21), GFP_KERNEL);
+	/* allocate esgov_policy */
+	esg_policy = kzalloc(sizeof(struct esgov_policy), GFP_KERNEL);
 	if (!esg_policy)
 		goto init_failed;
 
@@ -630,7 +630,7 @@ init_failed:
 
 static void esgov_work(struct kthread_work *work)
 {
-	struct esgov_policy_S21 *esg_policy = container_of(work, struct esgov_policy_S21, work);
+	struct esgov_policy *esg_policy = container_of(work, struct esgov_policy, work);
 	unsigned int freq;
 	unsigned long flags;
 
@@ -648,14 +648,14 @@ static void esgov_work(struct kthread_work *work)
 
 static void esgov_irq_work(struct irq_work *irq_work)
 {
-	struct esgov_policy_S21 *esg_policy;
+	struct esgov_policy *esg_policy;
 
-	esg_policy = container_of(irq_work, struct esgov_policy_S21, irq_work);
+	esg_policy = container_of(irq_work, struct esgov_policy, irq_work);
 
 	kthread_queue_work(&esg_policy->worker, &esg_policy->work);
 }
 
-static int esgov_kthread_create(struct esgov_policy_S21 *esg_policy)
+static int esgov_kthread_create(struct esgov_policy *esg_policy)
 {
 	struct task_struct *thread;
 	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO / 2 };
@@ -701,27 +701,27 @@ static int esgov_kthread_create(struct esgov_policy_S21 *esg_policy)
 	return 0;
 }
 
-static void esgov_policy_S21_free(struct esgov_policy_S21 *esg_policy)
+static void esgov_policy_free(struct esgov_policy *esg_policy)
 {
 	kfree(esg_policy);
 }
 
 static int esgov_init(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy;
+	struct esgov_policy *esg_policy;
 	int ret = 0;
 	int cpu;
 
 	if (policy->governor_data)
 		return -EBUSY;
 
-	esg_policy = per_cpu(esgov_policy_S21, policy->cpu);
-	if (per_cpu(esgov_policy_S21, policy->cpu)) {
-		pr_info("%s: Already allocated esgov_policy_S21\n", __func__);
+	esg_policy = per_cpu(esgov_policy, policy->cpu);
+	if (per_cpu(esgov_policy, policy->cpu)) {
+		pr_info("%s: Already allocated esgov_policy\n", __func__);
 		goto complete_esg_init;
 	}
 
-	esg_policy = esgov_policy_S21_alloc(policy);
+	esg_policy = esgov_policy_alloc(policy);
 	if (!esg_policy) {
 		ret = -ENOMEM;
 		goto failed_to_init;
@@ -732,7 +732,7 @@ static int esgov_init(struct cpufreq_policy *policy)
 		goto free_esg_policy;
 
 	for_each_cpu(cpu, &esg_policy->cpus)
-		per_cpu(esgov_policy_S21, cpu) = esg_policy;
+		per_cpu(esgov_policy, cpu) = esg_policy;
 
 complete_esg_init:
 	down_write(&esg_policy->rwsem);
@@ -752,7 +752,7 @@ complete_esg_init:
 	return 0;
 
 free_esg_policy:
-	esgov_policy_S21_free(esg_policy);
+	esgov_policy_free(esg_policy);
 
 failed_to_init:
 	pr_err("initialization failed (error %d)\n", ret);
@@ -762,7 +762,7 @@ failed_to_init:
 
 static void esgov_exit(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy = per_cpu(esgov_policy_S21, policy->cpu);
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, policy->cpu);
 
 	down_write(&esg_policy->rwsem);
 	esg_policy->enabled = false;;
@@ -770,7 +770,7 @@ static void esgov_exit(struct cpufreq_policy *policy)
 	up_write(&esg_policy->rwsem);
 }
 
-static unsigned int get_next_freq(struct esgov_policy_S21 *esg_policy,
+static unsigned int get_next_freq(struct esgov_policy *esg_policy,
 				unsigned long util, unsigned long max)
 {
 	struct cpufreq_policy *policy = esg_policy->policy;
@@ -788,7 +788,7 @@ static unsigned int get_next_freq(struct esgov_policy_S21 *esg_policy,
 static unsigned int
 esgov_apply_uclamp(struct esgov_cpu *esg_cpu, unsigned int orig_util)
 {
-	struct esgov_policy_S21 *esg_policy = per_cpu(esgov_policy_S21, esg_cpu->cpu);
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, esg_cpu->cpu);
 	int hist_idx, cur_idx;
 	int active_ratio, busy_ratio;
 	int total_indices;
@@ -913,8 +913,7 @@ static unsigned int esgov_calc_cpu_target_util(struct esgov_cpu *esg_cpu,
 	if (nr_running & FREQ_UPDATE_BIT)
 		trace_esg_cpu_util(esg_cpu->cpu, nr_running & ~FREQ_UPDATE_BIT,
 			org_io_util, io_util, org_step_util, step_util,
-			org_pelt_util, pelt_util, pelt_margin, max, util);
-//			org_pelt_util, pelt_util, pelt_margin, pelt_boost, max, util);
+			org_pelt_util, pelt_util, pelt_margin, pelt_boost, max, util);
 
 	return util;
 }
@@ -928,7 +927,7 @@ static int dec_hist_idx(int idx)
 }
 
 /* return max util of the cluster of this cpu */
-static unsigned int esgov_get_target_util(struct esgov_policy_S21 *esg_policy,
+static unsigned int esgov_get_target_util(struct esgov_policy *esg_policy,
 						u64 time, unsigned long max)
 {
 	unsigned long max_util = 0;
@@ -953,7 +952,7 @@ static unsigned int esgov_get_target_util(struct esgov_policy_S21 *esg_policy,
 /* update the step_util */
 #define PATIENT_MODE_BUSY_RATIO	950
 static unsigned long esgov_get_step_util(struct esgov_cpu *esg_cpu, unsigned long max) {
-	struct esgov_policy_S21 *esg_policy = per_cpu(esgov_policy_S21, esg_cpu->cpu);
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, esg_cpu->cpu);
 	unsigned int freq;
 	int active_ratio = 0, util, prev_idx, hist_count = 0, idx;
 	int patient_tick, over_cnt = 0;
@@ -996,7 +995,7 @@ static unsigned long esgov_get_step_util(struct esgov_cpu *esg_cpu, unsigned lon
 
  /* update cpu util */
 unsigned long ml_boosted_cpu_util(int cpu);
-static void esgov_update_cpu_util(struct esgov_policy_S21 *esg_policy, u64 time, unsigned long max)
+static void esgov_update_cpu_util(struct esgov_policy *esg_policy, u64 time, unsigned long max)
 {
 	int cpu;
 
@@ -1015,7 +1014,7 @@ static void esgov_update_cpu_util(struct esgov_policy_S21 *esg_policy, u64 time,
 	}
 }
 
-static bool esgov_check_rate_delay(struct esgov_policy_S21 *esg_policy, u64 time)
+static bool esgov_check_rate_delay(struct esgov_policy *esg_policy, u64 time)
 {
 	s64 delta_ns = time - esg_policy->last_freq_update_time;
 
@@ -1041,7 +1040,7 @@ enum {
  * It also means change in frequency level equal to 1 would need to
  * wait 5 ticks for it to take effect.
  */
-static bool esgov_postpone_freq_update(struct esgov_policy_S21 *esg_policy,
+static bool esgov_postpone_freq_update(struct esgov_policy *esg_policy,
 		int cpu, u64 time, unsigned int target_freq, int rapid_scale)
 {
 	unsigned int diff_num_levels, num_periods, elapsed, margin;
@@ -1117,7 +1116,7 @@ static void
 esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 {
 	struct esgov_cpu *esg_cpu = container_of(hook, struct esgov_cpu, update_util);
-	struct esgov_policy_S21 *esg_policy = esg_cpu->esg_policy;
+	struct esgov_policy *esg_policy = esg_cpu->esg_policy;
 	unsigned long max = arch_scale_cpu_capacity(esg_cpu->cpu, 0);
 	unsigned int target_util, target_freq;
 	int rapid_scale;
@@ -1169,8 +1168,7 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 		esg_policy->target_freq = target_freq;
 		esg_policy->last_freq_update_time = time;
 		trace_esg_req_freq(esg_policy->policy->cpu,
-			esg_policy->util, esg_policy->target_freq);
-//			esg_policy->util, esg_policy->target_freq, rapid_scale);
+			esg_policy->util, esg_policy->target_freq, rapid_scale);
 		irq_work_queue(&esg_policy->irq_work);
 	}
 out:
@@ -1179,7 +1177,7 @@ out:
 
 static int esgov_start(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy = policy->governor_data;
+	struct esgov_policy *esg_policy = policy->governor_data;
 	unsigned int cpu;
 
 	/* TODO: We SHOULD implement FREQVAR-RATE-DELAY Base on SchedTune */
@@ -1214,7 +1212,7 @@ static int esgov_start(struct cpufreq_policy *policy)
 
 static void esgov_stop(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy = policy->governor_data;
+	struct esgov_policy *esg_policy = policy->governor_data;
 	unsigned int cpu;
 
 	for_each_cpu(cpu, policy->cpus)
@@ -1228,7 +1226,7 @@ static void esgov_stop(struct cpufreq_policy *policy)
 
 static void esgov_limits(struct cpufreq_policy *policy)
 {
-	struct esgov_policy_S21 *esg_policy = policy->governor_data;
+	struct esgov_policy *esg_policy = policy->governor_data;
 	unsigned long max = arch_scale_cpu_capacity(NULL, policy->cpu);
 	unsigned int target_util, target_freq;
 
@@ -1254,8 +1252,8 @@ static void esgov_limits(struct cpufreq_policy *policy)
 	mutex_unlock(&esg_policy->work_lock);
 }
 
-struct cpufreq_governor energy_step_S21_gov = {
-	.name			= "energy_step_S21",
+struct cpufreq_governor energy_step_gov = {
+	.name			= "energy_step",
 	.owner			= THIS_MODULE,
 	.dynamic_switching	= true,
 	.init			= esgov_init,
@@ -1270,9 +1268,9 @@ struct cpufreq_governor energy_step_S21_gov = {
  * grp_cpu: one of the cpu of target group to get next maximum util
  * dst_cpu: dst_cpu of task
 */
-int get_gov_next_cap_S21(int grp_cpu, int dst_cpu, struct tp_env *env)
+int get_gov_next_cap(int grp_cpu, int dst_cpu, struct tp_env *env)
 {
-	struct esgov_policy_S21 *esg_policy = per_cpu(esgov_policy_S21, grp_cpu);
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, grp_cpu);
 	struct task_struct *p = env->p;
 	int cpu, src_cpu = task_cpu(p);
 	int task_util, max_util = 0;
@@ -1323,8 +1321,8 @@ int get_gov_next_cap_S21(int grp_cpu, int dst_cpu, struct tp_env *env)
 	return max_util;
 }
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ENERGYSTEP_21
-unsigned long cpufreq_governor_get_util_S21(unsigned int cpu)
+#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ENERGYSTEP_S21
+unsigned long cpufreq_governor_get_util(unsigned int cpu)
 {
 	struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
 
@@ -1336,14 +1334,14 @@ unsigned long cpufreq_governor_get_util_S21(unsigned int cpu)
 
 unsigned int cpufreq_governor_get_freq(int cpu)
 {
-	struct esgov_policy_S21 *esg_policy;
+	struct esgov_policy *esg_policy;
 	unsigned int freq;
 	unsigned long flags;
 
 	if (cpu < 0)
 		return 0;
 
-	esg_policy = per_cpu(esgov_policy_S21, cpu);
+	esg_policy = per_cpu(esgov_policy, cpu);
 	if (!esg_policy)
 		return 0;
 
@@ -1356,20 +1354,20 @@ unsigned int cpufreq_governor_get_freq(int cpu)
 
 struct cpufreq_governor *cpufreq_default_governor(void)
 {
-	return &energy_step_S21_gov;
+	return &energy_step_gov;
 }
 #endif
 
 static int esgov_register(void)
 {
-	esg_kobj = kobject_create_and_add("energy_step_S21", ems_kobj);
+	esg_kobj = kobject_create_and_add("energy_step", ems_kobj);
 	if (!esg_kobj)
 		return -EINVAL;
 
 	cpu_pm_register_notifier(&esg_cpu_pm_notifier);
 	emstune_register_mode_update_notifier(&esg_mode_update_notifier);
 
-	return cpufreq_register_governor(&energy_step_S21_gov);
+	return cpufreq_register_governor(&energy_step_gov);
 }
 
 #define DEFAULT_ESG_STEP	(4)
@@ -1411,10 +1409,10 @@ int esgov_pre_init(void)
 
 		if (of_property_read_u32(dn, "pelt-margin", &param->pelt_margin))
 			param->patient_mode = DEFAULT_PELT_MARGIN;
-/*
+
 		if (of_property_read_u32(dn, "pelt-boost", &param->pelt_boost))
 			param->patient_mode = DEFAULT_PELT_BOOST;
-*/
+
 		for_each_cpu(cpu, &param->cpus)
 			per_cpu(esgov_param, cpu) = param;
 	}

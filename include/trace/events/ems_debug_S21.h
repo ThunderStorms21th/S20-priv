@@ -7,10 +7,10 @@
  */
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM ems_debug
+#define TRACE_SYSTEM ems_debug_S21
 
-#if !defined(_TRACE_EMS_DEBUG_H) || defined(TRACE_HEADER_MULTI_READ)
-#define _TRACE_EMS_DEBUG_H
+#if !defined(_TRACE_EMS_DEBUG_S21_H) || defined(TRACE_HEADER_MULTI_READ)
+#define _TRACE_EMS_DEBUG_S21_H
 
 #include <linux/tracepoint.h>
 
