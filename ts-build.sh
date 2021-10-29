@@ -26,7 +26,7 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v1.4"
+export K_VERSION="v1.5"
 export K_NAME="ThundeRStormS-Kernel-S20"
 export K_NAME2="EdYoBlue-Kernel-S20"
 export K_BASE="DUI5"
@@ -52,6 +52,7 @@ DEFCONFIG2=exynos9830-x1slte_defconfig
 DEFCONFIG3=exynos9830-y2slte_defconfig
 DEFCONFIG4=exynos9830-x1sxxx_defconfig
 DEFCONFIG5=exynos9830-y2sxxx_defconfig
+DEFCONFIG6=exynos9830-c2sxxx_defconfig
 DEFCONFIG_TS=ts_defconfig
 DEFCONFIG_ED=ed_defconfig
 ZIP_DATE=`date +%Y%m%d`
@@ -208,6 +209,31 @@ BUILD_KERNEL_986B()
     fi
 }
 
+BUILD_KERNEL_N986B()
+{
+    # Make .config
+	cp -f $(pwd)/arch/arm64/configs/$DEFCONFIG6 $(pwd)/arch/arm64/configs/tmp_defconfig
+	cat $(pwd)/arch/arm64/configs/$DEFCONFIG_TS >> $(pwd)/arch/arm64/configs/tmp_defconfig
+
+    # Compile kernels
+    echo "***** Compiling kernel *****"
+    [ ! -d "out" ] && mkdir out
+    [ ! -d "out/SM-N986B" ] && mkdir out/SM-N986B
+    # SM-N986B
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
+    make -j$(nproc) -C $(pwd) $KERNEL_NAME
+    [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-N986B/Image.gz
+    if [ -e arch/arm64/boot/Image ]; then
+      cp arch/arm64/boot/Image $(pwd)/out/SM-N986B/Image
+      # DTB for Exynos 9830 - SM-N986B
+      echo "***** Compiling Device Tree Blobs *****"
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+      $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtbo.img dt.configs/c2sxxx.cfg -d ${DTB_DIR}/samsung
+    else
+      echo "return to Main menu' 'Kernel STUCK in BUILD!"
+    fi
+}
+
 BUILD_KERNEL_988Bed()
 {
     # Make .config
@@ -339,6 +365,7 @@ BUILD_DTB()
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-985F/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-981B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-986B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
+    $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
     # DTBO for Exynos 9830 SM-988B
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-988B/dtbo.img dt.configs/z3sxxx.cfg -d ${DTB_DIR}/samsung
     # DTBO for Exynos 9830 SM-980F
@@ -349,6 +376,8 @@ BUILD_DTB()
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-981B/dtbo.img dt.configs/x1sxxx.cfg -d ${DTB_DIR}/samsung
     # DTBO for Exynos 9830 SM-986B
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-986B/dtbo.img dt.configs/y2sxxx.cfg -d ${DTB_DIR}/samsung
+    # DTBO for Exynos 9830 SM-N986B
+    $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtbo.img dt.configs/c2sxxx.cfg -d ${DTB_DIR}/samsung
 }
 
 BUILD_RAMDISK_988B()
@@ -469,6 +498,31 @@ BUILD_RAMDISK_986B()
     cd ..
     cd ..
     mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SM986B-boot.img
+    rm -rf $(pwd)/builds/temp
+}
+
+BUILD_RAMDISK_N986B()
+{
+    # Build Ramdisk and boot.img
+    # SM-N986B
+    echo ""
+    echo "Building Ramdisk for SM-N986B"
+    mv $(pwd)/out/SM-N986B/Image $(pwd)/out/SM-N986B/boot.img-kernel
+    mv $(pwd)/out/SM-N986B/dtb.img $(pwd)/out/SM-N986B/boot.img-dtb
+    mkdir $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/aik/. $(pwd)/builds/temp
+    cp -rf $(pwd)/builds/ramdisk/. $(pwd)/builds/temp
+    rm -f $(pwd)/builds/temp/split_img/boot.img-kernel
+    rm -f $(pwd)/builds/temp/split_img/boot.img-dtb
+    mv $(pwd)/out/SM-N986B/boot.img-kernel $(pwd)/builds/temp/split_img/boot.img-kernel
+    mv $(pwd)/out/SM-N986B/boot.img-dtb $(pwd)/builds/temp/split_img/boot.img-dtb
+    echo "Done"
+    cd $(pwd)/builds/temp
+    ./repackimg.sh
+    echo SEANDROIDENFORCE >> image-new.img
+    cd ..
+    cd ..
+    mv $(pwd)/builds/temp/image-new.img $(pwd)/builds/SMN986B-boot.img
     rm -rf $(pwd)/builds/temp
 }
 
@@ -622,6 +676,7 @@ BUILD_FLASHABLES_TS()
     cp -rf SM981B-boot.img temp2/thunderstorm/g981
     cp -rf SM986B-boot.img temp2/thunderstorm/g986
     cp -rf SM988B-boot.img temp2/thunderstorm/g988
+    cp -rf SMN986B-boot.img temp2/thunderstorm/n986
 
     cp -rf SM980F-ed-boot.img temp2/edyo/g980
     cp -rf SM985F-ed-boot.img temp2/edyo/g985
@@ -659,6 +714,8 @@ MAIN()
         BUILD_RAMDISK_980F
         BUILD_KERNEL_985F
         BUILD_RAMDISK_985F
+        BUILD_KERNEL_N986B
+        BUILD_RAMDISK_N986B
 		rm $(pwd)/arch/arm64/configs/tmp_defconfig
         BUILD_KERNEL_988Bed
         BUILD_RAMDISK_988Bed
@@ -700,10 +757,10 @@ echo "*****************************************"
 echo ""
 echo "    CUSTOMIZABLE STOCK SAMSUNG KERNEL"
 echo ""
-echo "         Build Kernel for: S20"
+echo "       Build Kernel for: S20/N20"
 echo ""
 echo ""
-echo "-- Start compiling the kernel."
+echo "    -- Start compiling the kernel. --"
 echo ""
 echo ""
 
