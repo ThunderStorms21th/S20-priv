@@ -19,6 +19,8 @@ MODEL4=G986B
 MODEL4_DESC="SM986B"
 MODEL5=G988B
 MODEL5_DESC="SM988B"
+MODEL6=N986B
+MODEL6_DESC="SMN986B"
 
 sleep 10
 
@@ -30,7 +32,7 @@ rm -f $LOG
     fi
 
     # Create init.d folder
-        mkdir -p /vendor/etc/init.d;
+    mkdir -p /vendor/etc/init.d;
 	chown -R root.root /vendor/etc/init.d;
 	chmod 755 /vendor/etc/init.d;
 
@@ -42,7 +44,7 @@ rm -f $LOG
 	echo "## -- SafetyNet permissions" >> $LOG;
 	chmod 644 /sys/fs/selinux/enforce;
 	chmod 440 /sys/fs/selinux/policy;
-        echo "1" > /sys/fs/selinux/enforce
+    echo "1" > /sys/fs/selinux/enforce
 	echo " " >> $LOG;
 
 	# deepsleep fix
@@ -52,7 +54,7 @@ rm -f $LOG
 	echo "N" > /sys/kernel/debug/debug_enabled
 	echo "N" > /sys/kernel/debug/seclog/seclog_debug
 	echo "0" > /sys/kernel/debug/tracing/tracing_on
-	#echo "0" > /sys/module/lowmemorykiller/parameters/debug_level
+	echo "0" > /sys/module/lowmemorykiller/parameters/debug_level
     echo "0" > /sys/module/alarm_dev/parameters/debug_mask
     echo "0" > /sys/module/binder/parameters/debug_mask
     echo "0" > /sys/module/binder_alloc/parameters/debug_mask
@@ -160,10 +162,11 @@ rm -f $LOG
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
     # echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
     # echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
-    echo "26000" > /sys/devices/platform/18500000.mali/highspeed_clock
+    echo "377000" > /sys/devices/platform/18500000.mali/highspeed_clock
     echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
     echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
     echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable
+
 
    # Misc settings : bbr2, bbr, cubic or westwood
    echo "bbr" > /proc/sys/net/ipv4/tcp_congestion_control
@@ -185,12 +188,12 @@ rm -f $LOG
    echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
    echo "500" > /sys/block/sda/queue/iosched/target_latency
 
-    # Initial ThundeRStormS Stune and CPU set settings
-	echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
+   # Initial ThundeRStormS Stune and CPU set settings
+   echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
 
    ## Kernel Stune											DEFAULT VALUES
    # GLOBAL
-   echo "2" > /dev/stune/schedtune.boost					# 0
+   echo "3" > /dev/stune/schedtune.boost					# 0
    #echo "0" > /dev/stune/schedtune.band					# 0
    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
@@ -250,17 +253,17 @@ rm -f $LOG
    echo "0-5" > /dev/cpuset/dexopt/cpus					    # 0-3
 
    ## CPU Fluid RT
-   #echo "5" > sys/kernel/ems/frt/coregroup0/active_ratio
-   #echo "10" > sys/kernel/ems/frt/coregroup0/active_ratio_boost
+   #echo "10" > sys/kernel/ems/frt/coregroup0/active_ratio
+   #echo "30" > sys/kernel/ems/frt/coregroup0/active_ratio_boost
    #echo "15" > sys/kernel/ems/frt/coregroup0/coverage_ratio
    #echo "20" > sys/kernel/ems/frt/coregroup0/coverage_ratio_boost
 
-   #echo "20" > sys/kernel/ems/frt/coregroup1/active_ratio
+   #echo "25" > sys/kernel/ems/frt/coregroup1/active_ratio
    #echo "30" > sys/kernel/ems/frt/coregroup1/active_ratio_boost
    #echo "5" > sys/kernel/ems/frt/coregroup1/coverage_ratio
    #echo "10" > sys/kernel/ems/frt/coregroup1/coverage_ratio_boost
 
-   #echo "20" > sys/kernel/ems/frt/coregroup2/active_ratio
+   #echo "25" > sys/kernel/ems/frt/coregroup2/active_ratio
    #echo "30" > sys/kernel/ems/frt/coregroup2/active_ratio_boost
    #echo "10" > sys/kernel/ems/frt/coregroup2/coverage_ratio
    #echo "15" > sys/kernel/ems/frt/coregroup2/coverage_ratio_boost
@@ -272,10 +275,12 @@ rm -f $LOG
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "0" > /sys/module/cpuidle/parameters/off
-   echo "powersupersave" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
+   echo "50" > /proc/sys/kernel/sched_rr_timeslice_ms
+   echo "32" > /proc/sys/kernel/sched_nr_migrate
+   echo "1" > /sys/module/cpuidle/parameters/off
+   echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
    echo "0f" > /proc/irq/default_smp_affinity
-   echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask
+   echo "af" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
 
    # Thermal Governors
    # BIG Cluster

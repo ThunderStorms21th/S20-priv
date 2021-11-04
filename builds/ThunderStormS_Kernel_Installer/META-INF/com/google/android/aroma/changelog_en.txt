@@ -1,5 +1,17 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>EdYoBlue or ThunderStormS Kernel v1.5
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, EMS, VM & DTS improvements
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.4
+</*>
+------------------------------------------------
+
 <*>EdYoBlue or ThunderStormS Kernel v1.4
 - Linux 4.19.87
 - Samsung source DUI5

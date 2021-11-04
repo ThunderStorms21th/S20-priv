@@ -51,7 +51,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G980", getprop("ro.boot.bootloader")) then
 ui_print("@G980F Detected");
 ui_print("@Installation : EdYoBlue Kernel");
-package_extract_file("edyo/g980/SM980F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("edyo/g980/SMG980F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system1/system", "/system_root/system");
 endif;
@@ -60,7 +60,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G980", getprop("ro.boot.bootloader")) then
 ui_print("@G980F Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/g980/SM980F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/g980/SMG980F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 package_extract_dir("bootstock", "/system_root/system/media");
@@ -72,7 +72,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G981", getprop("ro.boot.bootloader")) then
 ui_print("@G981B Detected");
 ui_print("@Installation : EdYoBlue Kernel");
-package_extract_file("edyo/g981/SM981B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("edyo/g981/SMG981B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system1/system", "/system_root/system");
 endif;
@@ -81,7 +81,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G981", getprop("ro.boot.bootloader")) then
 ui_print("@G981B Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/g981/SM981B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/g981/SMG981B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 package_extract_dir("bootstock", "/system_root/system/media");
@@ -93,7 +93,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G985", getprop("ro.boot.bootloader")) then
 ui_print("@G985F Detected");
 ui_print("@Installation : EdYoBlue Kernel");
-package_extract_file("edyo/g985/SM985F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("edyo/g985/SMG985F-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system1/system", "/system_root/system");
 endif;
@@ -102,7 +102,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G985", getprop("ro.boot.bootloader")) then
 ui_print("@G985F Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/g985/SM985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/g985/SMG985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 package_extract_dir("bootstock", "/system_root/system/media");
@@ -114,7 +114,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G986", getprop("ro.boot.bootloader")) then
 ui_print("@G986B Detected");
 ui_print("@Installation : EdYoBlue Kernel");
-package_extract_file("edyo/g986/SM986B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("edyo/g986/SMG986B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system1/system", "/system_root/system");
 endif;
@@ -123,7 +123,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G986B", getprop("ro.boot.bootloader")) then
 ui_print("@G986B Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/g986/SM986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/g986/SMG986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 package_extract_dir("bootstock", "/system_root/system/media");
@@ -135,7 +135,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G988", getprop("ro.boot.bootloader")) then
 ui_print("@G988B Detected");
 ui_print("@Installation : EdYoBlue Kernel");
-package_extract_file("edyo/g988/SM988B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("edyo/g988/SMG988B-ed-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system1/system", "/system_root/system");
 endif;
@@ -144,7 +144,7 @@ if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G988", getprop("ro.boot.bootloader")) then
 ui_print("@G988B Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/g988/SM988B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/g988/SMG988B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 package_extract_dir("bootstock", "/system_root/system/media");

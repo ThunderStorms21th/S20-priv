@@ -27,8 +27,8 @@ on boot
    write /sys/bus/workqueue/devices/writeback/cpumask 1
 
    # I/O sched settings
-   write /sys/block/sda/queue/nr_requests 256
-   write /sys/block/mmcblk0/queue/nr_requests 256
+   write /sys/block/sda/queue/nr_requests 128
+   write /sys/block/mmcblk0/queue/nr_requests 128
    write /sys/block/sda/queue/iostats 0
    write /sys/block/mmcblk0/queue/iostats 0
    # VM
@@ -99,7 +99,7 @@ on boot
     setprop ro.mot.buttonlight.timeout 0
 
 ## VM
-    write /proc/sys/vm/page-cluster 1
+    write /proc/sys/vm/page-cluster 0
 
 #   stop logd
 

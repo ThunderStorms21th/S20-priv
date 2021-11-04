@@ -19,6 +19,8 @@ MODEL4=G986B
 MODEL4_DESC="SM986B"
 MODEL5=G988B
 MODEL5_DESC="SM988B"
+MODEL6=N986B
+MODEL6_DESC="SMN986B"
 
 sleep 10
 
@@ -52,7 +54,7 @@ rm -f $LOG
 	echo "N" > /sys/kernel/debug/debug_enabled
 	echo "N" > /sys/kernel/debug/seclog/seclog_debug
 	echo "0" > /sys/kernel/debug/tracing/tracing_on
-	#echo "0" > /sys/module/lowmemorykiller/parameters/debug_level
+	echo "0" > /sys/module/lowmemorykiller/parameters/debug_level
     echo "0" > /sys/module/alarm_dev/parameters/debug_mask
     echo "0" > /sys/module/binder/parameters/debug_mask
     echo "0" > /sys/module/binder_alloc/parameters/debug_mask
@@ -191,7 +193,7 @@ rm -f $LOG
 
    ## Kernel Stune											DEFAULT VALUES
    # GLOBAL
-   echo "2" > /dev/stune/schedtune.boost					# 0
+   echo "3" > /dev/stune/schedtune.boost					# 0
    #echo "0" > /dev/stune/schedtune.band					# 0
    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
@@ -273,10 +275,12 @@ rm -f $LOG
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
+   echo "50" > /proc/sys/kernel/sched_rr_timeslice_ms
+   echo "32" > /proc/sys/kernel/sched_nr_migrate
    echo "1" > /sys/module/cpuidle/parameters/off
-   echo "powersupersave" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
+   echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
    echo "0f" > /proc/irq/default_smp_affinity
-   echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask
+   echo "af" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
 
    # Thermal Governors
    # BIG Cluster
