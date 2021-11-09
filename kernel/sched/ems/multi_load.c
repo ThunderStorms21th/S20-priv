@@ -5,6 +5,8 @@
  * Park Bumgyu <bumgyu.park@samsung.com>
  */
 
+#include <linux/sched.h>
+
 #include <trace/events/ems.h>
 #include <trace/events/ems_debug.h>
 
@@ -1206,6 +1208,22 @@ __update_cpu_active_ratio(int cpu, struct part *pa, u64 now, int boost)
 
 	pa->period_start += period_size * period_count;
 	pa->last_updated = now;
+}
+
+static DEFINE_PER_CPU(struct part, part);
+
+int get_part_hist_idx(int cpu)
+{
+	struct part *pa = &per_cpu(part, cpu);
+
+	return pa->hist_idx;
+}
+
+int get_part_hist_value(int cpu, int idx)
+{
+	struct part *pa = &per_cpu(part, cpu);
+
+	return pa->hist[idx];
 }
 
 /********************************************************/

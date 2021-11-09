@@ -364,6 +364,56 @@ TRACE_EVENT(esg_cpu_step_util,
 			__entry->max, __entry->util)
 );
 
+/*
+ * Tracepoint for slack timer func called
+ */
+TRACE_EVENT(esgov_slack_func,
+
+	TP_PROTO(int cpu),
+
+	TP_ARGS(cpu),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+	),
+
+	TP_printk("cpu=%d SLACK EXPIRED", __entry->cpu)
+);
+
+/*
+ * Tracepoint for detalis of slack timer func called
+ */
+TRACE_EVENT(esgov_slack,
+
+	TP_PROTO(int cpu, unsigned long util,
+		unsigned long min, unsigned long action, int ret),
+
+	TP_ARGS(cpu, util, min, action, ret),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(unsigned long, util)
+		__field(unsigned long, min)
+		__field(unsigned long, action)
+		__field(int, ret)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+		__entry->util = util;
+		__entry->min = min;
+		__entry->action = action;
+		__entry->ret = ret;
+	),
+
+	TP_printk("cpu=%d util=%ld min=%ld action=%ld ret=%d", __entry->cpu,
+			__entry->util, __entry->min, __entry->action, __entry->ret)
+);
+
 TRACE_EVENT(esg_migov_boost,
 
 	TP_PROTO(int cpu, int boost, int util, int boosted_util),

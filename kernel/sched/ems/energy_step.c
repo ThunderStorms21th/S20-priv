@@ -14,21 +14,22 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/slab.h>
 #include <linux/cpu_pm.h>
-#include <linux/pm_qos.h>
 #include <linux/sched/cpufreq.h>
-
-#include <trace/events/ems.h>
-#include <trace/events/ems_debug.h>
 
 #include "../sched.h"
 #include "ems.h"
+
+#include <trace/events/ems.h>
+#include <trace/events/ems_debug.h>
 
 struct esgov_policy {
 	struct cpufreq_policy	*policy;
 	struct cpumask		cpus;
 	struct kobject		kobj;
 	raw_spinlock_t		update_lock;
+	struct rw_semaphore	rwsem;
 	bool			enabled;	/* whether esg is current cpufreq governor or not */
+	bool			running;	/* whether esg is running or not */
 
 	unsigned int		last_caller;
 	unsigned int		target_freq;	/* target frequency at the current status */
@@ -40,18 +41,30 @@ struct esgov_policy {
 	unsigned long		step_power;	/* allowed energy at a step */
 	s64			rate_delay_ns;
 	int			patient_mode;
+	int			pelt_margin;
+	int			pelt_boost;
+	int			up_rate_limit_ns;
+	int			down_rate_limit_ns;
+	int			rapid_scale_up;
+	int			rapid_scale_down;
+
+	/* for clamping util */
+	int			uclamp_min;
+	int			uclamp_max;
+	int			uclamp_monitor_len;
+	int			uclamp_busy_ratio;
+
+	/* slack timer */
+	int			slack_expired_time_ms;
+
+	/* no work freq press */
+	int			no_work_press_ratio;
 
 	/* Tracking min max information */
 	int			min_cap;	/* allowed max capacity */
 	int			max_cap;	/* allowed min capacity */
 	int			min;		/* min freq */
 	int			max;		/* max freq */
-
-	/* PM PoS Fields */
-	unsigned int		qos_min_class;
-	unsigned int		qos_max_class;
-	struct notifier_block	qos_min_notifier;
-	struct notifier_block	qos_max_notifier;
 
 	/* The next fields are for frequency change work */
 	bool			work_in_progress;
@@ -60,9 +73,6 @@ struct esgov_policy {
 	struct			mutex work_lock;
 	struct			kthread_worker worker;
 	struct task_struct	*thread;
-
-	/* For MIGov boost */
-	int			boost;
 };
 
 struct esgov_cpu {
@@ -84,58 +94,41 @@ struct esgov_cpu {
 	u64			last_update;
 
 	unsigned long		min;		/* min util matched with min_cap */
+
+	bool			no_work_press;
+};
+
+struct esgov_param {
+	struct cpumask		cpus;
+	int			step;
+	int			patient_mode;
+	int			pelt_margin;
+	int			pelt_boost;
+	int			up_rate_limit;
+	int			down_rate_limit;
+	int			rapid_scale_up;
+	int			rapid_scale_down;
 };
 
 struct kobject *esg_kobj;
 DEFINE_PER_CPU(struct esgov_policy *, esgov_policy);
 DEFINE_PER_CPU(struct esgov_cpu, esgov_cpu);
-bool esg_apply_migov;
+DEFINE_PER_CPU(struct esgov_param *, esgov_param);
 
 /*************************************************************************/
 /*			       HELPER FUNCTION				 */
 /************************************************************************/
-static struct esgov_policy * esg_find_esg_pol_qos_class(int class)
+static void esg_update_freq_range(struct cpufreq_policy *data)
 {
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		struct esgov_policy *esg_policy = per_cpu(esgov_policy, cpu);
-
-		if (unlikely(!esg_policy))
-			continue;
-
-		if ((esg_policy->qos_min_class == class) ||
-			(esg_policy->qos_max_class == class))
-			return esg_policy;
-	}
-
-	return NULL;
-}
-
-static void esg_update_step(struct esgov_policy *esg_policy, int step)
-{
-	int cpu = cpumask_first(&esg_policy->cpus);
-
-	esg_policy->step = step;
-	esg_policy->step_power = find_step_power(cpu, esg_policy->step);
-}
-
-static void esg_update_freq_range(struct cpufreq_policy *policy)
-{
-	unsigned int qos_min, qos_max, new_min, new_max, new_min_idx, new_max_idx;
-	struct esgov_policy *esg_policy = per_cpu(esgov_policy, policy->cpu);
+	unsigned int new_min, new_max, new_min_idx, new_max_idx;
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, data->cpu);
+	struct cpufreq_policy *policy = esg_policy->policy;
 
 	if (unlikely((!esg_policy) || !esg_policy->enabled))
 		return;
 
-	if (cpumask_empty(policy->cpus))
-		return;
-
-	qos_min = pm_qos_request(esg_policy->qos_min_class);
-	qos_max = pm_qos_request(esg_policy->qos_max_class);
-
-	new_min = max(policy->min, qos_min);
-	new_max = min(policy->max, qos_max);
+	new_min = data->min;
+	new_max = data->max;
 
 	if (esg_policy->min == new_min && esg_policy->max == new_max)
 		return;
@@ -158,112 +151,178 @@ static void esg_update_freq_range(struct cpufreq_policy *policy)
 	trace_esg_update_limit(policy->cpu, esg_policy->min_cap, esg_policy->max_cap);
 }
 
-static int esg_cpufreq_policy_callback(struct notifier_block *nb,
-				unsigned long event, void *data)
+static void esg_update_step(struct esgov_policy *esg_policy, int step)
 {
-	struct cpufreq_policy *policy = data;
+	int cpu = cpumask_first(&esg_policy->cpus);
 
-	if (event == CPUFREQ_NOTIFY)
-		esg_update_freq_range(policy);
-
-	return NOTIFY_OK;
+	esg_policy->step = step;
+	esg_policy->step_power = find_step_power(cpu, esg_policy->step);
 }
 
-static struct notifier_block esg_cpufreq_policy_notifier = {
-	.notifier_call = esg_cpufreq_policy_callback,
-};
-
-static int esg_cpufreq_pm_qos_callback(struct notifier_block *nb,
-					unsigned long val, void *v)
+static void
+esg_sync_param(struct esgov_policy *esg_policy, struct esgov_param *param)
 {
-	int pm_qos_class = *((int *)v);
-	struct esgov_policy *esg_pol;
+	esg_update_step(esg_policy, param->step);
 
-	esg_pol = esg_find_esg_pol_qos_class(pm_qos_class);
-	if (unlikely(!esg_pol))
-		return NOTIFY_OK;
+	esg_policy->patient_mode = param->patient_mode;
+	esg_policy->pelt_margin = param->pelt_margin;
+	esg_policy->pelt_boost = param->pelt_boost;
 
-	down_read(&esg_pol->policy->rwsem);
-	esg_update_freq_range(esg_pol->policy);
-	up_read(&esg_pol->policy->rwsem);
-
-	return NOTIFY_OK;
+	esg_policy->up_rate_limit_ns = param->up_rate_limit * NSEC_PER_MSEC;
+	esg_policy->down_rate_limit_ns = param->down_rate_limit * NSEC_PER_MSEC;
+	esg_policy->rapid_scale_up = param->rapid_scale_up;
+	esg_policy->rapid_scale_down = param->rapid_scale_down;
 }
 
-/************************************************************************/
-/*				BOOST				 	*/
-/************************************************************************/
 static int esg_mode_update_callback(struct notifier_block *nb,
 				unsigned long val, void *v)
 {
 	struct emstune_set *cur_set = (struct emstune_set *)v;
 	struct esgov_policy *esg_policy;
+	struct esgov_param *param;
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
 		if (cpu != cpumask_first(cpu_coregroup_mask(cpu)))
 			continue;
 
+		param = per_cpu(esgov_param, cpu);
+		if (unlikely(!param))
+			continue;
+
+		param->step = cur_set->esg.step[cpu];
+		param->patient_mode = cur_set->esg.patient_mode[cpu];
+		param->pelt_margin = cur_set->esg.pelt_margin[cpu];
+		param->pelt_boost = cur_set->esg.pelt_boost[cpu];
+		param->up_rate_limit = cur_set->esg.up_rate_limit;
+		param->down_rate_limit = cur_set->esg.down_rate_limit;
+		param->rapid_scale_up = cur_set->esg.rapid_scale_up;
+		param->rapid_scale_down = cur_set->esg.rapid_scale_down;
+
 		esg_policy = per_cpu(esgov_policy, cpu);
 		if (unlikely((!esg_policy) || !esg_policy->enabled))
 			continue;
 
-		esg_update_step(esg_policy, cur_set->esg.step[cpu]);
-		esg_policy->patient_mode = cur_set->esg.patient_mode[cpu];
+		esg_sync_param(esg_policy, param);
 	}
-
-	esg_apply_migov = cur_set->migov.migov_en;
 
 	return NOTIFY_OK;
 }
-static struct notifier_block esg_mode_update_notifier = {
-	.notifier_call = esg_mode_update_callback,
+
+/*********************************************************************/
+/* 			      SLACK TIMER			     */
+/*********************************************************************/
+struct esgov_slack_timer {
+	/* for slack timer */
+	unsigned long min;
+	int enabled;
+	struct timer_list timer;
 };
 
-int esg_get_migov_boost(int cpu)
+/* slack timer per cpu */
+static DEFINE_PER_CPU(struct esgov_slack_timer, esgov_timer);
+
+static void slack_update_min(struct cpufreq_policy *policy)
 {
-	struct esgov_policy *esg_policy = per_cpu(esgov_policy, cpu);
+	unsigned int cpu;
+	unsigned long max_cap, min_cap;
+	struct esgov_slack_timer *slack_timer;
 
-	if (unlikely((!esg_policy) || !esg_policy->enabled))
-		return 0;
+	max_cap = arch_scale_cpu_capacity(NULL, policy->cpu);
 
-	return esg_policy->boost;
+	/* min_cap is minimum value making higher frequency than policy->min */
+	min_cap = (max_cap * policy->min) / policy->max;
+	min_cap -= 1;
+
+	for_each_cpu(cpu, policy->cpus) {
+		slack_timer = &per_cpu(esgov_timer, cpu);
+		slack_timer->min = min_cap;
+	}
 }
 
-void esg_set_migov_boost(int cpu, int boost)
+static s64 get_next_event_time_ms(void)
 {
-	struct esgov_policy *esg_policy = per_cpu(esgov_policy, cpu);
-
-	if (unlikely((!esg_policy) || !esg_policy->enabled))
-		return;
-
-	esg_policy->boost = boost;
+	return ktime_to_ms(ktime_sub(tick_nohz_get_next_hrtimer(), ktime_get()));
 }
 
-static int esg_apply_migov_boost(int cpu, int util)
+static int need_slack_timer(unsigned int cpu)
 {
-	struct esgov_policy *esg_policy = per_cpu(esgov_policy, cpu);
-	int capacity, boosted_util = 0, margin = 0, boost;
+	struct esgov_slack_timer *slack_timer = &per_cpu(esgov_timer, cpu);
+	struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
+	unsigned long util = esg_cpu ? esg_cpu->util : 0;
 
-	capacity = esg_policy->max_cap;
-	boost = esg_policy->boost;
+	if ((util > slack_timer->min) &&
+		(get_next_event_time_ms() > esg_cpu->esg_policy->slack_expired_time_ms))
+		return 1;
 
-	if (boost >= 0) {
-		if (capacity > util) {
-			margin = capacity - util;
-			margin *= boost;
-		} else
-			margin  = 0;
-	} else
-		margin = util * boost;
+	return 0;
+}
 
-	margin = margin / 100;  // 100
+static void slack_nop_timer(struct timer_list *timer)
+{
+	/*
+	 * The purpose of slack-timer is to wake up the CPU from IDLE, in order
+	 * to decrease its frequency if it is not set to minimum already.
+	 *
+	 * This is important for platforms where CPU with higher frequencies
+	 * consume higher power even at IDLE.
+	 */
+	trace_esgov_slack_func(smp_processor_id());
+}
 
-	boosted_util = util + margin;
+static int esgov_cpu_pm_callback(struct notifier_block *nb,
+				 unsigned long event, void *v)
+{
+	unsigned int cpu = raw_smp_processor_id();
+	struct esgov_slack_timer *slack_timer = &per_cpu(esgov_timer, cpu);
+	struct timer_list *timer = &slack_timer->timer;
+	struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
+	unsigned long util = esg_cpu ? esg_cpu->util : 0;
 
-	trace_esg_migov_boost(cpu, boost, util, boosted_util);
+	if (!esg_cpu->esg_policy || !esg_cpu->esg_policy->running)
+		return NOTIFY_OK;
 
-	return boosted_util;
+	switch (event) {
+	case CPU_PM_ENTER:
+		if (timer_pending(timer))
+			del_timer_sync(timer);
+
+		if (need_slack_timer(cpu)) {
+			timer->expires = jiffies +
+				 msecs_to_jiffies(esg_cpu->esg_policy->slack_expired_time_ms);
+			add_timer_on(timer, cpu);
+
+			trace_esgov_slack(cpu, util, slack_timer->min, event, 1);
+		}
+		break;
+	case CPU_PM_EXIT:
+		if (timer_pending(timer)) {
+			del_timer_sync(timer);
+
+			trace_esgov_slack(cpu, util, slack_timer->min, event, -1);
+		}
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block esg_cpu_pm_notifier = {
+	.notifier_call = esgov_cpu_pm_callback,
+};
+
+#define DEFAULT_SLACK_EXPIRED_TIME     (20)
+static void esgov_init_slack_timer(struct cpufreq_policy *policy)
+{
+	int cpu;
+
+	for_each_cpu(cpu, policy->related_cpus) {
+		struct esgov_slack_timer *slack_timer = &per_cpu(esgov_timer, cpu);
+
+		/* Initialize slack-timer */
+		slack_timer->min = ULONG_MAX;
+		timer_setup(&slack_timer->timer, slack_nop_timer, TIMER_PINNED);
+	}
 }
 
 /*************************************************************************/
@@ -389,6 +448,11 @@ static unsigned long esgov_iowait_apply(struct esgov_cpu *esg_cpu,
 	return boost;
 }
 
+
+static struct notifier_block esg_mode_update_notifier = {
+	.notifier_call = esg_mode_update_callback,
+};
+
 struct esg_attr {
 	struct attribute attr;
 	ssize_t (*show)(struct kobject *, char *);
@@ -455,6 +519,30 @@ esg_show(patient_mode);
 esg_store(patient_mode);
 esg_attr_rw(patient_mode);
 
+esg_show(uclamp_min);
+esg_store(uclamp_min);
+esg_attr_rw(uclamp_min);
+
+esg_show(uclamp_max);
+esg_store(uclamp_max);
+esg_attr_rw(uclamp_max);
+
+esg_show(uclamp_monitor_len);
+esg_store(uclamp_monitor_len);
+esg_attr_rw(uclamp_monitor_len);
+
+esg_show(uclamp_busy_ratio);
+esg_store(uclamp_busy_ratio);
+esg_attr_rw(uclamp_busy_ratio);
+
+esg_show(slack_expired_time_ms);
+esg_store(slack_expired_time_ms);
+esg_attr_rw(slack_expired_time_ms);
+
+esg_show(no_work_press_ratio);
+esg_store(no_work_press_ratio);
+esg_attr_rw(no_work_press_ratio);
+
 static ssize_t show(struct kobject *kobj, struct attribute *at, char *buf)
 {
 	struct esg_attr *fvattr = container_of(at, struct esg_attr, attr);
@@ -476,6 +564,12 @@ static const struct sysfs_ops esg_sysfs_ops = {
 static struct attribute *esg_attrs[] = {
 	&step_attr.attr,
 	&patient_mode_attr.attr,
+	&uclamp_min_attr.attr,
+	&uclamp_max_attr.attr,
+	&uclamp_monitor_len_attr.attr,
+	&uclamp_busy_ratio_attr.attr,
+	&slack_expired_time_ms_attr.attr,
+	&no_work_press_ratio_attr.attr,
 	NULL
 };
 
@@ -486,43 +580,27 @@ static struct kobj_type ktype_esg = {
 
 static struct esgov_policy *esgov_policy_alloc(struct cpufreq_policy *policy)
 {
-	struct device_node *dn = NULL;
 	struct esgov_policy *esg_policy;
-	const char *buf;
-	char name[15];
-	int val;
-
-	/* find DT for this policy */
-	snprintf(name, sizeof(name), "esgov-pol%d", policy->cpu);
-	dn = of_find_node_by_type(dn, name);
-	if (!dn)
-		goto init_failed;
+	struct esgov_param *param;
 
 	/* allocate esgov_policy */
 	esg_policy = kzalloc(sizeof(struct esgov_policy), GFP_KERNEL);
 	if (!esg_policy)
 		goto init_failed;
 
-	/* initialize shared data of esgov_policy */
-	if (of_property_read_string(dn, "shared-cpus", &buf))
-		goto free_allocation;
-
-	cpulist_parse(buf, &esg_policy->cpus);
-	cpumask_and(&esg_policy->cpus, &esg_policy->cpus, policy->cpus);
+	/* Init cpumask */
+	cpumask_copy(&esg_policy->cpus, policy->related_cpus);
 	if (cpumask_weight(&esg_policy->cpus) == 0)
 		goto free_allocation;
 
-	/* Init tunable knob */
-	if (of_property_read_u32(dn, "step", &val))
-		goto free_allocation;
-	esg_update_step(esg_policy, val);
+	param = per_cpu(esgov_param, cpumask_any(&esg_policy->cpus));
+	esg_sync_param(esg_policy, param);
 
-	if (of_property_read_u32(dn, "patient_mode", &val))
-		goto free_allocation;
-	esg_policy->patient_mode = val;
+	esgov_init_slack_timer(policy);
 
-    int rate_multipler = 10 / 2; // added multipler for more precision
-	esg_policy->rate_delay_ns = rate_multipler * NSEC_PER_MSEC;  // 4 * NSEC_PER_MSEC
+	esg_policy->rate_delay_ns = 4 * NSEC_PER_MSEC;
+	esg_policy->up_rate_limit_ns = 4 * NSEC_PER_MSEC;
+	esg_policy->down_rate_limit_ns = 4 * NSEC_PER_MSEC;
 
 	/* Init Sysfs */
 	if (kobject_init_and_add(&esg_policy->kobj, &ktype_esg, esg_kobj,
@@ -531,20 +609,7 @@ static struct esgov_policy *esgov_policy_alloc(struct cpufreq_policy *policy)
 
 	/* init spin lock */
 	raw_spin_lock_init(&esg_policy->update_lock);
-
-	/* init pm qos */
-	if (of_property_read_u32(dn, "pm_qos-min-class", &esg_policy->qos_min_class))
-		goto free_allocation;
-	if (of_property_read_u32(dn, "pm_qos-max-class", &esg_policy->qos_max_class))
-		goto free_allocation;
-
-	esg_policy->qos_min_notifier.notifier_call = esg_cpufreq_pm_qos_callback;
-	esg_policy->qos_min_notifier.priority = INT_MAX;
-	esg_policy->qos_max_notifier.notifier_call = esg_cpufreq_pm_qos_callback;
-	esg_policy->qos_max_notifier.priority = INT_MAX;
-
-	pm_qos_add_notifier(esg_policy->qos_min_class, &esg_policy->qos_min_notifier);
-	pm_qos_add_notifier(esg_policy->qos_max_class, &esg_policy->qos_max_notifier);
+	init_rwsem(&esg_policy->rwsem);
 
 	esg_policy->policy = policy;
 
@@ -610,7 +675,7 @@ static int esgov_kthread_create(struct esgov_policy *esg_policy)
 		return ret;
 	}
 
-	dn = of_find_node_by_path("/esg");
+	dn = of_find_node_by_path("/ems/esg");
 	if (dn) {
 		struct cpumask mask;
 		const char *buf;
@@ -619,7 +684,8 @@ static int esgov_kthread_create(struct esgov_policy *esg_policy)
 		if (!of_property_read_string(dn, "thread-run-on", &buf))
 			cpulist_parse(buf, &mask);
 
-		kthread_bind_mask(thread, &mask);
+		set_cpus_allowed_ptr(thread, &mask);
+		thread->flags |= PF_NO_SETAFFINITY;
 	}
 
 	esg_policy->thread = thread;
@@ -665,6 +731,7 @@ static int esgov_init(struct cpufreq_policy *policy)
 		per_cpu(esgov_policy, cpu) = esg_policy;
 
 complete_esg_init:
+	down_write(&esg_policy->rwsem);
 	policy->governor_data = esg_policy;
 	esg_policy->min = policy->min;
 	esg_policy->max = policy->max;
@@ -672,6 +739,11 @@ complete_esg_init:
 	esg_policy->max_cap = find_allowed_capacity(policy->cpu, policy->max, 0);
 	esg_policy->enabled = true;;
 	esg_policy->last_caller = UINT_MAX;
+	esg_policy->uclamp_min = 0;
+	esg_policy->uclamp_max = SCHED_CAPACITY_SCALE;
+	esg_policy->uclamp_monitor_len = 1;	/* Default 1 window == 4ms */
+	esg_policy->uclamp_busy_ratio = 80;	/* Default 80% */
+	up_write(&esg_policy->rwsem);
 
 	return 0;
 
@@ -688,8 +760,10 @@ static void esgov_exit(struct cpufreq_policy *policy)
 {
 	struct esgov_policy *esg_policy = per_cpu(esgov_policy, policy->cpu);
 
-	esg_policy->enabled = false;
+	down_write(&esg_policy->rwsem);
+	esg_policy->enabled = false;;
 	policy->governor_data = NULL;
+	up_write(&esg_policy->rwsem);
 }
 
 static unsigned int get_next_freq(struct esgov_policy *esg_policy,
@@ -698,43 +772,125 @@ static unsigned int get_next_freq(struct esgov_policy *esg_policy,
 	struct cpufreq_policy *policy = esg_policy->policy;
 	unsigned int freq;
 
-	freq = (policy->user_policy.max * util) / max;
+	freq = (policy->cpuinfo.max_freq * util) / max;
+
 	freq = cpufreq_driver_resolve_freq(policy, freq);
 	return clamp_val(freq, esg_policy->min, esg_policy->max);
 }
 
+#define HIST_SIZE 10
+#define COND_LOWER_BOUNDARY	(0)
+#define COND_UPPER_BOUNDARY	(1)
+static unsigned int
+esgov_apply_uclamp(struct esgov_cpu *esg_cpu, unsigned int orig_util)
+{
+	struct esgov_policy *esg_policy = per_cpu(esgov_policy, esg_cpu->cpu);
+	int hist_idx, cur_idx;
+	int active_ratio, busy_ratio;
+	int total_indices;
+	int check_cond;
+
+	if (unlikely(!esg_policy))
+		return orig_util;
+
+	/* Return original util if it is between uclamp min/max */
+	if (esg_policy->uclamp_min <= orig_util && orig_util <= esg_policy->uclamp_max)
+		return orig_util;
+
+	/* What's a condition which we have to keep in mind */
+	if (orig_util < esg_policy->uclamp_min)
+		check_cond = COND_LOWER_BOUNDARY;
+	else
+		check_cond = COND_UPPER_BOUNDARY;
+
+	/*
+	 * Let's traversal consecutive windows of active ratio by total_indices times
+	 * to check whether there's a non-busy window exists or not.
+	 */
+	hist_idx = get_part_hist_idx(esg_cpu->cpu);
+	cur_idx = hist_idx ? hist_idx - 1 : HIST_SIZE - 1;
+
+	busy_ratio = (SCHED_CAPACITY_SCALE * esg_policy->uclamp_busy_ratio) / 100;
+	total_indices = esg_policy->uclamp_monitor_len;
+	while (total_indices) {
+		active_ratio = get_part_hist_value(esg_cpu->cpu, cur_idx);
+		if (active_ratio < busy_ratio)
+			break;
+
+		total_indices--;
+		cur_idx = cur_idx ? cur_idx - 1 : HIST_SIZE - 1;
+	};
+
+	/*
+	 * total_indices != 0 means there's a non-busy window.
+	 * total_indices == 0 means all windows we've tranversaled are busy.
+	 */
+	if (check_cond == COND_LOWER_BOUNDARY)
+		return total_indices ? orig_util : esg_policy->uclamp_min;
+	else
+		return total_indices ? esg_policy->uclamp_max : orig_util;
+}
+
+static int esg_get_boost_pelt_util(int capacity, int util, int boost)
+{
+	long long margin;
+
+	if (!boost)
+		return util;
+
+	if (boost > 0) {
+		margin = max(capacity - util, 0) * boost;
+	} else {
+		margin = util * boost;
+	}
+	margin /= 100;
+
+	return util + margin;
+}
+
+#define FREQ_UPDATE_BIT		(1 << 31)
 /* return the max_util of this cpu */
 static unsigned int esgov_calc_cpu_target_util(struct esgov_cpu *esg_cpu,
 			int max, int org_pelt_util, int pelt_util_diff, int nr_running)
 {
 	int util, step_util, pelt_util, io_util;
-	int org_io_util = esg_cpu->io_util;
-	int org_step_util = esg_cpu->step_util;
+	int org_io_util, org_step_util;
+	int pelt_margin, pelt_boost;
+
+	if (unlikely(!esg_cpu->esg_policy))
+		return org_pelt_util;
+
+	org_io_util = esg_cpu->io_util;
+	org_step_util = esg_cpu->step_util;
+	pelt_margin = esg_cpu->esg_policy->pelt_margin;
+	pelt_boost = esg_cpu->esg_policy->pelt_boost;
 
 	/* calculate boost util */
 	io_util = org_io_util;
 
 	/*
 	 * calculate pelt_util
-	 * apply pelt_util_diff and then apply 25% margin to sched_util
+	 * add pelt_util_diff and then apply pelt-margin to sched-util
 	 * pelt_util_diff: util_diff by migrating task
 	 */
 	pelt_util = org_pelt_util + pelt_util_diff;
 	pelt_util = max(pelt_util, 0);
+	if (pelt_util > 0) {
+		pelt_util += pelt_util * pelt_margin / 100;
+		pelt_util = esg_get_boost_pelt_util(capacity_cpu(esg_cpu->cpu, 0),
+				pelt_util, pelt_boost);
+		pelt_util = min(max, pelt_util);
+	}
 
-	if (!esg_apply_migov)
-		pelt_util = pelt_util + (pelt_util >> 2);
-	else
-		pelt_util = esg_apply_migov_boost(esg_cpu->cpu, pelt_util);
-
-	pelt_util = min(max, pelt_util);
+	pelt_util = nr_running & ~FREQ_UPDATE_BIT ?  pelt_util :
+			pelt_util * esg_cpu->esg_policy->no_work_press_ratio / 100;
 
 	/*
 	 * calculate step util
 	 * if there is no running task, step util is always 0
 	 */
-	step_util = nr_running ? org_step_util : 0;
-	step_util = (esg_cpu->active_ratio == 1024) ? step_util : 0;
+	step_util = nr_running & ~FREQ_UPDATE_BIT ? org_step_util : 0;
+	step_util = (esg_cpu->active_ratio == SCHED_CAPACITY_SCALE) ? step_util : 0;
 
 	/* find max util */
 	util = max(pelt_util, step_util);
@@ -743,12 +899,18 @@ static unsigned int esgov_calc_cpu_target_util(struct esgov_cpu *esg_cpu,
 	/* apply emstune_boost */
 	util = emstune_freq_boost(esg_cpu->cpu, util);
 
-	if (nr_running == -1)
-		trace_esg_cpu_util(esg_cpu->cpu, nr_running, pelt_util_diff, org_io_util,
-			io_util, org_step_util, step_util, org_pelt_util, pelt_util, max, util);
+	/* apply esgov uclamp */
+	util = esgov_apply_uclamp(esg_cpu, util);
 
 	return util;
+}
 
+static int dec_hist_idx(int idx)
+{
+	idx = idx - 1;
+	if (idx < 0)
+		return HIST_SIZE - 1;
+	return idx;
 }
 
 /* return max util of the cluster of this cpu */
@@ -761,9 +923,11 @@ static unsigned int esgov_get_target_util(struct esgov_policy *esg_policy,
 	/* get max util in the cluster */
 	for_each_cpu(cpu, esg_policy->policy->cpus) {
 		struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
+		int nr_running = cpu_rq(cpu)->nr_running;
 
 		esg_cpu->util = esgov_calc_cpu_target_util(
-					esg_cpu, max, esg_cpu->pelt_util, 0, -1);
+					esg_cpu, max, esg_cpu->pelt_util,
+					0, nr_running | FREQ_UPDATE_BIT);
 
 		if (esg_cpu->util > max_util)
 			max_util = esg_cpu->util;
@@ -772,42 +936,37 @@ static unsigned int esgov_get_target_util(struct esgov_policy *esg_policy,
 	return max_util;
 }
 
-#define HIST_SIZE 10
-static int dec_hist_idx(int idx)
-{
-	idx = idx - 1;
-	if (idx < 0)
-		return HIST_SIZE - 1;
-	return idx;
-}
-
 /* update the step_util */
+#define PATIENT_MODE_BUSY_RATIO	950
 static unsigned long esgov_get_step_util(struct esgov_cpu *esg_cpu, unsigned long max) {
 	struct esgov_policy *esg_policy = per_cpu(esgov_policy, esg_cpu->cpu);
-	struct rq *rq = cpu_rq(esg_cpu->cpu);
-	struct part *pa = &rq->pa;
 	unsigned int freq;
 	int active_ratio = 0, util, prev_idx, hist_count = 0, idx;
-	int patient_tick = esg_policy->patient_mode;
+	int patient_tick, over_cnt = 0;
+	int hist_idx = get_part_hist_idx(esg_cpu->cpu);
+	int cpu = esg_cpu->cpu;
 
-	if (unlikely(!esg_policy->step))
+	if (unlikely(!esg_policy || !esg_policy->step))
 		return 0;
 
-	if (esg_cpu->last_idx == pa->hist_idx)
+	if (esg_cpu->last_idx == hist_idx)
 		return esg_cpu->step_util;
 
 	/* get active ratio for patient mode */
-	idx = esg_cpu->last_idx = pa->hist_idx;
+	idx = esg_cpu->last_idx = hist_idx;
+	patient_tick = esg_policy->patient_mode;
 	while (hist_count++ < patient_tick) {
-		active_ratio += pa->hist[idx];
+		if (get_part_hist_value(cpu, idx) > PATIENT_MODE_BUSY_RATIO)
+			over_cnt++;
 		idx = dec_hist_idx(idx);
 	}
-	active_ratio = patient_tick ? (active_ratio / patient_tick) : 1024;
+	active_ratio = (patient_tick == over_cnt) ? SCHED_CAPACITY_SCALE : 0;
 	esg_cpu->active_ratio = active_ratio;
 
 	/* get active ratio for step util */
-	prev_idx = dec_hist_idx(esg_cpu->last_idx);
-	active_ratio = (pa->hist[esg_cpu->last_idx] + pa->hist[prev_idx]) >> 1;
+	prev_idx = dec_hist_idx(hist_idx);
+	active_ratio = get_part_hist_value(cpu, hist_idx) + get_part_hist_value(cpu, prev_idx);
+	active_ratio >>= 1;
 
 	/* update the capacity */
 	freq = esg_cpu->step_util * (esg_policy->policy->max / max);
@@ -852,6 +1011,11 @@ static bool esgov_check_rate_delay(struct esgov_policy *esg_policy, u64 time)
 	return true;
 }
 
+enum {
+	RAPID_SCALE_UP = 1,
+	RAPID_SCALE_DOWN,
+};
+
 #define ESG_MAX_DELAY_PERIODS 5
 /*
  * Return true if we can delay frequency update because the requested frequency
@@ -868,10 +1032,28 @@ static bool esgov_postpone_freq_update(struct esgov_policy *esg_policy,
 {
 	unsigned int diff_num_levels, num_periods, elapsed, margin;
 
-	if (!esg_apply_migov)
+	elapsed = time - esg_policy->last_freq_update_time;
+
+	/* In this point target_freq is different with cur freq */
+	if (esg_policy->policy->cur < target_freq) {
+		u64 ramp_up_bound = esg_policy->up_rate_limit_ns;
+
+		if (elapsed < ramp_up_bound)
+			return true;
+	} else {
+		u64 ramp_down_bound = esg_policy->down_rate_limit_ns;
+
+		if (elapsed < ramp_down_bound)
+			return true;
+	}
+
+	/*
+	 * if there is no pelt_margin, we do better increase
+	 * frequency immediately to prevent performance drop
+	 */
+	if (esg_policy->pelt_margin <= 0 && target_freq > esg_policy->policy->cur)
 		return false;
 
-	elapsed = time - esg_policy->last_freq_update_time;
 	margin  = esg_policy->rate_delay_ns >> 2;
 	num_periods = (elapsed + margin) / esg_policy->rate_delay_ns;
 	if (num_periods > ESG_MAX_DELAY_PERIODS)
@@ -892,6 +1074,9 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 	struct esgov_policy *esg_policy = esg_cpu->esg_policy;
 	unsigned long max = arch_scale_cpu_capacity(NULL, esg_cpu->cpu);
 	unsigned int target_util, target_freq;
+
+	if (unlikely(!esg_policy))
+		return;
 
 	/* check iowait boot */
 	esgov_iowait_boost(esg_cpu, time, flags);
@@ -921,10 +1106,11 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 
 	/* get target freq for new target util */
 	target_freq = get_next_freq(esg_policy, target_util, max);
-	if (esg_policy->target_freq == target_freq)
+	if (esg_policy->policy->cur == target_freq)
 		goto out;
 
-	if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu, time, target_freq))
+	if (esgov_postpone_freq_update(esg_policy, esg_cpu->cpu,
+				time, target_freq))
 		goto out;
 
 	if (!esg_policy->work_in_progress) {
@@ -933,8 +1119,6 @@ esgov_update(struct update_util_data *hook, u64 time, unsigned int flags)
 		esg_policy->util = target_util;
 		esg_policy->target_freq = target_freq;
 		esg_policy->last_freq_update_time = time;
-		trace_esg_req_freq(esg_policy->policy->cpu,
-			esg_policy->util, esg_policy->target_freq);
 		irq_work_queue(&esg_policy->irq_work);
 	}
 out:
@@ -949,6 +1133,15 @@ static int esgov_start(struct cpufreq_policy *policy)
 	/* TODO: We SHOULD implement FREQVAR-RATE-DELAY Base on SchedTune */
 	esg_policy->last_freq_update_time = 0;
 	esg_policy->target_freq = 0;
+
+	/* Initialize slack expired time */
+	esg_policy->slack_expired_time_ms = 20;	/* Default 20ms */
+
+	/* Initialize no work press ratio */
+	esg_policy->no_work_press_ratio = 100;	/* Default 100% */
+
+	esg_policy->running = 1;
+
 	for_each_cpu(cpu, policy->cpus) {
 		struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
 		esg_cpu->esg_policy = esg_policy;
@@ -975,16 +1168,37 @@ static void esgov_stop(struct cpufreq_policy *policy)
 	for_each_cpu(cpu, policy->cpus)
 		cpufreq_remove_update_util_hook(cpu);
 
-	synchronize_sched();
+	synchronize_rcu();
 	irq_work_sync(&esg_policy->irq_work);
+
+	esg_policy->running = 0;
 }
 
 static void esgov_limits(struct cpufreq_policy *policy)
 {
 	struct esgov_policy *esg_policy = policy->governor_data;
+	unsigned long max = arch_scale_cpu_capacity(NULL, policy->cpu);
+	unsigned int target_util, target_freq;
 
 	mutex_lock(&esg_policy->work_lock);
 	cpufreq_policy_apply_limits(policy);
+	esg_update_freq_range(policy);
+	slack_update_min(policy);
+
+	/* Get target util of the cluster of this cpu */
+	target_util = esgov_get_target_util(esg_policy, 0, max);
+
+	/* get target freq for new target util */
+	target_freq = get_next_freq(esg_policy, target_util, max);
+
+	/*
+	 * After freq limits change, CPUFreq policy->cur can be different
+	 * with ESG's target freq. In that case, explicitly change current freq
+	 * to ESG's target freq
+	 */
+	if (policy->cur != target_freq)
+		__cpufreq_driver_target(policy, target_freq, CPUFREQ_RELATION_L);
+
 	mutex_unlock(&esg_policy->work_lock);
 }
 
@@ -999,7 +1213,6 @@ struct cpufreq_governor energy_step_gov = {
 	.limits			= esgov_limits,
 };
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ENERGYSTEP
 /*
  * return next maximum util of this group when task moves to dst_cpu
  * grp_cpu: one of the cpu of target group to get next maximum util
@@ -1017,8 +1230,6 @@ int get_gov_next_cap(int grp_cpu, int dst_cpu, struct tp_env *env)
 
 	/* get task util and convert to uss */
 	task_util = ml_task_util_est(p);
-	if (p->sse)
-		task_util = (task_util * capacity_ratio(src_cpu, USS)) >> SCHED_CAPACITY_SHIFT;
 
 	if (esg_policy->min_cap >= esg_policy->max_cap)
 		return esg_policy->max_cap;
@@ -1060,6 +1271,7 @@ int get_gov_next_cap(int grp_cpu, int dst_cpu, struct tp_env *env)
 	return max_util;
 }
 
+#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ENERGYSTEP
 unsigned long cpufreq_governor_get_util(unsigned int cpu)
 {
 	struct esgov_cpu *esg_cpu = &per_cpu(esgov_cpu, cpu);
@@ -1096,18 +1308,70 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 }
 #endif
 
-static int __init esgov_register(void)
+static int esgov_register(void)
 {
 	esg_kobj = kobject_create_and_add("energy_step", ems_kobj);
 	if (!esg_kobj)
 		return -EINVAL;
 
+	cpu_pm_register_notifier(&esg_cpu_pm_notifier);
 	emstune_register_mode_update_notifier(&esg_mode_update_notifier);
-
-	cpufreq_register_notifier(&esg_cpufreq_policy_notifier,
-					CPUFREQ_POLICY_NOTIFIER);
 
 	return cpufreq_register_governor(&energy_step_gov);
 }
-fs_initcall(esgov_register);
 
+#define DEFAULT_ESG_STEP	(4)
+#define DEFAULT_PATIENT_MODE	(0)
+#define DEFAULT_PELT_MARGIN	(25)
+#define DEFAULT_PELT_BOOST	(0)
+
+int esgov_pre_init(void)
+{
+	struct device_node *dn, *child;
+	struct esgov_param *param;
+	int ret = 0, cpu;
+
+	esgov_register();
+
+	dn = of_find_node_by_path("/ems/esg");
+	for_each_child_of_node(dn, child) {
+		const char *buf;
+
+		param = kzalloc(sizeof(struct esgov_param), GFP_KERNEL);
+		if (!param) {
+			pr_err("%s: failed to alloc esgov_param\n", __func__);
+			ret = -ENOMEM;
+			goto fail;
+		}
+
+		if (of_property_read_string(child, "shared-cpus", &buf)) {
+			pr_err("%s: cpus property is omitted\n", __func__);
+			ret = -ENODATA;
+			goto fail;
+		} else
+			cpulist_parse(buf, &param->cpus);
+
+		if (of_property_read_u32(dn, "step", &param->step))
+			param->step = DEFAULT_ESG_STEP;
+
+		if (of_property_read_u32(dn, "patient-mode", &param->patient_mode))
+			param->patient_mode = DEFAULT_PATIENT_MODE;
+
+		if (of_property_read_u32(dn, "pelt-margin", &param->pelt_margin))
+			param->patient_mode = DEFAULT_PELT_MARGIN;
+
+		if (of_property_read_u32(dn, "pelt-boost", &param->pelt_boost))
+			param->patient_mode = DEFAULT_PELT_BOOST;
+
+		for_each_cpu(cpu, &param->cpus)
+			per_cpu(esgov_param, cpu) = param;
+	}
+
+	return ret;
+
+fail:
+	for_each_possible_cpu(cpu)
+		kfree(per_cpu(esgov_param, cpu));
+
+	return ret;
+}
