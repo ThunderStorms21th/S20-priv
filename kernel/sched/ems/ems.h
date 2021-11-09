@@ -100,8 +100,6 @@ extern unsigned long ml_cpu_util_without(int cpu, struct task_struct *p);
 extern unsigned long ml_boosted_cpu_util(int cpu);
 extern int ml_task_hungry(struct task_struct *p);
 extern void init_part(void);
-extern int get_part_hist_idx(int);
-extern int get_part_hist_value(int, int);
 
 /* efficiency cpu selection */
 extern int find_best_cpu(struct tp_env *env);
@@ -174,14 +172,6 @@ struct emstune_esg {
 	bool overriding;
 	int step[NR_CPUS];
 	int patient_mode[NR_CPUS];
-	int pelt_margin[NR_CPUS];
-	int pelt_boost[NR_CPUS];
-
-	int up_rate_limit;
-	int down_rate_limit;
-	int rapid_scale_up;
-	int rapid_scale_down;
-
 	struct kobject kobj;
 };
 
