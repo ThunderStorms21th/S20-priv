@@ -125,6 +125,7 @@ extern void ontime_select_fit_cpus(struct task_struct *p, struct cpumask *fit_cp
 extern unsigned long get_upper_boundary(int cpu, struct task_struct *p);
 
 /* energy_step_wise_governor */
+extern int esgov_pre_init(void);
 extern int find_allowed_capacity(int cpu, unsigned int new, int power);
 extern int find_step_power(int cpu, int step);
 extern int get_gov_next_cap(int grp_cpu, int dst_cpu, struct tp_env *env);

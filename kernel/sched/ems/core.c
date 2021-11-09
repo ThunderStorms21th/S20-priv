@@ -416,6 +416,8 @@ static int __init init_ems_core(void)
 
 	ems_core_initialized = true;
 
+	esgov_pre_init();
+
 	return 0;
 }
 core_initcall(init_ems_core);
