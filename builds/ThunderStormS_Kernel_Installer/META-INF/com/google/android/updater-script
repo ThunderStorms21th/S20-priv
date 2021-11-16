@@ -4,7 +4,7 @@ ui_print("*********************************************************");
 ui_print("                ThunderStorm Kernel OneUI-R              ");
 ui_print("                   For Samsung Galaxy S20                ");
 ui_print("           Developed by ThundeRStormS Team               ");
-ui_print("        G980F, G985F, G981B, G986B, G988B, N986B         ");
+ui_print(" G980F G985F G981B G986B G988B N986B N985F               ");
 ui_print("*********************************************************");
 ui_print(" ");
 ui_print(" ");
@@ -153,6 +153,16 @@ endif;
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("N986", getprop("ro.boot.bootloader")) then
 ui_print("@N986B Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/n986/SMN986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+#package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+if is_substring("N985", getprop("ro.boot.bootloader")) then
+ui_print("@N985F Detected");
 ui_print("@Installation : ThunderStormS Kernel");
 package_extract_file("thunderstorm/n986/SMN986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;

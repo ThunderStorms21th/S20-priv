@@ -26,12 +26,12 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v1.5"
-export K_NAME="ThundeRStormS-Kernel-S20"
+export K_VERSION="v1.6"
+export K_NAME="ThundeRStormS-Kernel-S20N20"
 export K_NAME2="EdYoBlue-Kernel-S20"
 export K_BASE="DUI5"
 ANDROID=OneUI-R
-MODEL=G98X
+MODEL=G98XX-N986B
 # -----------------------------
 
 # Paths
@@ -219,13 +219,13 @@ BUILD_KERNEL_N986B()
     echo "***** Compiling kernel *****"
     [ ! -d "out" ] && mkdir out
     [ ! -d "out/SM-N986B" ] && mkdir out/SM-N986B
-    # SM-N986B
+    # SM-N986B & SM-N985F
     make -j$(nproc) -C $(pwd) $KERNEL_NAME tmp_defconfig
     make -j$(nproc) -C $(pwd) $KERNEL_NAME
     [ -e arch/arm64/boot/Image.gz ] && cp arch/arm64/boot/Image.gz $(pwd)/out/SM-N986B/Image.gz
     if [ -e arch/arm64/boot/Image ]; then
       cp arch/arm64/boot/Image $(pwd)/out/SM-N986B/Image
-      # DTB for Exynos 9830 - SM-N986B
+      # DTB for Exynos 9830 - SM-N986B & SM-N985F
       echo "***** Compiling Device Tree Blobs *****"
       $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtb.img dt.configs/exynos9830.cfg -d ${DTB_DIR}/exynos
       $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtbo.img dt.configs/c2sxxx.cfg -d ${DTB_DIR}/samsung
@@ -376,7 +376,7 @@ BUILD_DTB()
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-G981B/dtbo.img dt.configs/x1sxxx.cfg -d ${DTB_DIR}/samsung
     # DTBO for Exynos 9830 SM-G986B
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-G986B/dtbo.img dt.configs/y2sxxx.cfg -d ${DTB_DIR}/samsung
-    # DTBO for Exynos 9830 SM-N986B
+    # DTBO for Exynos 9830 SM-N986B / SM-N885F
     $(pwd)/tools/mkdtimg cfg_create $(pwd)/out/SM-N986B/dtbo.img dt.configs/c2sxxx.cfg -d ${DTB_DIR}/samsung
 }
 
@@ -504,7 +504,7 @@ BUILD_RAMDISK_986B()
 BUILD_RAMDISK_N986B()
 {
     # Build Ramdisk and boot.img
-    # SM-N986B
+    # SM-N986B & SM-N985F
     echo ""
     echo "Building Ramdisk for SM-N986B"
     mv $(pwd)/out/SM-N986B/Image $(pwd)/out/SM-N986B/boot.img-kernel

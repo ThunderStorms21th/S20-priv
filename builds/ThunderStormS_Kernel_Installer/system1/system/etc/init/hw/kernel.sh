@@ -21,6 +21,8 @@ MODEL5=G988B
 MODEL5_DESC="SM988B"
 MODEL6=N986B
 MODEL6_DESC="SMN986B"
+MODEL6=N985F
+MODEL6_DESC="SMN985F"
 
 sleep 10
 
@@ -133,14 +135,14 @@ rm -f $LOG
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
-    echo "512" > /proc/sys/kernel/random/write_wakeup_threshold
+    echo "256" > /proc/sys/kernel/random/write_wakeup_threshold
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
     echo "95" > /proc/sys/vm/vfs_cache_pressure
     echo "100" > /proc/sys/vm/swappiness
-    echo "1000" > /proc/sys/vm/dirty_writeback_centisecs
-    echo "1000" > /proc/sys/vm/dirty_expire_centisecs
+    echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
+    echo "2000" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
 
     # ZRAM
@@ -184,16 +186,20 @@ rm -f $LOG
    echo "1" > /sys/block/sda/queue/rq_affinity
    echo "1" > /sys/block/mmcblk0/queue/rq_affinity
    echo "128" > /sys/block/sda/queue/nr_requests
-   echo "256" > /sys/block/mmcblk0/queue/nr_requests
+   echo "128" > /sys/block/mmcblk0/queue/nr_requests
    echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
    echo "500" > /sys/block/sda/queue/iosched/target_latency
+
+   #Devfreq
+   # default 2730 MHz
+   echo "2288000" > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq
 
    # Initial ThundeRStormS Stune and CPU set settings
    echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
 
    ## Kernel Stune											DEFAULT VALUES
    # GLOBAL
-   echo "3" > /dev/stune/schedtune.boost					# 0
+   echo "5" > /dev/stune/schedtune.boost					# 0
    #echo "0" > /dev/stune/schedtune.band					# 0
    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
@@ -242,7 +248,7 @@ rm -f $LOG
    # TOP-APP
    echo "0-7" > /dev/cpuset/top-app/cpus					# 0-7
    # FOREGROUND
-   echo "0-3,4-6" > /dev/cpuset/foreground/cpus				# 0-2,4-7
+   echo "0-3,4-5" > /dev/cpuset/foreground/cpus				# 0-2,4-7
    # BACKGROUND
    echo "0-2" > /dev/cpuset/background/cpus				    # 0-2
    # SYSTEM-BACKGROUND
@@ -275,7 +281,7 @@ rm -f $LOG
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "50" > /proc/sys/kernel/sched_rr_timeslice_ms
+   echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms
    echo "32" > /proc/sys/kernel/sched_nr_migrate
    echo "1" > /sys/module/cpuidle/parameters/off
    echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave

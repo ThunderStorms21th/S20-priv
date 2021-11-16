@@ -1,4 +1,4 @@
-<b><#selectbg_g>TERMS AND CONDITIONS FOR USE</#></b></@>
+<@center><b><#selectbg_g>TERMS AND CONDITIONS FOR USE</#></b></@>
 
 <@center><b><#selectbg_g>GENERAL</#></b>,/@>
 
