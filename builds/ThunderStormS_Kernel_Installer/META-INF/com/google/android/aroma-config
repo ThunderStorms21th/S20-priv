@@ -27,11 +27,11 @@
 #
 ### ROM INFORMATION
 ini_set("rom_name",				"ThunderStormS Kernel");
-ini_set("rom_version",          "1.6");
+ini_set("rom_version",          "1.7");
 ini_set("rom_author",           "nalasTS");
 ini_set("rom_themer",           "");
 ini_set("rom_device",           "G98x/N985F/N986B");
-ini_set("rom_date",             "16/11/2021");
+ini_set("rom_date",             "23/11/2021");
 # SET THEME
 ###################################################################################################################
 theme("ts");
@@ -156,7 +156,8 @@ textbox(
 		   
 		"<@center><b><#0099c0><~menu2.text1>",			    	                "",				2,							#-- Group 1 - key = "selected.1"		
 			"<~menu2.choice1>",					                  "<~menu2.choice1.1",0,				#-- selected.1 = 1
-			"<~menu2.choice2>",					                  "<~menu2.choice2.1",1			#-- selected.1 = 2
+			"<~menu2.choice2>",					                  "<~menu2.choice2.1",1,			#-- selected.1 = 2
+			"<~menu2.choice3>",					                  "<~menu2.choice3.1",0			#-- selected.1 = 3
 		
 
 			);

@@ -1,5 +1,19 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>EdYoBlue or ThunderStormS Kernel v1.7
+- Linux 4.19.87
+- Sources Samsung DUI5
+- Quelques débogages désactivés
+- Améliorations des CPU MASK, SCHED, EMS, VM & DTS
+- Améliorations des sources Linux
+- Prend en charge tous les CONFIG_HZ 25, 50 - 50Hz
+- Prend en charge tous les Battery Saver
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.6
+</*>
+------------------------------------------------
+
 <*>EdYoBlue or ThunderStormS Kernel v1.6
 - Linux 4.19.87
 - Sources Samsung DUI5

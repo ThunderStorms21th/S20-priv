@@ -130,7 +130,6 @@ package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
 #g988
-
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("G988", getprop("ro.boot.bootloader")) then
 ui_print("@G988B Detected");
@@ -170,15 +169,85 @@ package_extract_dir("system/system", "/system_root/system");
 #package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
-# Run install script
-ui_print(" ");
-ui_print("@ThundeRStormS - System Patching...");
-package_extract_dir("data", "/data");
-package_extract_dir("vendor", "/vendor");
-run_program("/tmp/scripts/perms.sh");
 
-# Upating root
+## without Magisk
+#g980
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("G980", getprop("ro.boot.bootloader")) then
+ui_print("@G980F Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g980/SMG980F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
+endif;
 
+#g981
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("G981", getprop("ro.boot.bootloader")) then
+ui_print("@G981B Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g981/SMG981B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+#g985
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("G985", getprop("ro.boot.bootloader")) then
+ui_print("@G985F Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g985/SMG985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+#g986
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("G986B", getprop("ro.boot.bootloader")) then
+ui_print("@G986B Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g986/SMG986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+#g988
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("G988", getprop("ro.boot.bootloader")) then
+ui_print("@G988B Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/g988/SMG988B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("N986", getprop("ro.boot.bootloader")) then
+ui_print("@N986B Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/n986/SMN986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+#package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "3"  then
+if is_substring("N985", getprop("ro.boot.bootloader")) then
+ui_print("@N985F Detected");
+ui_print("@Installation : ThunderStormS Kernel");
+package_extract_file("thunderstorm/n986/SMN986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+endif;
+package_extract_dir("system/system", "/system_root/system");
+#package_extract_dir("bootstock", "/system_root/system/media");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
+# Updating root
 ui_print(" ");
 ui_print("Magisk's Root...");
 package_extract_dir("root", "/tmp/magisk");
@@ -186,6 +255,26 @@ run_program("/tmp/scripts/busybox", "unzip", "/tmp/magisk/Magisk.zip", "META-INF
 run_program("/tmp/scripts/busybox", "sh", "/tmp/magisk/META-INF/com/google/android/update-binary", "dummy", "1", "/tmp/magisk/Magisk.zip");
 ui_print(" ");
 ui_print(" ");
+endif;
+
+if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
+# Updating root
+ui_print(" ");
+ui_print("Magisk's Root...");
+package_extract_dir("root", "/tmp/magisk");
+run_program("/tmp/scripts/busybox", "unzip", "/tmp/magisk/Magisk.zip", "META-INF/com/google/android/*", "-d", "/tmp/magisk");
+run_program("/tmp/scripts/busybox", "sh", "/tmp/magisk/META-INF/com/google/android/update-binary", "dummy", "1", "/tmp/magisk/Magisk.zip");
+ui_print(" ");
+ui_print(" ");
+endif;
+
+# Run install script
+ui_print(" ");
+ui_print("@ThundeRStormS - System Patching...");
+package_extract_dir("data", "/data");
+package_extract_dir("vendor", "/vendor");
+run_program("/tmp/scripts/perms.sh");
+
 
 
 #####################################################################################

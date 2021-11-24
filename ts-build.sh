@@ -26,7 +26,7 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v1.6"
+export K_VERSION="v1.7"
 export K_NAME="ThundeRStormS-Kernel-S20N20"
 export K_NAME2="EdYoBlue-Kernel-S20"
 export K_BASE="DUI5"
