@@ -27,6 +27,7 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include "input-compat.h"
+#include <linux/battery_saver.h>
 
 enum evdev_clock_type {
 	EV_CLK_REAL = 0,
@@ -1497,9 +1498,11 @@ static struct input_handler evdev_handler = {
 
 static int __init evdev_init(void)
 {
-#if 0
+	if (is_battery_saver_on()) {
+		return 0;
+    } else {
 	input_booster_init();
-#endif
+    }
 	return input_register_handler(&evdev_handler);
 }
 
