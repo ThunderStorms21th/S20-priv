@@ -455,7 +455,6 @@ static ssize_t show_volt_table(struct device *dev, struct device_attribute *attr
 
 	return count;
 }
-#endif
 
 static ssize_t set_volt_table(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -502,6 +501,7 @@ static ssize_t set_volt_table(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
+#endif
 
 #ifdef CONFIG_MALI_DVFS
 static int gpu_get_dvfs_table(struct exynos_context *platform, char *buf, size_t buf_size)

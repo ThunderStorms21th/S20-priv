@@ -427,7 +427,7 @@ static int gpu_dvfs_update_asv_table(struct kbase_device *kbdev)
 	int dvfs_table_size = 0;
 	int table_idx;
 	struct device_node *np;
-	int i, j, cal_vol;
+	int i, j, cal_freq, cal_vol;
 #ifdef CONFIG_MALI_CL_PMQOS
 	int cl_pmqos_table_row_num = 0, cl_pmqos_table_col_num = 0;
 	int cl_pmqos_table_size = 0;
