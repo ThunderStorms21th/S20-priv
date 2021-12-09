@@ -37,6 +37,7 @@
 #include <soc/samsung/exynos-pd.h>
 #endif
 
+#ifdef CONFIG_GPU_REG_VOLTAGE
 #include <linux/sysfs_helpers.h>
 #ifdef CONFIG_SOC_EXYNOS9830
 #define GPU_MAX_VOLT		1100000
@@ -44,6 +45,7 @@
 #define GPU_VOLT_STEP		6250
 #else
 #error "Please define gpu voltage ranges for current SoC."
+#endif
 #endif
 
 extern struct kbase_device *pkbdev;
@@ -431,6 +433,7 @@ static ssize_t show_asv_table(struct device *dev, struct device_attribute *attr,
 	return ret;
 }
 
+#ifdef CONFIG_GPU_REG_VOLTAGE
 static ssize_t show_volt_table(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct exynos_context *platform = (struct exynos_context *)pkbdev->platform_context;
@@ -452,6 +455,7 @@ static ssize_t show_volt_table(struct device *dev, struct device_attribute *attr
 
 	return count;
 }
+#endif
 
 static ssize_t set_volt_table(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -2191,7 +2195,9 @@ DEVICE_ATTR(clock, S_IRUGO|S_IWUSR, show_clock, set_clock);
 DEVICE_ATTR(vol, S_IRUGO, show_vol, NULL);
 DEVICE_ATTR(power_state, S_IRUGO, show_power_state, NULL);
 DEVICE_ATTR(asv_table, S_IRUGO, show_asv_table, NULL);
+#ifdef CONFIG_GPU_REG_VOLTAGE
 DEVICE_ATTR(volt_table, S_IRUGO|S_IWUSR, show_volt_table, set_volt_table);
+#endif
 DEVICE_ATTR(dvfs_table, S_IRUGO, show_dvfs_table, NULL);
 DEVICE_ATTR(time_in_state, S_IRUGO|S_IWUSR, show_time_in_state, set_time_in_state);
 DEVICE_ATTR(utilization, S_IRUGO, show_utilization, NULL);
@@ -2838,10 +2844,12 @@ int gpu_create_sysfs_file(struct device *dev)
 		goto out;
 	}
 
+#ifdef CONFIG_GPU_REG_VOLTAGE
 	if (device_create_file(dev, &dev_attr_volt_table)) {
 		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "couldn't create sysfs file [volt_table]\n");
 		goto out;
 	}
+#endif
 
 	if (device_create_file(dev, &dev_attr_dvfs_table)) {
 		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "couldn't create sysfs file [dvfs_table]\n");
@@ -3094,7 +3102,9 @@ void gpu_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_clock);
 	device_remove_file(dev, &dev_attr_vol);
 	device_remove_file(dev, &dev_attr_power_state);
+#ifdef CONFIG_GPU_REG_VOLTAGE
 	device_remove_file(dev, &dev_attr_volt_table);
+#endif
 	device_remove_file(dev, &dev_attr_asv_table);
 	device_remove_file(dev, &dev_attr_dvfs_table);
 	device_remove_file(dev, &dev_attr_time_in_state);
