@@ -24,7 +24,7 @@ MODEL6_DESC="SMN986B"
 MODEL6=N985F
 MODEL6_DESC="SMN985F"
 
-sleep 10
+sleep 20
 
 rm -f $LOG
 
@@ -96,6 +96,9 @@ rm -f $LOG
     # FINGERPRINT BOOST (0 = Disabled, 1 = Enabled)
     # echo "1" > /sys/kernel/fp_boost/enabled
 
+    # BATTERY SAVER (0/N = Disabled, 1/Y = Enabled)
+    echo "Y" > /sys/module/battery_saver/parameters/enabled
+
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
@@ -131,44 +134,50 @@ rm -f $LOG
     echo "N" > /sys/module/wakeup/parameters/enable_wlan_rx_wake_wl
     echo "N" > /sys/module/wakeup/parameters/enable_wlan_wd_wake_wl
     echo "Y" > /sys/module/wakeup/parameters/enable_mmc0_detect_wl
-    echo "3" > /sys/module/sec_battery/parameters/wl_polling
+    echo "6" > /sys/module/sec_battery/parameters/wl_polling
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
-    echo "256" > /proc/sys/kernel/random/write_wakeup_threshold
+    echo "512" > /proc/sys/kernel/random/write_wakeup_threshold
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
-    echo "95" > /proc/sys/vm/vfs_cache_pressure
-    echo "100" > /proc/sys/vm/swappiness
+    echo "150" > /proc/sys/vm/vfs_cache_pressure
+    echo "140" > /proc/sys/vm/swappiness
     echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
     echo "2000" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
+    echo "25" > /proc/sys/vm/dirty_ratio
+    echo "10" > /proc/sys/vm/dirty_background_ratio
+
+    # Fs
+    echo "0" > /proc/sys/fs/dir-notify-enable
+    echo "10" > /proc/sys/fs/lease-break-time
+    echo "131072" > /proc/sys/fs/aio-max-nr
 
     # ZRAM
     # for another SM-G98x - ZRAM is OFF because RAM is 8GB (no needed)
-    swapoff /dev/block/zram0 > /dev/null 2>&1
-    echo "1" > /sys/block/zram0/reset
+    # swapoff /dev/block/zram0 > /dev/null 2>&1
+    # echo "1" > /sys/block/zram0/reset
     # echo "1073741824" > /sys/block/zram0/disksize  # 1,0 GB
     # echo "1610612736" > /sys/block/zram0/disksize  # 1,5 GB
-    echo "2147483648" > /sys/block/zram0/disksize  # 2,0 GB
+    # echo "2147483648" > /sys/block/zram0/disksize  # 2,0 GB
     # echo "2684354560" > /sys/block/zram0/disksize  # 2,5 GB
     # echo "3221225472" > /sys/block/zram0/disksize  # 3,0 GB
     # echo "4194304000" > /sys/block/zram0/disksize  # 4,0 GB
-    chmod 644 /dev/block/zram0
-    mkswap /dev/block/zram0 > /dev/null 2>&1
-    swapon /dev/block/zram0 > /dev/null 2>&1
+    # chmod 644 /dev/block/zram0
+    # mkswap /dev/block/zram0 > /dev/null 2>&1
+    # swapon /dev/block/zram0 > /dev/null 2>&1
 
     # GPU set at max/min freq
     echo "800000" > /sys/kernel/gpu/gpu_max_clock
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
-    # echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
-    # echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
-    echo "377000" > /sys/devices/platform/18500000.mali/highspeed_clock
-    echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
+    echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
+    echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
+    echo "455000" > /sys/devices/platform/18500000.mali/highspeed_clock
+    echo "90" > /sys/devices/platform/18500000.mali/highspeed_load
     echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
-    echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable
-
+    echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable  # 0
 
    # Misc settings : bbr2, bbr, cubic or westwood
    echo "bbr" > /proc/sys/net/ipv4/tcp_congestion_control
@@ -177,22 +186,26 @@ rm -f $LOG
    echo "0" > /sys/kernel/sched/gentle_fair_sleepers
 
    # I/O sched settings
-   echo "cfq" > /sys/block/sda/queue/scheduler
+   echo "noop" > /sys/block/sda/queue/scheduler
    # echo "256" > /sys/block/sda/queue/read_ahead_kb
-   echo "cfq" > /sys/block/mmcblk0/queue/scheduler
+   echo "none" > /sys/block/mmcblk0/queue/scheduler
    # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
    echo "0" > /sys/block/sda/queue/iostats
    echo "0" > /sys/block/mmcblk0/queue/iostats
    echo "1" > /sys/block/sda/queue/rq_affinity
    echo "1" > /sys/block/mmcblk0/queue/rq_affinity
-   echo "128" > /sys/block/sda/queue/nr_requests
-   echo "128" > /sys/block/mmcblk0/queue/nr_requests
+   echo "256" > /sys/block/sda/queue/nr_requests
+   echo "256" > /sys/block/mmcblk0/queue/nr_requests
    echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
    echo "500" > /sys/block/sda/queue/iosched/target_latency
 
    #Devfreq
    # default 2730 MHz
-   echo "2288000" > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq
+   # echo "2288000" > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq
+
+   # Better DeepSleep 
+   # echo "mem" > /sys/power/autosleep
+   echo "deep" > /sys/power/mem_sleep
 
    # Initial ThundeRStormS Stune and CPU set settings
    echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
@@ -215,7 +228,7 @@ rm -f $LOG
    #echo "1" > /dev/stune/top-app/schedtune.ontime_en		# 0
    
    # RT
-   echo "0" > /dev/stune/rt/schedtune.boost					# 0
+   echo "5" > /dev/stune/rt/schedtune.boost					# 0
    #echo "0" > /dev/stune/rt/schedtune.band					# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_idle			# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_perf			# 0
@@ -233,7 +246,7 @@ rm -f $LOG
    # BACKGROUND-APP
    echo "0" > /dev/stune/background/schedtune.boost		    # 0
    #echo "0" > /dev/stune/background/schedtune.band			# 0
-   echo "0" > /dev/stune/background/schedtune.prefer_idle	# 0
+   echo "1" > /dev/stune/background/schedtune.prefer_idle	# 0
    echo "0" > /dev/stune/background/schedtune.prefer_perf	# 0
    #echo "1" > /dev/stune/background/schedtune.util_est_en	# 0
    #echo "1" > /dev/stune/background/schedtune.ontime_en	# 0
@@ -256,7 +269,7 @@ rm -f $LOG
    # MODERATE
    echo "0-2,4-6" > /dev/cpuset/moderate/cpus				# 0-2,4-6
    # DEXOPT
-   echo "0-5" > /dev/cpuset/dexopt/cpus					    # 0-3
+   echo "0-7" > /dev/cpuset/dexopt/cpus					    # 0-3
 
    ## CPU Fluid RT
    #echo "10" > sys/kernel/ems/frt/coregroup0/active_ratio
@@ -274,19 +287,22 @@ rm -f $LOG
    #echo "10" > sys/kernel/ems/frt/coregroup2/coverage_ratio
    #echo "15" > sys/kernel/ems/frt/coregroup2/coverage_ratio_boost
 
-
    ## Kernel Scheduler
    echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
    #echo "10000000" > /proc/sys/kernel/sched_latency_ns
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
    #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms
-   echo "32" > /proc/sys/kernel/sched_nr_migrate
-   echo "1" > /sys/module/cpuidle/parameters/off
+   echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms  #30
+   echo "64" > /proc/sys/kernel/sched_nr_migrate
+   echo "0" > /sys/module/cpuidle/parameters/off  # 0
    echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
-   echo "0f" > /proc/irq/default_smp_affinity
-   echo "af" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
+   echo "0f" > /proc/irq/default_smp_affinity  #0f
+   echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
+   echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
+   echo "5" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
+   echo "100000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
+   echo "516" > /proc/sys/kernel/perf_event_mlock_kb  #516
 
    # Thermal Governors
    # BIG Cluster

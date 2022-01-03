@@ -1,5 +1,22 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>ThunderStormS Kernel v1.8
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Support CONFIG_HZ 25 and 50 - set at 50Hz
+- Support Battery Saver
+- Added Sustinable GPU freq - set at 455MHz
+- GPU voltage settings now are hidden
+- Disabled GPU DVFS clokc_lock (const. max freq)
+- READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23015)
+- rest like in v1.7
+</*>
+------------------------------------------------
+
 <*>EdYoBlue or ThunderStormS Kernel v1.7
 - Linux 4.19.87
 - Samsung source DUI5
@@ -9,7 +26,7 @@
 - Support CONFIG_HZ 25 and 50 - set at 50Hz
 - Support Battery Saver
 - EdYoBlue : READ_AHEAD_KB = 256; TS=256
-- Magisk 23.1
+- Magisk 23.1 (23014)
 - rest like in v1.6
 </*>
 ------------------------------------------------
@@ -23,7 +40,7 @@
 - Support CONFIG_HZ 25 and 50 - set at 25Hz
 - Support Battery Saver
 - EdYoBlue : READ_AHEAD_KB = 256; TS=256
-- Magisk 23.1
+- Magisk 23.1 (23013)
 - rest like in v1.5
 </*>
 ------------------------------------------------

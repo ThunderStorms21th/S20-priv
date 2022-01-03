@@ -27,11 +27,11 @@
 #
 ### ROM INFORMATION
 ini_set("rom_name",				"ThunderStormS Kernel");
-ini_set("rom_version",          "1.7");
+ini_set("rom_version",          "1.8");
 ini_set("rom_author",           "nalasTS");
 ini_set("rom_themer",           "");
 ini_set("rom_device",           "G98x/N985F/N986B");
-ini_set("rom_date",             "23/11/2021");
+ini_set("rom_date",             "15/12/2021");
 # SET THEME
 ###################################################################################################################
 theme("ts");
@@ -64,7 +64,7 @@ selectbox(
     #example of menu option, always add them to the top to ensure that they work
 	#"Some language","Welcome to the Installer text",0,
 	"English","Welcome to ThunderStormS Kernel Installation",1,
-	"French","Bienvenue dans l'installation de la ThunderStormS Kernel",0
+	"French","Bienvenue dans l'installation de la ThunderStormS Kernel",3
 
   #--------[ Initial Value = 0: Unselected, 1: Selected, 2: Group Item, 3: Not Visible ]---------#
 );
@@ -155,7 +155,7 @@ textbox(
            "boot.prop",
 		   
 		"<@center><b><#0099c0><~menu2.text1>",			    	                "",				2,							#-- Group 1 - key = "selected.1"		
-			"<~menu2.choice1>",					                  "<~menu2.choice1.1",0,				#-- selected.1 = 1
+#			"<~menu2.choice1>",					                  "<~menu2.choice1.1",0,				#-- selected.1 = 1
 			"<~menu2.choice2>",					                  "<~menu2.choice2.1",1,			#-- selected.1 = 2
 			"<~menu2.choice3>",					                  "<~menu2.choice3.1",0			#-- selected.1 = 3
 		
