@@ -14,13 +14,11 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/notifier.h>
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/power_supply.h>
-#include <linux/property.h>
 #include <linux/thermal.h>
 #include "power_supply.h"
 
@@ -141,13 +139,8 @@ static void power_supply_deferred_register_work(struct work_struct *work)
 	struct power_supply *psy = container_of(work, struct power_supply,
 						deferred_register_work.work);
 
-	if (psy->dev.parent) {
-		while (!mutex_trylock(&psy->dev.parent->mutex)) {
-			if (psy->removing)
-				return;
-			msleep(10);
-		}
-	}
+	if (psy->dev.parent)
+		mutex_lock(&psy->dev.parent->mutex);
 
 	power_supply_changed(psy);
 
@@ -269,8 +262,8 @@ static int power_supply_check_supplies(struct power_supply *psy)
 	if (!psy->supplied_from)
 		return -ENOMEM;
 
-	*psy->supplied_from = devm_kcalloc(&psy->dev,
-					   cnt - 1, sizeof(char *),
+	*psy->supplied_from = devm_kzalloc(&psy->dev,
+					   sizeof(char *) * (cnt - 1),
 					   GFP_KERNEL);
 	if (!*psy->supplied_from)
 		return -ENOMEM;
@@ -675,8 +668,8 @@ EXPORT_SYMBOL_GPL(power_supply_powers);
 
 static void power_supply_dev_release(struct device *dev)
 {
-	struct power_supply *psy = to_power_supply(dev);
-	dev_dbg(dev, "%s\n", __func__);
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	pr_debug("device: '%s': %s\n", dev_name(dev), __func__);
 	kfree(psy);
 }
 
@@ -850,20 +843,11 @@ __power_supply_register(struct device *parent,
 {
 	struct device *dev;
 	struct power_supply *psy;
-	int i, rc;
+	int rc;
 
 	if (!parent)
 		pr_warn("%s: Expected proper parent device for '%s'\n",
 			__func__, desc->name);
-
-	if (!desc || !desc->name || !desc->properties || !desc->num_properties)
-		return ERR_PTR(-EINVAL);
-
-	for (i = 0; i < desc->num_properties; ++i) {
-		if ((desc->properties[i] == POWER_SUPPLY_PROP_USB_TYPE) &&
-		    (!desc->usb_types || !desc->num_usb_types))
-			return ERR_PTR(-EINVAL);
-	}
 
 	psy = kzalloc(sizeof(*psy), GFP_KERNEL);
 	if (!psy)
@@ -881,8 +865,7 @@ __power_supply_register(struct device *parent,
 	psy->desc = desc;
 	if (cfg) {
 		psy->drv_data = cfg->drv_data;
-		psy->of_node =
-			cfg->fwnode ? to_of_node(cfg->fwnode) : cfg->of_node;
+		psy->of_node = cfg->of_node;
 		psy->supplied_to = cfg->supplied_to;
 		psy->num_supplicants = cfg->num_supplicants;
 	}
@@ -1088,7 +1071,6 @@ EXPORT_SYMBOL_GPL(devm_power_supply_register_no_ws);
 void power_supply_unregister(struct power_supply *psy)
 {
 	WARN_ON(atomic_dec_return(&psy->use_cnt));
-	psy->removing = true;
 	cancel_work_sync(&psy->changed_work);
 	cancel_delayed_work_sync(&psy->deferred_register_work);
 	sysfs_remove_link(&psy->dev.kobj, "powers");

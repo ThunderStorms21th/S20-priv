@@ -28,6 +28,7 @@
 #include <linux/mm_types_task.h>
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
+#include <linux/sec_debug_types.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -343,6 +344,56 @@ struct util_est {
 #define UTIL_EST_WEIGHT_SHIFT		2
 } __attribute__((__aligned__(sizeof(u64))));
 
+
+/*
+ * struct multi_load - Multiple purpose load for EMS
+ */
+struct multi_load {
+	u64				last_update_time;
+	u32                             period_contrib;
+	u64                             runnable_sum;
+	u64                             runnable_sum_s;
+	unsigned long                   runnable_avg;
+	unsigned long                   runnable_avg_s;
+	u32                             util_sum;
+	u32                             util_sum_s;
+	unsigned long                   util_avg;
+	unsigned long                   util_avg_s;
+
+	/* for util_est */
+	struct util_est                 util_est;
+	struct util_est                 util_est_s;
+	int				util_est_applied;
+
+	int				hungry;
+};
+
+#define EMS_PART_ENQUEUE        0x1
+#define EMS_PART_DEQUEUE        0x2
+#define EMS_PART_UPDATE         0x4
+#define EMS_PART_WAKEUP_NEW     0x8
+
+struct part {
+        bool    running;
+
+        u64     period_start;
+        u64     last_updated;
+        u64     active_sum;
+
+#define PART_HIST_SIZE_MAX      20
+        int     hist_idx;
+        int     hist[PART_HIST_SIZE_MAX];
+        int     active_ratio_recent;
+        int     active_ratio_avg;
+        int     active_ratio_max;
+        int     active_ratio_est;
+        int     active_ratio_stdev;
+        int     active_ratio_limit;
+
+        u64     last_boost_time;
+        int     active_ratio_boost;
+};
+
 /*
  * The load_avg/util_avg accumulates an infinite geometric series
  * (see __update_load_avg() in kernel/sched/fair.c).
@@ -434,6 +485,11 @@ struct sched_statistics {
 #endif
 };
 
+struct ontime_entity {
+	int migrating;
+	int cpu;
+};
+
 struct sched_entity {
 	/* For load-balancing: */
 	struct load_weight		load;
@@ -460,6 +516,13 @@ struct sched_entity {
 	struct cfs_rq			*my_q;
 #endif
 
+#ifdef CONFIG_FAST_TRACK
+	int ftt_mark;
+	int ftt_enqueue_time;
+	atomic64_t ftt_dyn_mark;
+	u64 ftt_vrt_delta;
+#endif
+
 #ifdef CONFIG_SMP
 	/*
 	 * Per entity load average tracking.
@@ -468,7 +531,9 @@ struct sched_entity {
 	 * collide with read-mostly values above.
 	 */
 	struct sched_avg		avg;
+	struct multi_load		ml;
 #endif
+	struct ontime_entity		ontime;
 };
 
 struct sched_rt_entity {
@@ -486,6 +551,21 @@ struct sched_rt_entity {
 	struct rt_rq			*rt_rq;
 	/* rq "owned" by this entity/group: */
 	struct rt_rq			*my_q;
+#endif
+
+#ifdef CONFIG_SMP
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+	int sync_flag;
+	/*
+	 * Per entity load average tracking.
+	 *
+	 * Put into separate cache line so it does not
+	 * collide with read-mostly values above.
+	 */
+	struct sched_avg		avg;// ____cacheline_aligned_in_smp;
+	struct load_weight		load;
+	unsigned long			runnable_weight;
+#endif
 #endif
 } __randomize_layout;
 
@@ -570,6 +650,10 @@ union rcu_special {
 	u32 s; /* Set of bits. */
 };
 
+#ifdef CONFIG_FIVE
+struct task_integrity;
+#endif
+
 enum perf_event_task_context {
 	perf_invalid_context = -1,
 	perf_hw_context = 0,
@@ -635,6 +719,11 @@ struct task_struct {
 	const struct sched_class	*sched_class;
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
+	struct sched_avg		sa_box;
+
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+	int victim_flag;
+#endif
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
 #endif
@@ -652,6 +741,7 @@ struct task_struct {
 	unsigned int			policy;
 	int				nr_cpus_allowed;
 	cpumask_t			cpus_allowed;
+	cpumask_t			aug_cpus_allowed;
 
 #ifdef CONFIG_PREEMPT_RCU
 	int				rcu_read_lock_nesting;
@@ -675,6 +765,8 @@ struct task_struct {
 	struct plist_node		pushable_tasks;
 	struct rb_node			pushable_dl_tasks;
 #endif
+
+	unsigned int			sse;
 
 	struct mm_struct		*mm;
 	struct mm_struct		*active_mm;
@@ -1185,6 +1277,9 @@ struct task_struct {
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	unsigned long			task_state_change;
 #endif
+#ifdef CONFIG_FIVE
+	struct task_integrity		*integrity;
+#endif
 	int				pagefault_disabled;
 #ifdef CONFIG_MMU
 	struct task_struct		*oom_reaper_list;
@@ -1203,7 +1298,12 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
-
+#ifdef CONFIG_SEC_DEBUG_COMPLETE_HINT
+	struct completion		*x;
+#endif
+#ifdef CONFIG_SEC_DEBUG_DTASK
+	struct sec_debug_wait		ssdbg_wait;
+#endif
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
@@ -1520,6 +1620,9 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p, const struct cpuma
 #define cpu_relax_yield() cpu_relax()
 #endif
 
+u32 __accumulate_pelt_segments(u64 periods, u32 d1, u32 d3);
+u64 decay_load(u64 val, u64 n);
+
 extern int yield_to(struct task_struct *p, bool preempt);
 extern void set_user_nice(struct task_struct *p, long nice);
 extern int task_prio(const struct task_struct *p);
@@ -1767,7 +1870,6 @@ static inline unsigned int task_cpu(const struct task_struct *p)
 static inline void set_task_cpu(struct task_struct *p, unsigned int cpu)
 {
 }
-
 #endif /* CONFIG_SMP */
 
 /*

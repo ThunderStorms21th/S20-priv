@@ -379,6 +379,13 @@ config BT_WILINK
 	  Say Y here to compile support for Texas Instrument's WiLink7 driver
 	  into the kernel or say M to compile it as module (btwilink).
 
+config BT_BCM43XX
+	bool "Enable BCM43XX driver"
+	default n
+	help
+	  Adds BCM43XX RFKILL driver for Broadcom BCM4359 chipset for exynos.
+	  default is n.
+
 config BT_MTKUART
 	tristate "MediaTek HCI UART driver"
 	depends on SERIAL_DEV_BUS
@@ -412,5 +419,14 @@ config BT_HCIRSI
 
 	  Say Y here to compile support for HCI over Redpine into the
 	  kernel or say M to compile as a module.
+
+config MSM_BT_POWER
+	bool "MSM Bluetooth Power Control"
+	default n
+	help
+	  MSM Bluetooth Power control driver.
+	  This provides a parameter to switch on/off power from PMIC
+	  to Bluetooth device. This will control LDOs/Clock/GPIOs to
+	  control Bluetooth Chipset based on power on/off sequence.
 
 endmenu

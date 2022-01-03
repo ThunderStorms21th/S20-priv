@@ -8,6 +8,9 @@ menu "File systems"
 config DCACHE_WORD_ACCESS
        bool
 
+config INTERRUPTIBLE_SYNC
+    bool "Support interruptible sync for Samsung Mobile Device"
+
 if BLOCK
 
 config FS_IOMAP
@@ -133,6 +136,7 @@ if BLOCK
 menu "DOS/FAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
+source "fs/sdfat/Kconfig"
 source "fs/ntfs/Kconfig"
 
 endmenu
@@ -314,5 +318,9 @@ endif # NETWORK_FILESYSTEMS
 
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
+
+config FS_HPB
+	bool "Support HPB on Filesystem"
+	default n
 
 endmenu

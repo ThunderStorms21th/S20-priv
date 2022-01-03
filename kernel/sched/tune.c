@@ -92,6 +92,10 @@ struct schedtune {
 	/* Hint to bias scheduling of tasks on that SchedTune CGroup
 	 * towards idle CPUs */
 	int prefer_idle;
+
+	/* Hint to bias scheduling of tasks on that SchedTune CGroup
+	 * towards high performance CPUs */
+	int prefer_perf;
 };
 
 static inline struct schedtune *css_st(struct cgroup_subsys_state *css)
@@ -122,6 +126,7 @@ static struct schedtune
 root_schedtune = {
 	.boost	= 0,
 	.prefer_idle = 0,
+	.prefer_perf = 0,
 };
 
 /*
@@ -180,6 +185,25 @@ static inline bool schedtune_boost_timeout(u64 now, u64 ts)
 static inline bool
 schedtune_boost_group_active(int idx, struct boost_groups* bg, u64 now)
 {
+	if (bg->group[idx].tasks)
+		return true;
+
+	return !schedtune_boost_timeout(now, bg->group[idx].ts);
+}
+
+bool schedtune_cpu_boost_group_active(int idx, int cpu, u64 now)
+{
+	struct boost_groups *bg = &per_cpu(cpu_boost_groups, cpu);
+
+	/* Ignore non boostgroups not mapping a cgroup */
+	if (!bg->group[idx].valid)
+		return false;
+
+	/*
+	 * A boost group affects a CPU only if it has
+	 * RUNNABLE tasks on that CPU or it has hold
+	 * in effect from a previous task.
+	 */
 	if (bg->group[idx].tasks)
 		return true;
 
@@ -268,6 +292,7 @@ schedtune_boostgroup_update(int idx, int boost)
 		/* Check if this update has decreased current max */
 		if (cur_boost_max == old_boost && old_boost > boost) {
 			schedtune_cpu_update(cpu, now);
+			emstune_cpu_update(cpu, now);
 			trace_sched_tune_boostgroup_update(cpu, -1, bg->boost_max);
 			continue;
 		}
@@ -307,8 +332,10 @@ schedtune_tasks_update(struct task_struct *p, int cpu, int idx, int task_count)
 			bg->group[idx].ts = now;
 
 		/* Boost group activation or deactivation on that RQ */
-		if (bg->group[idx].tasks == 1)
+		if (bg->group[idx].tasks == 1) {
 			schedtune_cpu_update(cpu, now);
+			emstune_cpu_update(cpu, now);
+		}
 	}
 
 	trace_sched_tune_tasks_update(p, cpu, tasks, idx,
@@ -364,6 +391,9 @@ int schedtune_can_attach(struct cgroup_taskset *tset)
 
 
 	cgroup_taskset_for_each(task, css, tset) {
+		util_est_update(task,
+			emstune_util_est_group(task_schedtune(task)->idx),
+			emstune_util_est_group(css_st(css)->idx));
 
 		/*
 		 * Lock the CPU's RQ the task is enqueued to avoid race
@@ -469,10 +499,29 @@ int schedtune_cpu_boost(int cpu)
 	now = sched_clock_cpu(cpu);
 
 	/* Check to see if we have a hold in effect */
-	if (schedtune_boost_timeout(now, bg->boost_ts))
+	if (schedtune_boost_timeout(now, bg->boost_ts)) {
 		schedtune_cpu_update(cpu, now);
+		emstune_cpu_update(cpu, now);
+	}
 
 	return bg->boost_max;
+}
+
+int schedtune_task_group_idx(struct task_struct *p)
+{
+	struct schedtune *st;
+	int group_idx;
+
+	if (unlikely(!schedtune_initialized))
+		return 0;
+
+	/* Get task cgroup idx */
+	rcu_read_lock();
+	st = task_schedtune(p);
+	group_idx = st->idx;
+	rcu_read_unlock();
+
+	return group_idx;
 }
 
 int schedtune_task_boost(struct task_struct *p)
@@ -527,6 +576,24 @@ prefer_idle_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	return 0;
 }
 
+static u64
+prefer_perf_read(struct cgroup_subsys_state *css, struct cftype *cft)
+{
+       struct schedtune *st = css_st(css);
+
+       return st->prefer_perf;
+}
+
+static int
+prefer_perf_write(struct cgroup_subsys_state *css, struct cftype *cft,
+           u64 prefer_perf)
+{
+       struct schedtune *st = css_st(css);
+       st->prefer_perf = prefer_perf;
+
+       return 0;
+}
+
 static s64
 boost_read(struct cgroup_subsys_state *css, struct cftype *cft)
 {
@@ -562,6 +629,11 @@ static struct cftype files[] = {
 		.name = "prefer_idle",
 		.read_u64 = prefer_idle_read,
 		.write_u64 = prefer_idle_write,
+	},
+	{
+	        .name = "prefer_perf",
+	        .read_u64 = prefer_perf_read,
+	        .write_u64 = prefer_perf_write,
 	},
 	{ }	/* terminate */
 };

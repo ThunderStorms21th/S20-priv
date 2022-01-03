@@ -19,6 +19,13 @@
 #define FS_CRYPTO_BLOCK_SIZE		16
 
 struct fscrypt_ctx;
+
+#ifndef __FS_HAS_ENCRYPTION
+#define __FS_HAS_ENCRYPTION (IS_ENABLED(CONFIG_EXT4_FS_ENCRYPTION) ||	\
+			IS_ENABLED(CONFIG_F2FS_FS_ENCRYPTION) ||	\
+			IS_ENABLED(CONFIG_UBIFS_FS_ENCRYPTION))
+#endif
+
 struct fscrypt_info;
 
 struct fscrypt_str {
@@ -40,7 +47,11 @@ struct fscrypt_name {
 #define fname_len(p)		((p)->disk_name.len)
 
 /* Maximum value for the third parameter of fscrypt_operations.set_context(). */
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+#define FSCRYPT_SET_CONTEXT_MAX_SIZE	32
+#else
 #define FSCRYPT_SET_CONTEXT_MAX_SIZE	28
+#endif
 
 #if __FS_HAS_ENCRYPTION
 #include <linux/fscrypt_supp.h>

@@ -26,6 +26,7 @@
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/overflow.h>
+#include <linux/slab.h>
 #include <asm/device.h>
 
 struct device;
@@ -1020,6 +1021,9 @@ struct device {
 	/* arch specific additions */
 	struct dev_archdata	archdata;
 
+	/* soc specific additions */
+	struct dev_socdata	socdata;
+
 	struct device_node	*of_node; /* associated device tree node */
 	struct fwnode_handle	*fwnode; /* firmware device node */
 
@@ -1105,6 +1109,24 @@ static inline void *dev_get_drvdata(const struct device *dev)
 static inline void dev_set_drvdata(struct device *dev, void *data)
 {
 	dev->driver_data = data;
+}
+
+#define DEV_SOCDATA_MAGIC	(0xCAFEBABE)
+static inline void dev_set_socdata(struct device *dev,
+					const char *soc, const char *ip)
+{
+	if (dev && soc && ip) {
+		dev->socdata.magic = DEV_SOCDATA_MAGIC;
+		dev->socdata.soc = soc;
+		dev->socdata.ip = ip;
+	}
+}
+
+static inline struct device *create_empty_device(void)
+{
+	struct device *dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+
+	return dev;
 }
 
 static inline struct pm_subsys_data *dev_to_psd(struct device *dev)

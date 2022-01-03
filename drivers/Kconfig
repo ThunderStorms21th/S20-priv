@@ -23,9 +23,15 @@ source "drivers/block/Kconfig"
 
 source "drivers/nvme/Kconfig"
 
+source "drivers/mcps/Kconfig"
+
 # misc before ide - BLK_DEV_SGIIOC4 depends on SGI_IOC4
 
 source "drivers/misc/Kconfig"
+
+source "drivers/muic/Kconfig"
+
+source "drivers/ifconn/Kconfig"
 
 source "drivers/ide/Kconfig"
 
@@ -220,4 +226,38 @@ source "drivers/siox/Kconfig"
 source "drivers/slimbus/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+source "drivers/bts/Kconfig"
+
+source "drivers/battery/Kconfig"
+
+source "drivers/battery_v2/Kconfig"
+
+source "drivers/switch/Kconfig"
+
+source "drivers/sensorhub/brcm/Kconfig"
+
+source "drivers/vision/Kconfig"
+
+source "drivers/motor/Kconfig"
+
+source "drivers/fingerprint/Kconfig"
+
+source "drivers/samsung/Kconfig"
+
+source "drivers/optics/Kconfig"
+
+source "drivers/security/samsung/five_tee_driver/Kconfig"
+
+source "drivers/security/samsung/icdrv/Kconfig"
+
+source "drivers/gator/Kconfig"
+
+source "drivers/kperfmon/Kconfig"
+
+source "drivers/security/samsung/tzic/Kconfig"
+
+source "drivers/kunit/Kconfig"
+
+source "drivers/spu_verify/Kconfig"
 endmenu

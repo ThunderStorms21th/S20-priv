@@ -786,6 +786,12 @@ config GCOV_PROFILE_FTRACE
 	  Note that on a kernel compiled with this config, ftrace will
 	  run significantly slower.
 
+config BPF_TRACE_PRINTK_EVERYWHERE
+	bool "enable bpf_trace_printf"
+	depends on TRACING
+	help
+	  Enable bpf_trace_printf helper function everywhere
+
 endif # FTRACE
 
 endif # TRACING_SUPPORT

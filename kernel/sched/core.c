@@ -10,9 +10,12 @@
 #include <linux/nospec.h>
 
 #include <linux/kcov.h>
+#include <linux/debug-snapshot.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
+
+#include <linux/sec_debug.h>
 
 #include "../workqueue_internal.h"
 #include "../smpboot.h"
@@ -21,6 +24,11 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+
+
+#ifdef CONFIG_FAST_TRACK
+#include <cpu/ftt/ftt.h>
+#endif
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
@@ -736,6 +744,8 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 		psi_enqueue(p, flags & ENQUEUE_WAKEUP);
 	}
 
+	update_cpu_active_ratio(rq, p, EMS_PART_ENQUEUE);
+
 	p->sched_class->enqueue_task(rq, p, flags);
 }
 
@@ -748,6 +758,8 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 		sched_info_dequeued(rq, p);
 		psi_dequeue(p, flags & DEQUEUE_SLEEP);
 	}
+
+	update_cpu_active_ratio(rq, p, EMS_PART_DEQUEUE);
 
 	p->sched_class->dequeue_task(rq, p, flags);
 }
@@ -2168,6 +2180,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.vruntime			= 0;
 	INIT_LIST_HEAD(&p->se.group_node);
 
+#ifdef CONFIG_FAST_TRACK
+	init_task_ftt_info(p);
+#endif
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
 #endif
@@ -2356,6 +2371,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_class = &fair_sched_class;
 
 	init_entity_runnable_average(&p->se);
+	frt_init_entity_runnable_average(&p->rt);
 
 	/*
 	 * The child is not yet in the pid-hash so no cgroup attach races,
@@ -2434,6 +2450,8 @@ void wake_up_new_task(struct task_struct *p)
 	rq = __task_rq_lock(p, &rf);
 	update_rq_clock(rq);
 	post_init_entity_util_avg(&p->se);
+
+	update_cpu_active_ratio(rq, p, EMS_PART_WAKEUP_NEW);
 
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
 	p->on_rq = TASK_ON_RQ_QUEUED;
@@ -3067,15 +3085,22 @@ void scheduler_tick(void)
 
 	rq_lock(rq, &rf);
 
+	set_part_period_start(rq);
+	update_cpu_active_ratio(rq, NULL, EMS_PART_UPDATE);
+	update_cont_avg(rq, rq->curr, NULL);
+
 	update_rq_clock(rq);
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
 	psi_task_tick(rq);
-
+	if (!cpu)
+		frt_update_available_cpus();
 	rq_unlock(rq, &rf);
 
 	perf_event_task_tick();
+
+	sysbusy_boost();
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
@@ -3319,7 +3344,7 @@ static noinline void __schedule_bug(struct task_struct *prev)
 	if (oops_in_progress)
 		return;
 
-	printk(KERN_ERR "BUG: scheduling while atomic: %s/%d/0x%08x\n",
+	pr_auto(ASL6, "BUG: scheduling while atomic: %s/%d/0x%08x\n",
 		prev->comm, prev->pid, preempt_count());
 
 	debug_show_held_locks(prev);
@@ -3336,6 +3361,9 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		panic("scheduling while atomic\n");
 
 	dump_stack();
+#ifdef CONFIG_SEC_DEBUG_ATOMIC_SLEEP_PANIC
+	BUG();
+#endif
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 }
 
@@ -3530,6 +3558,8 @@ static void __sched notrace __schedule(bool preempt)
 		 */
 		++*switch_count;
 
+		update_cont_avg(rq, prev, next);
+
 		trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
@@ -3539,6 +3569,7 @@ static void __sched notrace __schedule(bool preempt)
 		rq_unlock_irq(rq, &rf);
 	}
 
+	dbg_snapshot_task(smp_processor_id(), rq->curr);
 	balance_callback(rq);
 }
 
@@ -5354,10 +5385,44 @@ void sched_show_task(struct task_struct *p)
 		(unsigned long)task_thread_info(p)->flags);
 
 	print_worker_info(KERN_INFO, p);
+	secdbg_dtsk_print_info(p, false);
 	show_stack(p, NULL);
 	put_task_stack(p);
 }
 EXPORT_SYMBOL_GPL(sched_show_task);
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+void sched_show_task_auto_comment(struct task_struct *p)
+{
+	unsigned long free = 0;
+	int ppid;
+
+	if (!try_get_task_stack(p))
+		return;
+
+	pr_auto(ASL1, "%-15.15s %c", p->comm, task_state_to_char(p));
+
+	if (p->state == TASK_RUNNING)
+		printk(KERN_CONT "  running task    ");
+#ifdef CONFIG_DEBUG_STACK_USAGE
+	free = stack_not_used(p);
+#endif
+	ppid = 0;
+	rcu_read_lock();
+	if (pid_alive(p))
+		ppid = task_pid_nr(rcu_dereference(p->real_parent));
+	rcu_read_unlock();
+	printk(KERN_CONT "%5lu %5d %6d 0x%08lx\n", free,
+		task_pid_nr(p), ppid,
+		(unsigned long)task_thread_info(p)->flags);
+
+	print_worker_info(KERN_INFO, p);
+	secdbg_dtsk_print_info(p, false);
+	show_stack_auto_comment(p, NULL);
+	put_task_stack(p);
+}
+EXPORT_SYMBOL_GPL(sched_show_task_auto_comment);
+#endif /* CONFIG_SEC_DEBUG_AUTO_COMMENT */
 
 static inline bool
 state_filter_match(unsigned long state_filter, struct task_struct *p)
@@ -6098,7 +6163,10 @@ void __init sched_init(void)
 		rq->max_idle_balance_cost = sysctl_sched_migration_cost;
 
 		INIT_LIST_HEAD(&rq->cfs_tasks);
-
+#ifdef CONFIG_SCHED_EMS
+		INIT_LIST_HEAD(&rq->uss_cfs_tasks);
+		INIT_LIST_HEAD(&rq->sse_cfs_tasks);
+#endif
 		rq_attach_root(rq, &def_root_domain);
 #ifdef CONFIG_NO_HZ_COMMON
 		rq->last_load_update_tick = jiffies;
@@ -6136,6 +6204,8 @@ void __init sched_init(void)
 	init_schedstats();
 
 	psi_init();
+
+	init_ems();
 
 	scheduler_running = 1;
 }
@@ -6189,7 +6259,7 @@ void ___might_sleep(const char *file, int line, int preempt_offset)
 	/* Save this before calling printk(), since that will clobber it: */
 	preempt_disable_ip = get_preempt_disable_ip(current);
 
-	printk(KERN_ERR
+	pr_auto(ASL6,
 		"BUG: sleeping function called from invalid context at %s:%d\n",
 			file, line);
 	printk(KERN_ERR
@@ -6210,6 +6280,9 @@ void ___might_sleep(const char *file, int line, int preempt_offset)
 		pr_cont("\n");
 	}
 	dump_stack();
+#ifdef CONFIG_SEC_DEBUG_ATOMIC_SLEEP_PANIC
+	BUG();
+#endif
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 }
 EXPORT_SYMBOL(___might_sleep);
@@ -7124,4 +7197,22 @@ const u32 sched_prio_to_wmult[40] = {
  /*  15 */ 119304647, 148102320, 186737708, 238609294, 286331153,
 };
 
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+/*
+ * RT Extension for 'prio_to_weight'
+ */
+const int rtprio_to_weight[51] = {
+ /* 0 */     17222521, 15500269, 13950242, 12555218, 11299696,
+ /* 10 */    10169726,  9152754,  8237478,  7413730,  6672357,
+ /* 20 */     6005122,  5404609,  4864149,  4377734,  3939960,
+ /* 30 */     3545964,  3191368,  2872231,  2585008,  2326507,
+ /* 40 */     2093856,  1884471,  1696024,  1526421,  1373779,
+ /* 50 */     1236401,  1112761,  1001485,   901337,   811203,
+ /* 60 */      730083,   657074,   591367,   532230,   479007,
+ /* 70 */      431106,   387996,   349196,   314277,   282849,
+ /* 80 */      254564,   229108,   206197,   185577,   167019,
+ /* 90 */      150318,   135286,   121757,   109581,    98623,
+ /* 100 for Fair class */				88761,
+};
+#endif
 #undef CREATE_TRACE_POINTS

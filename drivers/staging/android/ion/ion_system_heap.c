@@ -21,7 +21,12 @@
 static gfp_t high_order_gfp_flags = (GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN |
 				     __GFP_NORETRY) & ~__GFP_RECLAIM;
 static gfp_t low_order_gfp_flags  = GFP_HIGHUSER | __GFP_ZERO;
+#ifdef CONFIG_HUGEPAGE_POOL
+#include <linux/hugepage_pool.h>
+static const unsigned int orders[] = {HUGEPAGE_ORDER, 4, 0};
+#else
 static const unsigned int orders[] = {8, 4, 0};
+#endif
 
 static int order_to_index(unsigned int order)
 {
@@ -50,7 +55,7 @@ static struct page *alloc_buffer_page(struct ion_system_heap *heap,
 {
 	struct ion_page_pool *pool = heap->pools[order_to_index(order)];
 
-	return ion_page_pool_alloc(pool);
+	return ion_page_pool_alloc(pool, buffer->flags);
 }
 
 static void free_buffer_page(struct ion_system_heap *heap,
@@ -83,7 +88,11 @@ static struct page *alloc_largest_available(struct ion_system_heap *heap,
 			continue;
 		if (max_order < orders[i])
 			continue;
-
+#ifdef CONFIG_HUGEPAGE_POOL
+		if (orders[i] == HUGEPAGE_ORDER &&
+		    !is_hugepage_allowed(current, orders[i], true, HPAGE_ION))
+			continue;
+#endif
 		page = alloc_buffer_page(heap, buffer, orders[i]);
 		if (!page)
 			continue;
@@ -110,8 +119,16 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
 	unsigned long size_remaining = PAGE_ALIGN(size);
 	unsigned int max_order = orders[0];
 
-	if (size / PAGE_SIZE > totalram_pages / 2)
+	if (size / PAGE_SIZE > totalram_pages / 2) {
+		perrfn("too large allocation, %zu bytes", size);
 		return -ENOMEM;
+	}
+
+	if (!!(flags & ION_FLAG_PROTECTED)) {
+		perrfn("ION_FLAG_PROTECTED is set to non-secure heap %s",
+		       heap->name);
+		return -EINVAL;
+	}
 
 	INIT_LIST_HEAD(&pages);
 	while (size_remaining > 0) {
@@ -128,8 +145,16 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
 	if (!table)
 		goto free_pages;
 
-	if (sg_alloc_table(table, i, GFP_KERNEL))
+	if (sg_alloc_table(table, i, GFP_KERNEL)) {
+		perrfn("failed to alloc sgtable of %d nent", i);
 		goto free_table;
+	}
+
+	if (!(buffer->flags & ION_FLAG_CACHED)) {
+		list_for_each_entry(page, &pages, lru)
+			__dma_flush_area(page_to_virt(page),
+					 PAGE_SIZE << compound_order(page));
+	}
 
 	sg = table->sgl;
 	list_for_each_entry_safe(page, tmp_page, &pages, lru) {
@@ -247,13 +272,13 @@ static void ion_system_heap_destroy_pools(struct ion_page_pool **pools)
 static int ion_system_heap_create_pools(struct ion_page_pool **pools)
 {
 	int i;
+	gfp_t gfp_flags = high_order_gfp_flags;
 
 	for (i = 0; i < NUM_ORDERS; i++) {
 		struct ion_page_pool *pool;
-		gfp_t gfp_flags = low_order_gfp_flags;
 
-		if (orders[i] > 4)
-			gfp_flags = high_order_gfp_flags;
+		if (orders[i] < 4)
+			gfp_flags = low_order_gfp_flags;
 
 		pool = ion_page_pool_create(gfp_flags, orders[i]);
 		if (!pool)
@@ -266,6 +291,81 @@ err_create_pool:
 	ion_system_heap_destroy_pools(pools);
 	return -ENOMEM;
 }
+
+static struct ion_system_heap *system_heap;
+
+unsigned int get_ion_system_heap_id(void)
+{
+	if (system_heap)
+		return system_heap->heap.id;
+	return -ENODEV;
+}
+
+void show_ion_system_heap_pool_size(struct seq_file *s)
+{
+	unsigned long pool_size = 0;
+	struct ion_page_pool *pool;
+	int i;
+
+	if (!system_heap) {
+		pr_err("system_heap_pool is not ready\n");
+		return;
+	}
+
+	for (i = 0; i < NUM_ORDERS; i++) {
+		pool = system_heap->pools[i];
+		pool_size += (1 << pool->order) * pool->high_count;
+		pool_size += (1 << pool->order) * pool->low_count;
+	}
+
+	if (s)
+		seq_printf(s, "SystemHeapPool: %8lu kB\n",
+			   (pool_size) << (PAGE_SHIFT - 10));
+	else
+		pr_cont("SystemHeapPool:%lukB ",
+			(pool_size) << (PAGE_SHIFT - 10));
+}
+
+void show_ion_system_heap_size(struct seq_file *s)
+{
+	struct ion_heap *heap;
+	unsigned long system_byte = 0;
+
+	if (!system_heap) {
+		pr_err("system_heap is not ready\n");
+		return;
+	}
+
+	heap = &system_heap->heap;
+	system_byte = (unsigned long)atomic_long_read(&heap->total_allocated);
+	if (s)
+		seq_printf(s, "SystemHeap:     %8lu kB\n", system_byte >> 10);
+	else
+		pr_cont("SystemHeap:%lukB ", system_byte >> 10);
+}
+
+
+static int ion_system_heap_size_notifier(struct notifier_block *nb,
+					 unsigned long action, void *data)
+{
+	show_ion_system_heap_size((struct seq_file *)data);
+	return 0;
+}
+
+static struct notifier_block ion_system_heap_nb = {
+	.notifier_call = ion_system_heap_size_notifier,
+};
+
+static int ion_system_heap_pool_size_notifier(struct notifier_block *nb,
+					      unsigned long action, void *data)
+{
+	show_ion_system_heap_pool_size((struct seq_file *)data);
+	return 0;
+}
+
+static struct notifier_block ion_system_heap_pool_nb = {
+	.notifier_call = ion_system_heap_pool_size_notifier,
+};
 
 static struct ion_heap *__ion_system_heap_create(void)
 {
@@ -282,6 +382,15 @@ static struct ion_heap *__ion_system_heap_create(void)
 		goto free_heap;
 
 	heap->heap.debug_show = ion_system_heap_debug_show;
+
+	if (!system_heap) {
+		system_heap = heap;
+		show_mem_extra_notifier_register(&ion_system_heap_nb);
+		show_mem_extra_notifier_register(&ion_system_heap_pool_nb);
+	}
+	else
+		pr_err("system_heap had been already created\n");
+
 	return &heap->heap;
 
 free_heap:
@@ -301,7 +410,7 @@ static int ion_system_heap_create(void)
 	ion_device_add_heap(heap);
 	return 0;
 }
-device_initcall(ion_system_heap_create);
+subsys_initcall(ion_system_heap_create);
 
 static int ion_system_contig_heap_allocate(struct ion_heap *heap,
 					   struct ion_buffer *buffer,
@@ -313,6 +422,12 @@ static int ion_system_contig_heap_allocate(struct ion_heap *heap,
 	struct sg_table *table;
 	unsigned long i;
 	int ret;
+
+	if (!!(flags & ION_FLAG_PROTECTED)) {
+		perrfn("ION_FLAG_PROTECTED is set to non-secure heap %s",
+		       heap->name);
+		return -EINVAL;
+	}
 
 	page = alloc_pages(low_order_gfp_flags | __GFP_NOWARN, order);
 	if (!page)
@@ -383,7 +498,7 @@ static struct ion_heap *__ion_system_contig_heap_create(void)
 	return heap;
 }
 
-static int ion_system_contig_heap_create(void)
+static int __maybe_unused ion_system_contig_heap_create(void)
 {
 	struct ion_heap *heap;
 
@@ -394,5 +509,4 @@ static int ion_system_contig_heap_create(void)
 	ion_device_add_heap(heap);
 	return 0;
 }
-device_initcall(ion_system_contig_heap_create);
 

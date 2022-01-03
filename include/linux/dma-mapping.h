@@ -12,6 +12,10 @@
 #include <linux/bug.h>
 #include <linux/mem_encrypt.h>
 
+#ifdef CONFIG_MHI_BUS
+#define DMA_ATTR_FORCE_NON_COHERENT            (1UL << 15)
+#endif
+
 /**
  * List of possible attributes associated with a DMA mapping. The semantics
  * of each attribute should be defined in Documentation/DMA-attributes.txt.

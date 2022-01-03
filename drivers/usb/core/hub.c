@@ -9,7 +9,7 @@
  *
  * Released under the GPLv2 only.
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/module.h>
@@ -34,6 +34,9 @@
 
 #include "hub.h"
 #include "otg_whitelist.h"
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+#include <linux/usb_notify.h>
+#endif
 
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define HUB_QUIRK_CHECK_PORT_AUTOSUSPEND	0x01
@@ -109,6 +112,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev);
 static int hub_port_disable(struct usb_hub *hub, int port1, int set_state);
 static bool hub_port_warm_reset_required(struct usb_hub *hub, int port1,
 		u16 portstatus);
+static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev);
 
 static inline char *portspeed(struct usb_hub *hub, int portstatus)
 {
@@ -927,7 +931,11 @@ static int hub_set_port_link_state(struct usb_hub *hub, int port1,
  */
 static void hub_port_logical_disconnect(struct usb_hub *hub, int port1)
 {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&hub->ports[port1 - 1]->dev, "logical disconnect\n");
+#else
 	dev_dbg(&hub->ports[port1 - 1]->dev, "logical disconnect\n");
+#endif
 	hub_port_disable(hub, port1, 1);
 
 	/* FIXME let caller ask to power down the port:
@@ -1726,6 +1734,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	struct usb_host_interface *desc;
 	struct usb_device *hdev;
 	struct usb_hub *hub;
+	struct usb_hcd *hcd;
 
 	desc = intf->cur_altsetting;
 	hdev = interface_to_usbdev(intf);
@@ -1767,7 +1776,13 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	 *   usbcore.autosuspend = -1 then keep autosuspend disabled.
 	 */
 #ifdef CONFIG_PM
-	if (hdev->dev.power.autosuspend_delay >= 0)
+	/*
+	 * bus suspend is executed before USB3.0 hub and devices are detected,
+	 * which causes USB3.0 hub and devices aren't recognized when l2 sleep is enabled.
+	 * Restoring suspend delay will resolve USB3.0 hub detect issue.
+	 */
+	hcd = bus_to_hcd(hdev->bus);
+	if ((hdev->dev.power.autosuspend_delay >= 0) && !hcd->driver->usb_l2_check(hcd))
 		pm_runtime_set_autosuspend_delay(&hdev->dev, 0);
 #endif
 
@@ -1788,6 +1803,9 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	if (hdev->level == MAX_TOPO_LEVEL) {
 		dev_err(&intf->dev,
 			"Unsupported bus topology: hub nested too deep\n");
+#if defined(CONFIG_USB_HOST_CERTI)
+		send_usb_certi_uevent(USB_CERTI_HUB_DEPTH_EXCEED);
+#endif
 		return -E2BIG;
 	}
 
@@ -2364,8 +2382,25 @@ static int usb_enumerate_device(struct usb_device *udev)
 		}
 		return -ENOTSUPP;
 	}
-
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+	if (!usb_check_whitelist_for_mdm(udev)) {
+		if (IS_ENABLED(CONFIG_USB_OTG) && (udev->bus->b_hnp_enable
+			|| udev->bus->is_b_host)) {
+			err = usb_port_suspend(udev, PMSG_AUTO_SUSPEND);
+			if (err < 0)
+				dev_dbg(&udev->dev, "HNP fail, %d\n", err);
+		}
+		return -ENOTSUPP;
+	}
+#endif
 	usb_detect_interface_quirks(udev);
+
+#ifdef CONFIG_USB_INTERFACE_LPM_LIST
+		if (usb_detect_interface_lpm(udev)) {
+			dev_info(&udev->dev, "L1 enable");
+			hub_set_initial_usb2_lpm_policy(udev);
+		}
+#endif
 
 	return 0;
 }
@@ -2803,13 +2838,18 @@ static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 
 /* Handle port reset and port warm(BH) reset (for USB3 protocol ports) */
 static int hub_port_reset(struct usb_hub *hub, int port1,
-			struct usb_device *udev, unsigned int delay, bool warm)
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		struct usb_device *udev, unsigned int delay, bool warm, u32 trstrcy)
+#else
+		struct usb_device *udev, unsigned int delay, bool warm)
+#endif
 {
 	int i, status;
 	u16 portchange, portstatus;
 	struct usb_port *port_dev = hub->ports[port1 - 1];
+#ifndef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
 	int reset_recovery_time;
-
+#endif
 	if (!hub_is_superspeed(hub->hdev)) {
 		if (warm) {
 			dev_err(hub->intfdev, "only USB3 hub support "
@@ -2902,6 +2942,9 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 
 done:
 	if (status == 0) {
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		usleep_range(trstrcy * 1000, trstrcy * 1100);
+#else
 		if (port_dev->quirks & USB_PORT_QUIRK_FAST_ENUM)
 			usleep_range(10000, 12000);
 		else {
@@ -2914,7 +2957,7 @@ done:
 
 			msleep(reset_recovery_time);
 		}
-
+#endif
 		if (udev) {
 			struct usb_hcd *hcd = bus_to_hcd(udev->bus);
 
@@ -3203,6 +3246,9 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 	int		port1 = udev->portnum;
 	int		status;
 	bool		really_suspend = true;
+#if defined(CONFIG_USB_NOTIFY_PROC_LOG)
+	int		event;
+#endif
 
 	usb_lock_port(port_dev);
 
@@ -3217,6 +3263,10 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 		if (status) {
 			dev_dbg(&udev->dev, "won't remote wakeup, status %d\n",
 					status);
+#if defined(CONFIG_USB_NOTIFY_PROC_LOG)
+			event = NOTIFY_EXTRA_PORT_SUSPEND_WAKEUP_FAIL;
+			store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 			/* bail if autosuspend is requested */
 			if (PMSG_IS_AUTO(msg))
 				goto err_wakeup;
@@ -3229,6 +3279,10 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 	if (usb_disable_ltm(udev)) {
 		dev_err(&udev->dev, "Failed to disable LTM before suspend\n");
 		status = -ENOMEM;
+#if defined(CONFIG_USB_NOTIFY_PROC_LOG)
+		event = NOTIFY_EXTRA_PORT_SUSPEND_LTM_FAIL;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 		if (PMSG_IS_AUTO(msg))
 			goto err_ltm;
 	}
@@ -3257,6 +3311,10 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 	}
 	if (status) {
 		dev_dbg(&port_dev->dev, "can't suspend, status %d\n", status);
+#if defined(CONFIG_USB_NOTIFY_PROC_LOG)
+		event = NOTIFY_EXTRA_PORT_SUSPEND_FAIL;
+		store_usblog_notify(NOTIFY_EXTRA, (void *)&event, NULL);
+#endif
 
 		/* Try to enable USB3 LTM again */
 		usb_enable_ltm(udev);
@@ -3478,8 +3536,13 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	if (!test_and_set_bit(port1, hub->child_usage_bits)) {
 		status = pm_runtime_get_sync(&port_dev->dev);
 		if (status < 0) {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+			dev_err(&udev->dev, "can't resume usb port, status %d\n",
+					status);
+#else
 			dev_dbg(&udev->dev, "can't resume usb port, status %d\n",
 					status);
+#endif
 			return status;
 		}
 	}
@@ -3501,7 +3564,11 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		status = usb_clear_port_feature(hub->hdev,
 				port1, USB_PORT_FEAT_SUSPEND);
 	if (status) {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&port_dev->dev, "can't resume, status %d\n", status);
+#else
 		dev_dbg(&port_dev->dev, "can't resume, status %d\n", status);
+#endif
 	} else {
 		/* drive resume for USB_RESUME_TIMEOUT msec */
 		dev_dbg(&udev->dev, "usb %sresume\n",
@@ -3541,7 +3608,11 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	if (status == 0)
 		status = finish_port_resume(udev);
 	if (status < 0) {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&udev->dev, "can't resume, status %d\n", status);
+#else
 		dev_dbg(&udev->dev, "can't resume, status %d\n", status);
+#endif
 		hub_port_logical_disconnect(hub, port1);
 	} else  {
 		/* Try to enable USB2 hardware LPM */
@@ -4368,7 +4439,11 @@ int hub_port_debounce(struct usb_hub *hub, int port1, bool must_be_connected)
 
 		if (total_time >= HUB_DEBOUNCE_TIMEOUT)
 			break;
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		usleep_range(23000, 24000);
+#else
 		msleep(HUB_DEBOUNCE_STEP);
+#endif
 	}
 
 	dev_dbg(&port_dev->dev, "debounce total %dms stable %dms status 0x%x\n",
@@ -4473,7 +4548,11 @@ static int hub_enable_device(struct usb_device *udev)
  */
 static int
 hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		int retry_counter, int trstrcy)
+#else
 		int retry_counter)
+#endif
 {
 	struct usb_device	*hdev = hub->hdev;
 	struct usb_hcd		*hcd = bus_to_hcd(hdev->bus);
@@ -4484,7 +4563,6 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	const char		*speed;
 	int			devnum = udev->devnum;
 	const char		*driver_name;
-
 	/* root hub ports have a slightly longer reset period
 	 * (from USB 2.0 spec, section 7.1.7.5)
 	 */
@@ -4503,9 +4581,21 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 	/* Reset the device; full speed may morph to high speed */
 	/* FIXME a USB 2.0 device may morph into SuperSpeed on reset. */
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+	retval = hub_port_reset(hub, port1, udev, delay, false, trstrcy);
+	/* error or disconnect */
+	if (retval < 0) {
+		/* Retry again */
+		dev_err(&udev->dev, "device reset again!\n");
+		retval = hub_port_reset(hub, port1, udev, delay, false, 50);
+		if (retval < 0)
+			goto fail;
+	}
+#else
 	retval = hub_port_reset(hub, port1, udev, delay, false);
-	if (retval < 0)		/* error or disconnect */
+	if (retval < 0) 	/* error or disconnect */
 		goto fail;
+#endif
 	/* success, speed is known */
 
 	retval = -ENODEV;
@@ -4657,10 +4747,21 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 			udev->descriptor.bMaxPacketSize0 =
 					buf->bMaxPacketSize0;
 			kfree(buf);
-
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+			retval = hub_port_reset(hub, port1, udev, delay, false, trstrcy);
+			/* error or disconnect */
+			if (retval < 0) {
+				/* Retry again */
+				dev_err(&udev->dev, "device reset again!\n");
+				retval = hub_port_reset(hub, port1, udev, delay, false, 50);
+				if (retval < 0)
+					goto fail;
+			}
+#else
 			retval = hub_port_reset(hub, port1, udev, delay, false);
-			if (retval < 0)		/* error or disconnect */
+			if (retval < 0) 	/* error or disconnect */
 				goto fail;
+#endif
 			if (oldspeed != udev->speed) {
 				dev_dbg(&udev->dev,
 					"device reset changed speed!\n");
@@ -4668,9 +4769,13 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 				goto fail;
 			}
 			if (r) {
-				if (r != -ENODEV)
+				if (r != -ENODEV) {
 					dev_err(&udev->dev, "device descriptor read/64, error %d\n",
 							r);
+#if defined(CONFIG_USB_HOST_CERTI)
+					send_usb_certi_uevent(USB_CERTI_NO_RESPONSE);
+#endif
+				}
 				retval = -EMSGSIZE;
 				continue;
 			}
@@ -4687,6 +4792,12 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 				retval = hub_set_address(udev, devnum);
 				if (retval >= 0)
 					break;
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+				if (udev->reset_resume && retval < 0) {
+					dev_err(&udev->dev, "set address fail in reset resume\n");
+					break;
+				}
+#endif
 				msleep(200);
 			}
 			if (retval < 0) {
@@ -4711,7 +4822,11 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 			 *  - let SET_ADDRESS settle, some device hardware wants it
 			 *  - read ep0 maxpacket even for high and low speed,
 			 */
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+			usleep_range(10000, 11000);
+#else
 			msleep(10);
+#endif
 			/* use_new_scheme() checks the speed which may have
 			 * changed since the initial look so we cache the result
 			 * in did_new_scheme
@@ -4722,10 +4837,14 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 		retval = usb_get_device_descriptor(udev, 8);
 		if (retval < 8) {
-			if (retval != -ENODEV)
+			if (retval != -ENODEV) {
 				dev_err(&udev->dev,
 					"device descriptor read/8, error %d\n",
 					retval);
+#if defined(CONFIG_USB_HOST_CERTI)
+				send_usb_certi_uevent(USB_CERTI_NO_RESPONSE);
+#endif
+			}
 			if (retval >= 0)
 				retval = -EMSGSIZE;
 		} else {
@@ -4760,7 +4879,11 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 		dev_err(&udev->dev, "got a wrong device descriptor, "
 				"warm reset device\n");
 		hub_port_reset(hub, port1, udev,
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+				HUB_BH_RESET_TIME, true, 50);
+#else
 				HUB_BH_RESET_TIME, true);
+#endif
 		retval = -EINVAL;
 		goto fail;
 	}
@@ -4787,9 +4910,13 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 	retval = usb_get_device_descriptor(udev, USB_DT_DEVICE_SIZE);
 	if (retval < (signed)sizeof(udev->descriptor)) {
-		if (retval != -ENODEV)
+		if (retval != -ENODEV) {
 			dev_err(&udev->dev, "device descriptor read/all, error %d\n",
 					retval);
+#if defined(CONFIG_USB_HOST_CERTI)
+			send_usb_certi_uevent(USB_CERTI_NO_RESPONSE);
+#endif
+		}
 		if (retval >= 0)
 			retval = -ENOMSG;
 		goto fail;
@@ -4805,11 +4932,17 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 		}
 	}
 
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&udev->dev, "udev->lpm_capable=%d\n", udev->lpm_capable);
+#endif
+
 	retval = 0;
 	/* notify HCD that we have a device connected and addressed */
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
+#ifndef CONFIG_USB_INTERFACE_LPM_LIST
 	hub_set_initial_usb2_lpm_policy(udev);
+#endif
 fail:
 	if (retval) {
 		hub_port_disable(hub, port1, 0);
@@ -4890,6 +5023,9 @@ hub_power_remaining(struct usb_hub *hub)
 		dev_warn(hub->intfdev, "%dmA over power budget!\n",
 			-remaining);
 		remaining = 0;
+#if defined(CONFIG_USB_HOST_CERTI)
+		send_usb_certi_uevent(USB_CERTI_HUB_POWER_EXCEED);
+#endif
 	}
 	return remaining;
 }
@@ -4905,6 +5041,19 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 	struct usb_port *port_dev = hub->ports[port1 - 1];
 	struct usb_device *udev = port_dev->child;
 	static int unreliable_port = -1;
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+	int trstrcy = 10;
+#endif
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+	struct otg_notify *o_notify = get_otg_notify();
+#endif
+
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&port_dev->dev,
+		"%s : port %d, status %04x, change %04x, %s\n",
+		__func__, port1, portstatus, portchange,
+		portspeed(hub, portstatus));
+#endif
 
 	/* Disconnect any existing devices under this port */
 	if (udev) {
@@ -4926,8 +5075,12 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 		if (status < 0) {
 			if (status != -ENODEV &&
 				port1 != unreliable_port &&
-				printk_ratelimit())
+				printk_ratelimit()) {
 				dev_err(&port_dev->dev, "connect-debounce failed\n");
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+				send_otg_notify(o_notify, NOTIFY_EVENT_HOST_RELOAD, 1);
+#endif
+			}
 			portstatus &= ~USB_PORT_STAT_CONNECTION;
 			unreliable_port = port1;
 		} else {
@@ -4954,6 +5107,11 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 			goto done;
 		return;
 	}
+
+	/* clear unreliable_port when port is stable */
+	if (unreliable_port == port1)
+		unreliable_port = -1;
+
 	if (hub_is_superspeed(hub->hdev))
 		unit_load = 150;
 	else
@@ -4961,7 +5119,11 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 
 	status = 0;
 	for (i = 0; i < SET_CONFIG_TRIES; i++) {
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&port_dev->dev,
+			"%s : before usb_alloc_dev() port %d, status %04x, change %04x, %s\n",
+			__func__, port1, portstatus, portchange, portspeed(hub, portstatus));
+#endif
 		/* reallocate for each attempt, since references
 		 * to the previous one can escape in various ways
 		 */
@@ -4971,7 +5133,11 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 					"couldn't allocate usb_device\n");
 			goto done;
 		}
-
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+		dev_err(&port_dev->dev,
+			"%s : after usb_alloc_dev() port %d, status %04x, change %04x, %s\n",
+			__func__, port1, portstatus, portchange, portspeed(hub, portstatus));
+#endif
 		usb_set_device_state(udev, USB_STATE_POWERED);
 		udev->bus_mA = hub->mA_per_port;
 		udev->level = hdev->level + 1;
@@ -4991,7 +5157,17 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 
 		/* reset (non-USB 3.0 devices) and get descriptor */
 		usb_lock_port(port_dev);
+
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		if (i == 0)
+			trstrcy = 10;
+		else
+			trstrcy *= 2;
+
+		status = hub_port_init(hub, udev, port1, i, trstrcy);
+#else
 		status = hub_port_init(hub, udev, port1, i);
+#endif
 		usb_unlock_port(port_dev);
 		if (status < 0)
 			goto loop;
@@ -5266,10 +5442,17 @@ static void port_event(struct usb_hub *hub, int port1)
 	 */
 	if (hub_port_warm_reset_required(hub, port1, portstatus)) {
 		dev_dbg(&port_dev->dev, "do warm reset\n");
+#if defined(CONFIG_USB_HOST_CERTI)
+		send_usb_certi_uevent(USB_CERTI_WARM_RESET);
+#endif
 		if (!udev || !(portstatus & USB_PORT_STAT_CONNECTION)
 				|| udev->state == USB_STATE_NOTATTACHED) {
 			if (hub_port_reset(hub, port1, NULL,
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+					HUB_BH_RESET_TIME, true, 50) < 0)
+#else
 					HUB_BH_RESET_TIME, true) < 0)
+#endif
 				hub_port_disable(hub, port1, 1);
 		} else {
 			usb_unlock_port(port_dev);
@@ -5291,6 +5474,7 @@ static void hub_event(struct work_struct *work)
 	struct usb_interface *intf;
 	struct usb_hub *hub;
 	struct device *hub_dev;
+	struct usb_hcd *hcd;
 	u16 hubstatus;
 	u16 hubchange;
 	int i, ret;
@@ -5298,6 +5482,7 @@ static void hub_event(struct work_struct *work)
 	hub = container_of(work, struct usb_hub, events);
 	hdev = hub->hdev;
 	hub_dev = hub->intfdev;
+	hcd = bus_to_hcd(hdev->bus);
 	intf = to_usb_interface(hub_dev);
 
 	dev_dbg(hub_dev, "state %d ports %d chg %04x evt %04x\n",
@@ -5309,6 +5494,7 @@ static void hub_event(struct work_struct *work)
 	/* Lock the device, then check to see if we were
 	 * disconnected while waiting for the lock to succeed. */
 	usb_lock_device(hdev);
+	hcd->is_in_hub_event = true;
 	if (unlikely(hub->disconnected))
 		goto out_hdev_lock;
 
@@ -5401,6 +5587,7 @@ out_autopm:
 	/* Balance the usb_autopm_get_interface() above */
 	usb_autopm_put_interface_no_suspend(intf);
 out_hdev_lock:
+	hcd->is_in_hub_event = false;
 	usb_unlock_device(hdev);
 
 	/* Balance the stuff in kick_hub_wq() and allow autosuspend */
@@ -5603,7 +5790,9 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 	struct usb_host_bos		*bos;
 	int				i, j, ret = 0;
 	int				port1 = udev->portnum;
-
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+	int trstrcy = 10;
+#endif
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED) {
 		dev_dbg(&udev->dev, "device reset not allowed in state %d\n",
@@ -5639,7 +5828,16 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 		/* ep0 maxpacket size may change; let the HCD know about it.
 		 * Other endpoints will be handled by re-enumeration. */
 		usb_ep0_reinit(udev);
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+		if (i == 0)
+			trstrcy = 10;
+		else
+			trstrcy *= 2;
+
+		ret = hub_port_init(parent_hub, udev, port1, i, trstrcy);
+#else
 		ret = hub_port_init(parent_hub, udev, port1, i);
+#endif
 		if (ret >= 0 || ret == -ENOTCONN || ret == -ENODEV)
 			break;
 	}

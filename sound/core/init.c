@@ -181,6 +181,18 @@ static void release_card_device(struct device *dev)
 	snd_card_do_free(dev_to_snd_card(dev));
 }
 
+#ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
+int get_next_snd_card_number(struct module *module)
+{
+	int idx = 0;
+	
+	idx = get_slot_from_bitmask(-1, check_empty_slot, module);
+
+	return idx;
+}
+EXPORT_SYMBOL_GPL(get_next_snd_card_number);
+#endif
+
 /**
  *  snd_card_new - create and initialize a soundcard structure
  *  @parent: the parent device object
@@ -283,6 +295,10 @@ int snd_card_new(struct device *parent, int idx, const char *xid,
 		goto __error_ctl;
 	}
 	*card_ret = card;
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(parent, "%s: card%d is created %s:%s\n", __func__, idx, 
+			dev_driver_string(card->dev), dev_name(&card->card_dev));
+#endif
 	return 0;
 
       __error_ctl:

@@ -111,6 +111,17 @@ SCHED_FEAT(EAS_PREFER_IDLE, true)
 SCHED_FEAT(SUGOV_RT_MAX_FREQ, false)
 
 /*
+ * Exynos Mobile Scheduler
+ */
+SCHED_FEAT(EMS, true)
+
+#ifdef CONFIG_SCHED_USE_FLUID_RT
+SCHED_FEAT(EXYNOS_FRT, true)
+#else
+SCHED_FEAT(EXYNOS_FRT, false)
+#endif
+
+/*
  * Apply schedtune boost hold to tasks of all sched classes.
  * If enabled, schedtune will hold the boost applied to a CPU
  * for 50ms regardless of task activation - if the task is

@@ -97,6 +97,14 @@ obj-$(CONFIG_REGULATOR_RN5T618) += rn5t618-regulator.o
 obj-$(CONFIG_REGULATOR_RT5033)	+= rt5033-regulator.o
 obj-$(CONFIG_REGULATOR_S2MPA01) += s2mpa01.o
 obj-$(CONFIG_REGULATOR_S2MPS11) += s2mps11.o
+obj-$(CONFIG_DRV_SAMSUNG_PMIC) += pmic_class.o
+obj-$(CONFIG_REGULATOR_S2MPS19) += s2mps19_regulator.o s2mps19_powermeter.o
+obj-$(CONFIG_REGULATOR_S2MPS20) += s2mps20-regulator.o s2mps20-powermeter.o
+obj-$(CONFIG_REGULATOR_S2MPS22) += s2mps22_regulator.o s2mps22_powermeter.o
+obj-$(CONFIG_REGULATOR_S2MPB02) += s2mpb02-regulator.o
+obj-$(CONFIG_REGULATOR_S2MPB03) += s2mpb03.o
+obj-$(CONFIG_REGULATOR_S2DOS05) += s2dos05.o  s2dos05_powermeter.o
+obj-$(CONFIG_REGULATOR_S2DOS06) += s2dos06.o s2dos06_powermeter.o
 obj-$(CONFIG_REGULATOR_S5M8767) += s5m8767.o
 obj-$(CONFIG_REGULATOR_SC2731) += sc2731-regulator.o
 obj-$(CONFIG_REGULATOR_SKY81452) += sky81452-regulator.o
@@ -130,3 +138,6 @@ obj-$(CONFIG_REGULATOR_WM8400) += wm8400-regulator.o
 obj-$(CONFIG_REGULATOR_WM8994) += wm8994-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
+ccflags-y := -Wformat
+
+GCOV_PROFILE_s2dos05.o		:=y

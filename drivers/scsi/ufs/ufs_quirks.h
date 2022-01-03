@@ -25,6 +25,10 @@
 #define UFS_VENDOR_SAMSUNG     0x1CE
 #define UFS_VENDOR_SKHYNIX     0x1AD
 
+/*uniqueu number*/
+#define UFS_UN_20_DIGITS 20
+#define UFS_UN_MAX_DIGITS 21 //current max digit + 1
+
 /**
  * ufs_dev_fix - ufs device quirk info
  * @card: ufs card details
@@ -52,6 +56,7 @@ struct ufs_dev_fix {
  * TX_LCC_ENABLE attribute of host to 0).
  */
 #define UFS_DEVICE_QUIRK_BROKEN_LCC (1 << 0)
+#define UFS_DEVICE_QUIRK_BROKEN_LINEREST	UFS_BIT(1)
 
 /*
  * Some UFS devices don't need VCCQ rail for device operations. Enabling this
@@ -136,5 +141,14 @@ struct ufs_dev_fix {
  * enabling this quirk ensure this.
  */
 #define UFS_DEVICE_QUIRK_HOST_VS_DEBUGSAVECONFIGTIME	(1 << 9)
+
+/*
+ * Some UFS devices support the FATAL MODE
+ * to gether the debug info.
+ */
+#define UFS_DEVICE_QUIRK_SUPPORT_QUERY_FATAL_MODE	(1 << 10)
+
+struct ufs_hba;
+void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *str_desc_buf, u8 *desc_buf);
 
 #endif /* UFS_QUIRKS_H_ */

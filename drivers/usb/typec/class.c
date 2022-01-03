@@ -10,6 +10,9 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+#include <linux/usb_notify.h>
+#endif
 
 #include "bus.h"
 
@@ -683,8 +686,17 @@ EXPORT_SYMBOL_GPL(typec_register_partner);
  */
 void typec_unregister_partner(struct typec_partner *partner)
 {
-	if (!IS_ERR_OR_NULL(partner))
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+	struct otg_notify *o_notify = get_otg_notify();
+#endif
+
+	if (!IS_ERR_OR_NULL(partner)) {
 		device_unregister(&partner->dev);
+#if defined(CONFIG_USB_NOTIFY_LAYER)	
+		if (o_notify)
+			send_otg_notify(o_notify, NOTIFY_EVENT_PD_CONTRACT, 0);
+#endif
+	}
 }
 EXPORT_SYMBOL_GPL(typec_unregister_partner);
 
@@ -1101,18 +1113,23 @@ port_type_store(struct device *dev, struct device_attribute *attr,
 		return -EOPNOTSUPP;
 	}
 
+	pr_info("%s %s +\n", __func__, buf);
 	ret = sysfs_match_string(typec_port_power_roles, buf);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_err("%s error -\n", __func__);
 		return ret;
+	}
 
 	type = ret;
 	mutex_lock(&port->port_type_lock);
-
+	pr_info("%s port_type : %d, type : %d\n", 
+		__func__, port->port_type, type);
+#if 0 /* logically, we don't need to compare previous role */
 	if (port->port_type == type) {
 		ret = size;
 		goto unlock_and_ret;
 	}
-
+#endif
 	ret = port->cap->port_type_set(port->cap, type);
 	if (ret)
 		goto unlock_and_ret;
@@ -1122,6 +1139,7 @@ port_type_store(struct device *dev, struct device_attribute *attr,
 
 unlock_and_ret:
 	mutex_unlock(&port->port_type_lock);
+	pr_info("%s -\n", __func__);
 	return ret;
 }
 
@@ -1359,6 +1377,18 @@ void typec_set_pwr_opmode(struct typec_port *port,
 			  enum typec_pwr_opmode opmode)
 {
 	struct device *partner_dev;
+
+#if defined(CONFIG_USB_NOTIFY_LAYER)
+	struct otg_notify *o_notify = get_otg_notify();
+
+	if (o_notify) {
+		if (opmode == TYPEC_PWR_MODE_PD)
+			send_otg_notify(o_notify, NOTIFY_EVENT_PD_CONTRACT, 1);
+		else
+			send_otg_notify(o_notify, NOTIFY_EVENT_PD_CONTRACT, 0);
+	}
+#endif
+	pr_info("%s pwr_opmode=%d opmode=%d\n", __func__, port->pwr_opmode, opmode);
 
 	if (port->pwr_opmode == opmode)
 		return;

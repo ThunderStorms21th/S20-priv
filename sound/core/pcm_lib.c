@@ -1843,7 +1843,7 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 		if (substream->wait_time) {
 			wait_time = substream->wait_time;
 		} else {
-			wait_time = 10;
+			wait_time = 1;
 
 			if (runtime->rate) {
 				long t = runtime->period_size * 2 /

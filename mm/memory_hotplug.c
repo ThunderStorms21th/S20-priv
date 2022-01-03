@@ -41,6 +41,8 @@
 
 #include "internal.h"
 
+#include <soc/samsung/exynos-debug.h>
+
 /*
  * online_page_callback contains pointer to current page onlining function.
  * Initially it is generic_online_page(). If it is required it could be
@@ -84,6 +86,25 @@ static int __init setup_memhp_default_state(char *str)
 	return 1;
 }
 __setup("memhp_default_state=", setup_memhp_default_state);
+
+static atomic_t mem_offline_stop_request;
+static ktime_t t_memstop_req;
+
+static inline bool mem_stop_is_requested(void)
+{
+	return atomic_read(&mem_offline_stop_request) > 0;
+}
+
+static inline void mem_stop_progress_init(void)
+{
+	atomic_set(&mem_offline_stop_request, 0);
+}
+
+void mem_stop_offline(void)
+{
+	if (atomic_inc_return(&mem_offline_stop_request) == 1)
+		t_memstop_req = ktime_get();
+}
 
 void mem_hotplug_begin(void)
 {
@@ -1341,117 +1362,6 @@ static unsigned long scan_movable_pages(unsigned long start, unsigned long end)
 	return 0;
 }
 
-static struct page *new_node_page(struct page *page, unsigned long private)
-{
-	int nid = page_to_nid(page);
-	nodemask_t nmask = node_states[N_MEMORY];
-
-	/*
-	 * try to allocate from a different node but reuse this node if there
-	 * are no other online nodes to be used (e.g. we are offlining a part
-	 * of the only existing node)
-	 */
-	node_clear(nid, nmask);
-	if (nodes_empty(nmask))
-		node_set(nid, nmask);
-
-	return new_page_nodemask(page, nid, &nmask);
-}
-
-#define NR_OFFLINE_AT_ONCE_PAGES	(256)
-static int
-do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
-{
-	unsigned long pfn;
-	struct page *page;
-	int move_pages = NR_OFFLINE_AT_ONCE_PAGES;
-	int not_managed = 0;
-	int ret = 0;
-	LIST_HEAD(source);
-
-	for (pfn = start_pfn; pfn < end_pfn && move_pages > 0; pfn++) {
-		if (!pfn_valid(pfn))
-			continue;
-		page = pfn_to_page(pfn);
-
-		if (PageHuge(page)) {
-			struct page *head = compound_head(page);
-			pfn = page_to_pfn(head) + (1<<compound_order(head)) - 1;
-			if (compound_order(head) > PFN_SECTION_SHIFT) {
-				ret = -EBUSY;
-				break;
-			}
-			if (isolate_huge_page(page, &source))
-				move_pages -= 1 << compound_order(head);
-			continue;
-		} else if (PageTransHuge(page))
-			pfn = page_to_pfn(compound_head(page))
-				+ hpage_nr_pages(page) - 1;
-
-		/*
-		 * HWPoison pages have elevated reference counts so the migration would
-		 * fail on them. It also doesn't make any sense to migrate them in the
-		 * first place. Still try to unmap such a page in case it is still mapped
-		 * (e.g. current hwpoison implementation doesn't unmap KSM pages but keep
-		 * the unmap as the catch all safety net).
-		 */
-		if (PageHWPoison(page)) {
-			if (WARN_ON(PageLRU(page)))
-				isolate_lru_page(page);
-			if (page_mapped(page))
-				try_to_unmap(page, TTU_IGNORE_MLOCK | TTU_IGNORE_ACCESS);
-			continue;
-		}
-
-		if (!get_page_unless_zero(page))
-			continue;
-		/*
-		 * We can skip free pages. And we can deal with pages on
-		 * LRU and non-lru movable pages.
-		 */
-		if (PageLRU(page))
-			ret = isolate_lru_page(page);
-		else
-			ret = isolate_movable_page(page, ISOLATE_UNEVICTABLE);
-		if (!ret) { /* Success */
-			put_page(page);
-			list_add_tail(&page->lru, &source);
-			move_pages--;
-			if (!__PageMovable(page))
-				inc_node_page_state(page, NR_ISOLATED_ANON +
-						    page_is_file_cache(page));
-
-		} else {
-#ifdef CONFIG_DEBUG_VM
-			pr_alert("failed to isolate pfn %lx\n", pfn);
-			dump_page(page, "isolation failed");
-#endif
-			put_page(page);
-			/* Because we don't have big zone->lock. we should
-			   check this again here. */
-			if (page_count(page)) {
-				not_managed++;
-				ret = -EBUSY;
-				break;
-			}
-		}
-	}
-	if (!list_empty(&source)) {
-		if (not_managed) {
-			putback_movable_pages(&source);
-			goto out;
-		}
-
-		/* Allocate a new page from the nearest neighbor node */
-		ret = migrate_pages(&source, new_node_page, NULL, 0,
-					MIGRATE_SYNC, MR_MEMORY_HOTPLUG);
-		if (ret)
-			putback_movable_pages(&source);
-	}
-out:
-	return ret;
-}
-
 /*
  * remove from free_area[] and mark all as Reserved.
  */
@@ -1601,6 +1511,165 @@ static void node_states_clear_node(int node, struct memory_notify *arg)
 		node_clear_state(node, N_MEMORY);
 }
 
+struct partial_work {
+	struct work_struct work;
+
+	int cpu;
+	int result;
+	unsigned long start_pfn;
+	unsigned long end_pfn;
+	struct zone *zone;
+	struct kref *kref;
+	struct completion *completion;
+};
+
+struct partial_job {
+	struct kref ref;
+	struct completion completion;
+};
+
+#define MEM_HP_REFRESH_TIME		(9 * HZ)
+static void hotplug_watchdog_handler(struct timer_list *timer)
+{
+	s3c2410wdt_keepalive_common();
+	mod_timer(timer, jiffies + MEM_HP_REFRESH_TIME);
+}
+
+static void finish_partial_work(struct kref *kref)
+{
+	struct partial_job *pjob = container_of(kref, struct partial_job, ref);
+
+	complete_all(&pjob->completion);
+}
+
+#define OFFLINE_RETRY_COUNT 5
+
+static void __offline_partial_pages(struct work_struct *work)
+{
+	struct partial_work *pwork = container_of(work, struct partial_work, work);
+	unsigned long start_pfn, end_pfn, pfn;
+	int max_retry = OFFLINE_RETRY_COUNT;
+	struct zone *zone;
+
+	pfn = start_pfn = pwork->start_pfn;
+	end_pfn = pwork->end_pfn;
+	zone = pwork->zone;
+
+repeat:
+	/* start memory hot removal */
+	if (mem_stop_is_requested()) {
+		pwork->result = -EINTR;
+		goto finish_offline;
+	}
+
+	cond_resched();
+	lru_add_drain_all();
+	drain_all_pages(zone);
+
+	pfn = scan_movable_pages(start_pfn, end_pfn);
+	if (pfn) { /* We have movable pages */
+		int ret;
+
+		pfn = ALIGN_DOWN(pfn, pageblock_nr_pages);
+		ret = reclaim_pages_range(pfn, end_pfn - pfn,
+					  MIGRATE_SYNC, MR_MEMORY_HOTPLUG);
+		if (ret && --max_retry == 0) {
+			pwork->result = ret;
+			goto finish_offline;
+		} else if (!ret)
+			max_retry = OFFLINE_RETRY_COUNT;
+
+		goto repeat;
+	}
+
+	pwork->result = 0;
+
+finish_offline:
+	kref_put(pwork->kref, finish_partial_work);
+}
+
+#define HP_WORK_COUNT	4
+static int offline_pages_multi(struct zone *zone, unsigned long start_pfn)
+{
+	struct partial_work work[HP_WORK_COUNT];
+	struct partial_work *pwork = work;
+	struct partial_job job;
+	struct timer_list timer;
+	int i, psize, pstart, pend;
+	int num_cpus = num_possible_cpus();
+	int ret = 0;
+
+	/* Distribute the works fairly */
+	BUILD_BUG_ON((PAGES_PER_SECTION % HP_WORK_COUNT));
+
+	timer_setup_on_stack(&timer, hotplug_watchdog_handler, 0);
+
+	timer.expires = jiffies + MEM_HP_REFRESH_TIME;
+	add_timer(&timer);
+
+	/* watchdog kicking once before start */
+	s3c2410wdt_keepalive_common();
+
+	init_completion(&job.completion);
+	kref_init(&job.ref);
+
+	psize = PAGES_PER_SECTION / HP_WORK_COUNT;
+	pstart = start_pfn;
+	pend = pstart + psize;
+
+	for (i = 0; i < HP_WORK_COUNT; i++, pwork++) {
+		/* avoid cpu0 */
+		pwork->cpu = (i + 1) % num_cpus;
+		if (num_cpus > 1 && pwork->cpu == 0)
+			pwork->cpu++;
+
+		pwork->result = 0;
+		pwork->start_pfn = pstart;
+		pwork->end_pfn = pend;
+		pwork->zone = zone;
+		pwork->kref = &job.ref;
+		pwork->completion = &job.completion;
+
+		kref_get(&job.ref);
+		INIT_WORK(&pwork->work, __offline_partial_pages);
+		schedule_work_on(pwork->cpu, &pwork->work);
+
+		pstart = pend;
+		pend += psize;
+	}
+
+	kref_put(&job.ref, finish_partial_work);
+	ret = wait_for_completion_interruptible(&job.completion);
+	if (ret) {
+		/*
+		 * Stop is requested by signal,
+		 * so request stop memory offline and wait till done.
+		 */
+		mem_stop_offline();
+		wait_for_completion(&job.completion);
+		return -EINTR;
+	}
+
+	del_timer_sync(&timer);
+	destroy_timer_on_stack(&timer);
+
+	for (i = 0; i < HP_WORK_COUNT; i++) {
+		if (work[i].result != 0) {
+			ret = work[i].result;
+			break;
+		}
+	}
+
+	if (ret == -EINTR) {
+		s64 elapsed_ms;
+
+		elapsed_ms = ktime_to_ms(ktime_sub(ktime_get(), t_memstop_req));
+		pr_info("%lld ms to finish offline stop request\n", elapsed_ms);
+	}
+
+	return ret;
+}
+
 static int __ref __offline_pages(unsigned long start_pfn,
 		  unsigned long end_pfn)
 {
@@ -1650,22 +1719,11 @@ static int __ref __offline_pages(unsigned long start_pfn,
 		goto failed_removal;
 
 	pfn = start_pfn;
+	mem_stop_progress_init();
 repeat:
-	/* start memory hot removal */
-	ret = -EINTR;
-	if (signal_pending(current))
+	ret = offline_pages_multi(zone, start_pfn);
+	if (ret)
 		goto failed_removal;
-
-	cond_resched();
-	lru_add_drain_all();
-	drain_all_pages(zone);
-
-	pfn = scan_movable_pages(start_pfn, end_pfn);
-	if (pfn) { /* We have movable pages */
-		ret = do_migrate_range(pfn, end_pfn);
-		goto repeat;
-	}
-
 	/*
 	 * dissolve free hugepages in the memory block before doing offlining
 	 * actually in order to make hugetlbfs's object counting consistent.
@@ -1913,10 +1971,9 @@ void __ref remove_memory(int nid, u64 start, u64 size)
 
 	/* remove memmap entry */
 	firmware_map_remove(start, start + size, "System RAM");
+	arch_remove_memory(start, size, NULL);
 	memblock_free(start, size);
 	memblock_remove(start, size);
-
-	arch_remove_memory(start, size, NULL);
 
 	try_offline_node(nid);
 

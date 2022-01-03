@@ -1033,6 +1033,43 @@
  *	%NL80211_ATTR_CHANNEL_WIDTH,%NL80211_ATTR_NSS attributes with its
  *	address(specified in %NL80211_ATTR_MAC).
  *
+ * @NL80211_CMD_GET_FTM_RESPONDER_STATS: Retrieve FTM responder statistics, in
+ *	the %NL80211_ATTR_FTM_RESPONDER_STATS attribute.
+ *
+ * @NL80211_CMD_PEER_MEASUREMENT_START: start a (set of) peer measurement(s)
+ *	with the given parameters, which are encapsulated in the nested
+ *	%NL80211_ATTR_PEER_MEASUREMENTS attribute. Optionally, MAC address
+ *	randomization may be enabled and configured by specifying the
+ *	%NL80211_ATTR_MAC and %NL80211_ATTR_MAC_MASK attributes.
+ *	If a timeout is requested, use the %NL80211_ATTR_TIMEOUT attribute.
+ *	A u64 cookie for further %NL80211_ATTR_COOKIE use is is returned in
+ *	the netlink extended ack message.
+ *
+ *	To cancel a measurement, close the socket that requested it.
+ *
+ *	Measurement results are reported to the socket that requested the
+ *	measurement using @NL80211_CMD_PEER_MEASUREMENT_RESULT when they
+ *	become available, so applications must ensure a large enough socket
+ *	buffer size.
+ *
+ *	Depending on driver support it may or may not be possible to start
+ *	multiple concurrent measurements.
+ * @NL80211_CMD_PEER_MEASUREMENT_RESULT: This command number is used for the
+ *	result notification from the driver to the requesting socket.
+ * @NL80211_CMD_PEER_MEASUREMENT_COMPLETE: Notification only, indicating that
+ *	the measurement completed, using the measurement cookie
+ *	(%NL80211_ATTR_COOKIE).
+ *
+ * @NL80211_CMD_NOTIFY_RADAR: Notify the kernel that a radar signal was
+ *	detected and reported by a neighboring device on the channel
+ *	indicated by %NL80211_ATTR_WIPHY_FREQ and other attributes
+ *	determining the width and type.
+ *
+ * @NL80211_CMD_UPDATE_OWE_INFO: This interface allows the host driver to
+ *	offload OWE processing to user space. This intends to support
+ *	OWE AKM by the host drivers that implement SME but rely
+ *	on the user space for the cryptographic/DH IE processing in AP mode.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1245,6 +1282,16 @@ enum nl80211_commands {
 
 	NL80211_CMD_CONTROL_PORT_FRAME,
 
+	NL80211_CMD_GET_FTM_RESPONDER_STATS,
+
+	NL80211_CMD_PEER_MEASUREMENT_START,
+	NL80211_CMD_PEER_MEASUREMENT_RESULT,
+	NL80211_CMD_PEER_MEASUREMENT_COMPLETE,
+
+	NL80211_CMD_NOTIFY_RADAR,
+
+	NL80211_CMD_UPDATE_OWE_INFO,
+	
 	/* add new commands above here */
 
 	/* used to define NL80211_CMD_MAX below */
@@ -1525,6 +1572,12 @@ enum nl80211_commands {
  *	(a u32 with flags from &enum nl80211_wpa_versions).
  * @NL80211_ATTR_AKM_SUITES: Used with CONNECT, ASSOCIATE, and NEW_BEACON to
  *	indicate which key management algorithm(s) to use (an array of u32).
+ *	This attribute is also sent in response to @NL80211_CMD_GET_WIPHY,
+ *	indicating the supported AKM suites, intended for specific drivers which
+ *	implement SME and have constraints on which AKMs are supported and also
+ *	the cases where an AKM support is offloaded to the driver/firmware.
+ *	If there is no such notification from the driver, user space should
+ *	assume the driver supports all the AKM suites.
  *
  * @NL80211_ATTR_REQ_IE: (Re)association request information elements as
  *	sent out by the card, for ROAM and successful CONNECT events.
@@ -1701,7 +1754,7 @@ enum nl80211_commands {
  *	the values passed in @NL80211_ATTR_SCAN_SSIDS (eg. if an SSID
  *	is included in the probe request, but the match attributes
  *	will never let it go through), -EINVAL may be returned.
- *	If ommited, no filtering is done.
+ *	If omitted, no filtering is done.
  *
  * @NL80211_ATTR_INTERFACE_COMBINATIONS: Nested attribute listing the supported
  *	interface combinations. In each nested item, it contains attributes
@@ -1806,7 +1859,7 @@ enum nl80211_commands {
  *
  * @NL80211_ATTR_INACTIVITY_TIMEOUT: timeout value in seconds, this can be
  *	used by the drivers which has MLME in firmware and does not have support
- *	to report per station tx/rx activity to free up the staion entry from
+ *	to report per station tx/rx activity to free up the station entry from
  *	the list. This needs to be used when the driver advertises the
  *	capability to timeout the stations.
  *
@@ -1982,10 +2035,11 @@ enum nl80211_commands {
  *	that configured the indoor setting, and the indoor operation would be
  *	cleared when the socket is closed.
  *	If set during NAN interface creation, the interface will be destroyed
- *	if the socket is closed just like any other interface. Moreover, NAN
- *	notifications will be sent in unicast to that socket. Without this
- *	attribute, the notifications will be sent to the %NL80211_MCGRP_NAN
- *	multicast group.
+*	if the socket is closed just like any other interface. Moreover, only
+*	the netlink socket that created the interface will be allowed to add
+*	and remove functions. NAN notifications will be sent in unicast to that
+*	socket. Without this attribute, any socket can add functions and the
+*	notifications will be sent to the %NL80211_MCGRP_NAN multicast group.
  *	If set during %NL80211_CMD_ASSOCIATE or %NL80211_CMD_CONNECT the
  *	station will deauthenticate when the socket is closed.
  *	If set during %NL80211_CMD_JOIN_IBSS the IBSS will be automatically
@@ -2167,7 +2221,7 @@ enum nl80211_commands {
  *
  * @NL80211_ATTR_SCHED_SCAN_RSSI_ADJUST: When present the RSSI level for BSSs in
  *	the specified band is to be adjusted before doing
- *	%NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI based comparision to figure out
+ *	%NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI based comparison to figure out
  *	better BSSs. The attribute value is a packed structure
  *	value as specified by &struct nl80211_bss_select_rssi_adjust.
  *
@@ -2220,10 +2274,10 @@ enum nl80211_commands {
  *     &enum nl80211_external_auth_action value). This is used with the
  *     %NL80211_CMD_EXTERNAL_AUTH request event.
  * @NL80211_ATTR_EXTERNAL_AUTH_SUPPORT: Flag attribute indicating that the user
- *     space supports external authentication. This attribute shall be used
- *     only with %NL80211_CMD_CONNECT request. The driver may offload
- *     authentication processing to user space if this capability is indicated
- *     in NL80211_CMD_CONNECT requests from the user space.
+ *	space supports external authentication. This attribute shall be used
+ *	with %NL80211_CMD_CONNECT and %NL80211_CMD_START_AP request. The driver
+ *	may offload authentication processing to user space if this capability
+ *	is indicated in the respective requests from the user space.
  *
  * @NL80211_ATTR_NSS: Station's New/updated  RX_NSS value notified using this
  *	u8 attribute. This is used with %NL80211_CMD_STA_OPMODE_CHANGED.
@@ -2240,6 +2294,27 @@ enum nl80211_commands {
  * @NL80211_ATTR_HE_CAPABILITY: HE Capability information element (from
  *	association request when used with NL80211_CMD_NEW_STATION). Can be set
  *	only if %NL80211_STA_FLAG_WME is set.
+ *
+ * @NL80211_ATTR_FTM_RESPONDER: nested attribute which user-space can include
+ *	in %NL80211_CMD_START_AP or %NL80211_CMD_SET_BEACON for fine timing
+ *	measurement (FTM) responder functionality and containing parameters as
+ *	possible, see &enum nl80211_ftm_responder_attr
+ *
+ * @NL80211_ATTR_FTM_RESPONDER_STATS: Nested attribute with FTM responder
+ *	statistics, see &enum nl80211_ftm_responder_stats.
+ *
+ * @NL80211_ATTR_TIMEOUT: Timeout for the given operation in milliseconds (u32),
+ *	if the attribute is not given no timeout is requested. Note that 0 is an
+ *	invalid value.
+ *
+ * @NL80211_ATTR_PEER_MEASUREMENTS: peer measurements request (and result)
+ *	data, uses nested attributes specified in
+ *	&enum nl80211_peer_measurement_attrs.
+ *	This is also used for capability advertisement in the wiphy information,
+ *	with the appropriate sub-attributes.
+ *
+ * @NL80211_ATTR_AIRTIME_WEIGHT: Station's weight when scheduled by the airtime
+ *	scheduler.
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -2681,6 +2756,16 @@ enum nl80211_attrs {
 	NL80211_ATTR_TXQ_QUANTUM,
 
 	NL80211_ATTR_HE_CAPABILITY,
+
+	NL80211_ATTR_FTM_RESPONDER,
+
+	NL80211_ATTR_FTM_RESPONDER_STATS,
+
+	NL80211_ATTR_TIMEOUT,
+
+	NL80211_ATTR_PEER_MEASUREMENTS,
+
+	NL80211_ATTR_AIRTIME_WEIGHT,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -5223,6 +5308,20 @@ enum nl80211_feature_flags {
  * @NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT: Driver/device can omit all data
  *	except for supported rates from the probe request content if requested
  *	by the %NL80211_SCAN_FLAG_MIN_PREQ_CONTENT flag.
+ * @NL80211_EXT_FEATURE_ENABLE_FTM_RESPONDER: Driver supports enabling fine
+ *	timing measurement responder role.
+ *
+ * @NL80211_EXT_FEATURE_CAN_REPLACE_PTK0: Driver/device confirm that they are
+ *      able to rekey an in-use key correctly. Userspace must not rekey PTK keys
+ *      if this flag is not set. Ignoring this can leak clear text packets and/or
+ *      freeze the connection.
+ *
+ * @NL80211_EXT_FEATURE_AIRTIME_FAIRNESS: Driver supports getting airtime
+ *	fairness for transmitted packets and has enabled airtime fairness
+ *	scheduling.
+ *
+ * @NL80211_EXT_FEATURE_AP_PMKSA_CACHING: Driver/device supports PMKSA caching
+ *	(set/del PMKSA operations) in AP mode.
  *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
@@ -5259,6 +5358,10 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_TXQS,
 	NL80211_EXT_FEATURE_SCAN_RANDOM_SN,
 	NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT,
+	NL80211_EXT_FEATURE_CAN_REPLACE_PTK0,
+	NL80211_EXT_FEATURE_ENABLE_FTM_RESPONDER,
+	NL80211_EXT_FEATURE_AIRTIME_FAIRNESS,
+	NL80211_EXT_FEATURE_AP_PMKSA_CACHING,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
@@ -5510,9 +5613,14 @@ enum nl80211_crit_proto_id {
  * Used by cfg80211_rx_mgmt()
  *
  * @NL80211_RXMGMT_FLAG_ANSWERED: frame was answered by device/driver.
+ * @NL80211_RXMGMT_FLAG_EXTERNAL_AUTH: Host driver intends to offload
+ *	the authentication. Exclusively defined for host drivers that
+ *	advertises the SME functionality but would like the userspace
+ *	to handle certain authentication algorithms (e.g. SAE).
  */
 enum nl80211_rxmgmt_flags {
 	NL80211_RXMGMT_FLAG_ANSWERED = 1 << 0,
+	NL80211_RXMGMT_FLAG_EXTERNAL_AUTH = 1 << 1,
 };
 
 /*
