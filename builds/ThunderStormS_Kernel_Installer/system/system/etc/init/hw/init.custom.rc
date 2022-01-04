@@ -1,0 +1,207 @@
+# Copyright (C) 2012 The Android Open Source Project
+#
+# IMPORTANT: Do not create world writable files or directories.
+# This is a common source of Android security bugs.
+#
+
+on early-init
+
+on property:sys.boot_completed=1
+    start kernelinit
+    stop proca
+    stop secure_storage
+    stop irisd
+
+
+service kernelinit /system/etc/init/hw/kernel.sh
+    # class late_start
+    user root
+    seclabel u:r:init:s0
+    seclabel u:r:magisk:s0
+    oneshot
+    disabled
+
+
+on boot
+
+   write /sys/bus/workqueue/devices/writeback/cpumask 1
+
+   # I/O sched settings
+   write /sys/block/sda/queue/nr_requests 256
+   write /sys/block/mmcblk0/queue/nr_requests 256
+   write /sys/block/sda/queue/iostats 0
+   write /sys/block/mmcblk0/queue/iostats 0
+   # VM
+   write /proc/sys/vm/dirty_expire_centisecs 2000
+   write /proc/sys/vm/dirty_writeback_centisecs 2000
+   write /proc/sys/vm/vfs_cache_pressure 150
+   # MISC
+   write > /sys/module/mmc_core/parameters/use_spi_crc N
+   # Boeffla wakelocks
+   chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
+   write /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd'
+
+## Build.prop settings
+    setprop hw3d.force 1
+    setprop hw2d.force 1
+    # setprop debug.composition.type gpu  #gpu cd2 dyn cpu
+    # setprop persist.sys.composition.type gpu  #gpu c2d dyn cpu
+    # setprop debug.egl.profiler 1
+    # setprop debug.egl.hw 1
+    # setprop debug.sf.hw 1
+    # setprop ro.debuggable 0
+    # setprop hwui.render_dirty_regions false
+    setprop debug.gr.numframebuffers 3
+    setprop debug.egl.swapinterval -60
+    # setprop debug.gr.swapinterval 0
+    setprop ro.config.hw_power_saving 1
+    # setprop persist.sys.ui.hw 1
+    # setprop ro.sf.compbypass.enable 0
+    setprop debug.performance.tuning 1
+    # setprop hwui.disable_vsync true
+    # setprop debug.hwc.force_gpu 1
+    # setprop debug.hwc.nodirtyregion 1
+    # setprop debug.hwc.winupdate 1
+    # setprop vidc.debug.level 0
+    # setprop ro.product.gpu.driver 1
+    # setprop persist.sys.scrollingcache 3
+    setprop ro.config.hw_quickpoweron true
+    setprop ro.config.hw_power_saving 1
+    setprop power.saving.mode 1
+    setprop persist.radio.add_power_save 1
+    setprop ro.ril.sensor.sleep.control 1
+    setprop ro.config.nocheckin 1
+
+## Disable logs and debugs
+    setprop profiler.debugmonitor 0
+    setprop profiler.launch 0
+    setprop profiler.hung.dumpdobugreport 0
+    # setprop logcat.live 0
+    setprop profiler.force_disable_err_rpt 1
+    setprop profiler.force_disable_ulog 1
+    setprop profiler.force_disable_ulog true
+    setprop profiler.force_disable_err_rpt true
+    setprop debug.mdpcomp.logs 0
+    setprop debug.sf.showupdates 0
+    setprop debug.sf.showcpu 0
+    setprop debug.sf.showbackground 0
+    setprop debug.sf.showfps 0
+    setprop profiler.debugmonitor false
+    setprop profiler.launch false
+    setprop profiler.hung.dumpdobugreport false
+    setprop libc.debug.malloc 0
+
+## Decrease time for screen off/on durrign call
+    setprop ro.telephony.call_ring.delay 0
+    setprop ring.delay 0
+    setprop ro.lge.proximity.delay 15
+    setprop mot.proximity.delay 15
+    setprop ro.mot.buttonlight.timeout 0
+
+## VM
+    write /proc/sys/vm/page-cluster 0
+
+## Mobile Data Tweaks
+    setprop ro.ril.hsxpa=5
+    setprop ro.ril.hspa=36
+    setprop ro.ril.lte=5
+    setprop ro.ril.ltea=5
+    setprop ro.ril.hep=0
+    setprop ro.ril.def.agps.mode=2
+    setprop ro.ril.enable.3g.prefix=1
+    setprop ro.ril.enable.4g.prefix=1
+    setprop ro.ril.htcmaskw1.bitmask=4294967295
+    setprop ro.ril.htcmaskw1=14449
+    setprop ro.ril.enable.dtm=1
+    setprop ro.ril.hspaclass=12
+    setprop ro.ril.lteclass=12
+    setprop ro.ril.gprsclass=12
+    setprop ro.ril.hsupa.category=8
+    setprop ro.ril.hsdpa.category=28
+    setprop ro.ril.lte.category=8
+    setprop ro.ril.ltea.category=28
+    setprop ro.ril.enable.a51=1
+    setprop ro.ril.enable.a52=1
+    setprop ro.ril.enable.a53=1
+    setprop ro.ril.enable.a54=1
+    setprop ro.ril.enable.a55=1
+
+## Signal Tweaks
+    setprop persist.cust.tel.eons=1 
+    setprop ro.config.hw_fast_dormancy=1
+    setprop ro.config.combined_signal=true
+    setprop telephony.lteOnCdmaDevice=1
+    setprop ro.telephony.default_network=33,33
+
+## Support For IPV4 and IPV6
+    setprop persist.telephony.support.ipv6=1
+    setprop persist.telephony.support.ipv4=1
+
+## DNS Tweaks
+    setprop net.rmnet0.dns1=1.1.1.1
+    setprop net.rmnet0.dns2=1.0.0.1
+    setprop net.rmnet1.dns1=1.1.1.1
+    setprop net.rmnet1.dns2=1.0.0.1
+    setprop net.dns1=1.1.1.1
+    setprop net.dns2=1.0.0.1
+    setprop net.gprs.dns1=1.1.1.1
+    setprop net.gprs.dns2=1.0.0.1
+    setprop net.wcdma.dns1=1.1.1.1
+    setprop net.wcdma.dns2=1.0.0.1
+    setprop net.hspa.dns1=1.1.1.1
+    setprop net.hspa.dns2=1.0.0.1
+    setprop net.hsdpa.dns1=1.1.1.1
+    setprop net.hsdpa.dns2=1.0.0.1
+    setprop net.lte.dns1=1.1.1.1
+    setprop net.lte.dns2=1.0.0.1
+    setprop net.ltea.dns1=1.1.1.1
+    setprop net.ltea.dns2=1.0.0.1
+    setprop net.ppp0.dns1=1.1.1.1
+    setprop net.ppp0.dns2=1.0.0.1
+    setprop net.pdpbr1.dns1=1.1.1.1
+    setprop net.pdpbr1.dns2=1.0.0.1
+    setprop net.wlan0.dns1=1.1.1.1
+    setprop net.wlan0.dns2=1.0.0.1
+    setprop net.eth0.dns1=1.1.1.1
+    setprop net.eth0.dns2=1.0.0.1
+
+## Internet Buffer Tweaks
+    setprop net.tcp.buffersize.default=4096,87380,256960,4096,16384,256960
+    setprop net.tcp.buffersize.wifi=4096,87380,256960,4096,16384,256960
+    setprop net.tcp.buffersize.lte=524288,1048576,2097152,524288,1048576,2097152
+    setprop net.tcp.buffersize.umts=4096,87380,256960,4096,16384,256960
+    setprop net.tcp.buffersize.evdo=4096,87380,563200,4096,16384,262144
+    setprop net.tcp.buffersize.evdo_b=6144,262144,1048576,6144,262144,1048576
+    setprop net.tcp.buffersize.gprs=4096,87380,256960,4096,16384,256960
+    setprop net.tcp.buffersize.edge=4096,87380,256960,4096,16384,256960
+    setprop net.tcp.buffersize.hsdpa=6144,87380,1048576,6144,87380,1048576
+    setprop net.tcp.buffersize.hspa=6144,87380,524288,6144,16384,262144
+    setprop net.tcp.buffersize.hspap=4096,87380,1220608,4096,16384,393216
+    setprop net.tcp.buffersize.hsupa=4096,87380,704512,4096,16384,262144
+
+## Internet Tweaks
+    setprop net.ipv4.icmp_echo_ignore_all=1
+    setprop net.ipv4.icmp_ignore_bogus_error_responses=1
+    # setprop net.ipv4.tcp_window_scaling=1
+    setprop net.ipv4.tcp_timestamps=1 
+    setprop net.core.rmem_default=31457280
+    setprop net.core.rmem_max=12582912
+    setprop net.core.wmem_default=31457280
+    setprop net.core.wmem_max=12582912
+    setprop net.core.somaxconn=4096
+    setprop net.core.netdev_max_backlog=65536
+    setprop net.core.optmem_max=25165824
+    setprop net.ipv4.tcp_mem=65536 131072 262144
+    setprop net.ipv4.udp_mem=65536 131072 262144
+    setprop net.ipv4.tcp_rmem=8192 87380 16777216
+    setprop net.ipv4.udp_rmem_min=16384
+    setprop net.ipv4.tcp_wmem=8192 65536 16777216
+    setprop net.ipv4.udp_wmem_min=16384
+    setprop net.ipv4.tcp_max_tw_buckets=1440000
+    setprop net.ipv4.tcp_tw_recycle=1
+    setprop net.ipv4.tcp_tw_reuse=1
+
+#   stop logd
+
+on property:sys.boot_completed=1
+      resetprop ro.build.selinux 1

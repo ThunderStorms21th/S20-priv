@@ -1,0 +1,118 @@
+<@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
+
+<*>EdYoBlue or ThunderStormS Kernel v1.7
+- Linux 4.19.87
+- Sources Samsung DUI5
+- Quelques débogages désactivés
+- Améliorations des CPU MASK, SCHED, EMS, VM & DTS
+- Améliorations des sources Linux
+- Prend en charge tous les CONFIG_HZ 25, 50 - 50Hz
+- Prend en charge tous les Battery Saver
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.6
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.6
+- Linux 4.19.87
+- Sources Samsung DUI5
+- Quelques débogages désactivés
+- Améliorations des CPU MASK, EMS, VM & DTS
+- Améliorations des sources Linux
+- Prend en charge tous les CONFIG_HZ 25, 50 - 25Hz
+- Prend en charge tous les Battery Saver
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.5
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.5
+- Linux 4.19.87
+- Sources Samsung DUI5
+- Quelques débogages désactivés
+- Améliorations des CPU MASK, EMS, VM & DTS
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.4
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.4
+- Linux 4.19.87
+- Sources Samsung DUI5
+- Quelques débogages désactivés
+- Améliorations des EMS, VM & DTS
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.3
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.3
+- Linux 4.19.87
+- Sources Samsung DUH5
+- Quelques débogages désactivés
+- Prend en charge tous les gouverneurs de CPU d'origine
+- I/O sched - nouveau SEN, FIOPS, SIO et MAPLE
+- Améliorations des EMS, VM & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.2
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.2
+- Linux 4.19.87
+- Sources Samsung DUH5
+- Quelques débogages désactivés
+- Améliorations des I/O sched cfq
+- Améliorations des EMS & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.1
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.1
+- Linux 4.19.87
+- Sources Samsung DUF9
+- Le support Powersuspned v2.0
+- Le support Wireguard
+- Quelques débogages désactivés
+- Le support File Blocker pour certaines applications de réglage
+- Améliorations des I/O sched cfq de Pixel 4
+- Améliorations des EMS & DTS
+- OC CPUs : 3016MHz - big, 2600 MHz Mid
+- Améliorations des sources Linux
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.0
+</*>
+------------------------------------------------
+
+<*>Kernel EdYoBlue ou ThunderStormS
+- Linux 4.19.87
+- Sources Samsung DUF9
+- Filtre TTL activé
+- Fenêtre IP TCP 64k
+- Quelques débogages désactivés
+- USB en série ajouté
+- MTP Samsung activé
+- Mappage de pages Zmalloc désactivé
+- Wakelocks ajoutés
+- Wakelocks Boeffla ajoutés
+- Prise en charge de la puissance de la file d'attente dans la section CPU
+- Support CRC dans la section MISC
+- Prise en charge de Fsync dans la section MISC
+- Prise en charge de Geantle Fair Sleepers  en charge la section MISC
+- Assistance Frandom
+- Prise en charge des partitions CIFS et NTFS
+- Désactivation de certaines sécurités Samsung et FIPS
+- Prise en charge du magasin de batteries
+- Améliorations des sources Linux
+
+</*>

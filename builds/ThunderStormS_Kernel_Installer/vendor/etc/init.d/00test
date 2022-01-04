@@ -1,0 +1,10 @@
+#!/system/bin/sh
+#Init.d Test
+
+busybox mount -o remount,rw -t auto /system;
+busybox mount -o remount,rw -t auto /data;
+
+
+
+echo  "Init.d Is Working !!! - $( date +"%m-%d-%Y %r" )" >> /data/media/0/Apkinstaller/Test.log
+

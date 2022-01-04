@@ -1,0 +1,152 @@
+<@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
+
+<*>ThunderStormS Kernel v2.0
+- Linux 4.19.87
+- Samsung source CEUL7 Android 12
+- Some debugs off
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Support CONFIG_HZ 25 and 50 - set at 50Hz
+- Support Battery Saver
+- Added Sustinable GPU freq - set at 455MHz
+- GPU voltage settings now are hidden
+- Disabled GPU DVFS clokc_lock (const. max freq)
+- READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23016)
+- rest like in v1.8
+</*>
+------------------------------------------------
+
+<*>ThunderStormS Kernel v1.8
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Support CONFIG_HZ 25 and 50 - set at 50Hz
+- Support Battery Saver
+- Added Sustinable GPU freq - set at 455MHz
+- GPU voltage settings now are hidden
+- Disabled GPU DVFS clokc_lock (const. max freq)
+- READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23015)
+- rest like in v1.7
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.7
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Support CONFIG_HZ 25 and 50 - set at 50Hz
+- Support Battery Saver
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23014)
+- rest like in v1.6
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.6
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, EMS, VM & DTS improvements
+- Linux source improvements
+- Support CONFIG_HZ 25 and 50 - set at 25Hz
+- Support Battery Saver
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23013)
+- rest like in v1.5
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.5
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- CPU MASK, EMS, VM & DTS improvements
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1
+- rest like in v1.4
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.4
+- Linux 4.19.87
+- Samsung source DUI5
+- Some debugs off
+- EMS, VM & DTS improvements
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.3
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.3
+- Linux 4.19.87
+- Samsung source DUH5
+- Some debugs off
+- Support all stock CPU governors
+- I/O sched - new SEN, FIOPS, SIO and MAPLE
+- EMS, VM & DTS improvements
+- OC CPUs to 3016MHz - big, 2600 MHz Mid
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.2
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.2
+- Linux 4.19.87
+- Samsung source DUH5
+- Some debugs off
+- I/O sched cfq improvements
+- EMS & DTS improvements
+- OC CPUs to 3016MHz - big, 2600 MHz Mid
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- rest like in v1.1
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.1
+- Linux 4.19.87
+- Samsung source DUF9
+- Support Powersuspned v2.0
+- Support Wireguard
+- Some debugs off
+- Support File Blocker for some tune apps
+- I/O sched cfq improvements from Pixel 4
+- EMS & DTS improvements
+- OC CPUs to 3016 MHz - big, 2600 MHz Mid
+- Linux source improvements
+- EdYoBlue : READ_AHEAD_KB = 256; TS=256
+- Another initial settings for EdYoBlue and ThundeRStormS kernels
+- rest like in v1.0
+</*>
+------------------------------------------------
+
+<*>EdYoBlue or ThunderStormS Kernel v1.0
+- Linux 4.19.87
+- Samsung source DUF9
+- TTL Filter ON
+- 64k TCP IP Window
+- Some debugs off
+- USB serial added
+- Samsung MTP ON
+- Zmalloc page mapping OFF
+- Wakelocks added
+- Boeffla wakelocks added
+- Powereffcient workqueue support in CPU section
+- CRC support in MISC section
+- Fsync support in MISC section
+- Geantle Fair Sleepers support im MISC section
+- Frandom support
+- CIFS and NTFS partition support
+- Disabled some Samsung security and FIPS
+- Battery Store support
+- Linux source improvements
+</*>

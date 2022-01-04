@@ -1,0 +1,12 @@
+#!/system/bin/sh
+
+
+# Wait till boot has completed
+
+sleep 15
+
+# Installation apk
+
+
+su -c "sh /data/media/0/Apkinstaller/apkinstall" 
+exit 0

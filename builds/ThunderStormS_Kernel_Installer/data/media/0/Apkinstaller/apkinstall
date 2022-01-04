@@ -1,0 +1,20 @@
+#!/system/bin/sh
+
+
+# Install APK
+
+
+cd /data/media/0/Apkinstaller
+
+for apk in *.apk; do
+	su -c "pm install -r $apk"
+	
+echo  "- ApkInstaller have installed $apk on $( date +"%m-%d-%Y %r" )" >> /data/media/0/Apkinstaller/Install.log
+
+rm $apk
+
+done;
+
+
+
+
