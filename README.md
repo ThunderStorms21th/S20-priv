@@ -100,26 +100,11 @@ $ git checkout master
 # Install compilers
 $ git submodule update --init --recursive
 # Compile
-$ ./build mkimg name="ThunderStorms" model=G980F
-# You will find your kernel in boot.img file after compilation inside the prime folder.
-$ ls -lah ./boot.img
-
-# You can automatically flash the kernel with heimdall
-# if you connect your phone to the PC and execute:
-$ ./build :flash
-
-# Or in a single command (compilation with flashing)
-# ./build flash name="ThunderStorms" model=G980F
+$ ./ts-build.sh
 ```
 ----------------------------------------------------------------------------------------
 # Available toolchains:
-
-- default - standard toolchain from samsung's kernel archives for S10/Note10 models (clang6/gcc4.9)
-- samsung - samsung's toolchain from S20 sources archive (clang8/gcc-4.9)
-- proton  - bleeding-edge clang 12 (https://github.com/kdrag0n/proton-clang)
-- arter97 - stable gcc 10.2.0 (https://github.com/arter97/arm64-gcc)
-- arm     - arm's gcc 9.2-2019.12 (https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads)
-- system  - gcc cross compiler installed in your system
+- default - standard toolchain from samsung's kernel archives for S20/Note20 models (clang8.0.8/gcc4.9)
 
 ----------------------------------------------------------------------------------------
 # WHAT IS LINUX KERNEL:
