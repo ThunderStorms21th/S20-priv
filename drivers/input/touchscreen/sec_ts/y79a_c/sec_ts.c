@@ -10,6 +10,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/proc_fs.h>
 #include "sec_ts.h"
 
 struct sec_ts_data *tsp_info;
@@ -1667,7 +1668,9 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 #endif
 				break;
 			case SEC_TS_GESTURE_CODE_DUMPFLUSH:
-				if (ts->sponge_inf_dump) {
+						ts->sponge_dump_delayed_flag = true;
+						ts->sponge_dump_delayed_area = p_gesture_status->gesture_id;
+/*				if (ts->sponge_inf_dump) {
 					if (ts->power_status == SEC_TS_STATE_LPM) {
 						if (p_gesture_status->gesture_id == SEC_TS_SPONGE_DUMP_0)
 							sec_ts_sponge_dump_flush(ts, SEC_TS_SPONGE_DUMP_0);
@@ -1677,7 +1680,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						ts->sponge_dump_delayed_flag = true;
 						ts->sponge_dump_delayed_area = p_gesture_status->gesture_id;
 					}
-				}
+				} */
 				break;
 			}
 
@@ -3434,7 +3437,7 @@ int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 
 		if (ts->sponge_inf_dump) {
 			if (ts->sponge_dump_delayed_flag) {
-				sec_ts_sponge_dump_flush(ts, ts->sponge_dump_delayed_area);
+//				sec_ts_sponge_dump_flush(ts, ts->sponge_dump_delayed_area);
 				ts->sponge_dump_delayed_flag = false;
 				input_info(true, &ts->client->dev, "%s : Sponge dump flush delayed work have procceed\n", __func__);
 			}
