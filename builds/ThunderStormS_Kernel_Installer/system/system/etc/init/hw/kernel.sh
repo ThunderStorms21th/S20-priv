@@ -102,7 +102,7 @@ rm -f $LOG
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    echo "442000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq
+    echo "650000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
     echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
     #echo "2000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/down_rate_limit_us
     #echo "4000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/up_rate_limit_us
@@ -110,7 +110,7 @@ rm -f $LOG
 
     # Midle CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor
-    echo "507000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq
+    echo "507000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq   # 507000
     echo "2504000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq
     #echo "2000" > /sys/devices/system/cpu/cpu4/cpufreq/schedutil/down_rate_limit_us
     #echo "4000" > /sys/devices/system/cpu/cpu4/cpufreq/schedutil/up_rate_limit_us
@@ -138,11 +138,11 @@ rm -f $LOG
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
-    echo "512" > /proc/sys/kernel/random/write_wakeup_threshold
+    echo "256" > /proc/sys/kernel/random/write_wakeup_threshold
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
-    echo "150" > /proc/sys/vm/vfs_cache_pressure
+    echo "100" > /proc/sys/vm/vfs_cache_pressure
     echo "140" > /proc/sys/vm/swappiness
     echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
     echo "2000" > /proc/sys/vm/dirty_expire_centisecs
@@ -297,12 +297,13 @@ rm -f $LOG
    echo "64" > /proc/sys/kernel/sched_nr_migrate
    echo "0" > /sys/module/cpuidle/parameters/off  # 0
    echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
-   echo "0f" > /proc/irq/default_smp_affinity  #0f
+   echo "0f" > /proc/irq/default_smp_affinity  #ff
    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
    echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
-   echo "5" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
+   echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
    echo "100000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
    echo "516" > /proc/sys/kernel/perf_event_mlock_kb  #516
+   echo "0" > /dev/cpuset/sched_load_balance   # 0
 
    # Thermal Governors
    # BIG Cluster

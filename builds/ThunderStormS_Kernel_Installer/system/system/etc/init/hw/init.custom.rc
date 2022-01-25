@@ -34,7 +34,7 @@ on boot
    # VM
    write /proc/sys/vm/dirty_expire_centisecs 2000
    write /proc/sys/vm/dirty_writeback_centisecs 2000
-   write /proc/sys/vm/vfs_cache_pressure 150
+   write /proc/sys/vm/vfs_cache_pressure 100
    # MISC
    write > /sys/module/mmc_core/parameters/use_spi_crc N
    # Boeffla wakelocks
@@ -42,8 +42,8 @@ on boot
    write /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd'
 
 ## Build.prop settings
-    setprop hw3d.force 1
-    setprop hw2d.force 1
+    # setprop hw3d.force 1
+    # setprop hw2d.force 1
     # setprop debug.composition.type gpu  #gpu cd2 dyn cpu
     # setprop persist.sys.composition.type gpu  #gpu c2d dyn cpu
     # setprop debug.egl.profiler 1
@@ -55,14 +55,14 @@ on boot
     setprop debug.egl.swapinterval -60
     # setprop debug.gr.swapinterval 0
     setprop ro.config.hw_power_saving 1
-    # setprop persist.sys.ui.hw 1
-    # setprop ro.sf.compbypass.enable 0
+    setprop persist.sys.ui.hw 1
+    setprop ro.sf.compbypass.enable 0
     setprop debug.performance.tuning 1
     # setprop hwui.disable_vsync true
     # setprop debug.hwc.force_gpu 1
     # setprop debug.hwc.nodirtyregion 1
-    # setprop debug.hwc.winupdate 1
-    # setprop vidc.debug.level 0
+    setprop debug.hwc.winupdate 1
+    setprop vidc.debug.level 0
     # setprop ro.product.gpu.driver 1
     # setprop persist.sys.scrollingcache 3
     setprop ro.config.hw_quickpoweron true

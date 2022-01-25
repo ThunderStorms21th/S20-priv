@@ -29,13 +29,3 @@ sed -i '/init.custom.rc/d' /system_root/system/etc/init/hw/init.rc
 # sed -i '/import \/prism\/etc\/init\/init.rc/a\import \/init.custom.rc' /system_root/system/etc/init/hw/init.rc
 sed -i '/import \/init.container.rc/a\import \/system\/etc\/init\/hw\/init.custom.rc' /system_root/system/etc/init/hw/init.rc
 
-# perms 
-
-chmod 0755 /system_root/system/etc/init/hw/kernel.sh
-chmod 0755 /system_root/system/etc/init/hw/init.rc
-chmod 0755 /system_root/system/etc/init/hw/init.custom.rc
-
-
-
-
-

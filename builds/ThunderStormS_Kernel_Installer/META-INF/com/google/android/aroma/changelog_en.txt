@@ -1,5 +1,19 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>ThunderStormS Kernel v2.0.1
+- Linux 4.19.87
+- Samsung source CEUL7 Android 12
+- Some debugs off
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Support Battery Saver
+- COmpiled with CLang 14.0.1
+- READ_AHEAD_KB = 256; TS=256
+- Magisk 23.1 (23017)
+- rest like in v2.0
+</*>
+------------------------------------------------
+
 <*>ThunderStormS Kernel v2.0
 - Linux 4.19.87
 - Samsung source CEUL7 Android 12

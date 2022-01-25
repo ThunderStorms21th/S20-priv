@@ -11,8 +11,12 @@ export ARCH=arm64
 export CROSS_COMPILE=$(pwd)/toolchain/gcc-cfp/gcc-cfp-jopp-only/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 export CLANG_TRIPLE=aarch64-linux-gnu-
 export LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=$(pwd)/toolchain/gcc-cfp/gcc-cfp-jopp-only/aarch64-linux-android-4.9/bin
-export CLANG_PREBUILT_BIN=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
-export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
+## Clang 8.0.8
+#export CLANG_PREBUILT_BIN=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
+#export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
+## Clang 14.0.0
+export CLANG_PREBUILT_BIN=$(pwd)/toolchain/clang-14/host/linux-x86/clang-r437112b/bin/clang
+export CC=$(pwd)/toolchain/clang-14/host/linux-x86/clang-r437112b/bin/clang
 #export CLANG_PREBUILT_BIN=$(pwd)/toolchain/clang-12/host/linux-x86/clang-r416183c/bin
 #export CC=$(pwd)/toolchain/clang-12/host/linux-x86/clang-r416183c/bin
 #export CLANG_PREBUILT_BIN=$(pwd)/toolchain/clang-11/host/linux-x86/clang-r399163b/bin
@@ -26,11 +30,11 @@ export CC=$(pwd)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v2.0"
+export K_VERSION="v2.0.1"
 export K_NAME="ThundeRStormS-Kernel-S20N20"
 export K_BASE="CLUE7"
 ANDROID=OneUI-R
-MODEL=G98XX-N986B
+MODEL=G98XX-N986B-N985F
 # -----------------------------
 
 # Paths
@@ -56,7 +60,7 @@ DEFCONFIG7=exynos9830-c2slte_defconfig
 DEFCONFIG_TS=ts_defconfig
 DEFCONFIG_ED=ed_defconfig
 ZIP_DATE=`date +%Y%m%d`
-ZIP_NAME=$K_NAME-$MODEL-$ANDROID-$K_VERSION-CLANG808-$ZIP_DATE.zip
+ZIP_NAME=$K_NAME-$MODEL-$ANDROID-$K_VERSION-CLANG1401-$ZIP_DATE.zip
 # -----------------------------
 
 # FUNCTIONS

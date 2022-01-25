@@ -9,32 +9,24 @@ ui_print("*********************************************************");
 ui_print(" ");
 ui_print(" ");
 
+
 package_extract_dir("minstall/bin", "/tmp");
 set_metadata_recursive("/tmp/scripts", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0777);
 
-ifelse(is_mounted("/system"), unmount("/system"));
-ifelse(is_mounted("/vendor"), unmount("/vendor"));
-ifelse(is_mounted("/product"), unmount("/product"));
-ifelse(is_mounted("/prism"), unmount("/prism"));
-ifelse(is_mounted("/optics"), unmount("/optics"));
-ifelse(is_mounted("/odm"), unmount("/odm"));
-# ifelse(is_mounted("/data"), unmount("/data"));
-ifelse(is_mounted("/efs"), unmount("/efs"));
-ifelse(is_mounted("/sec_efs"), unmount("/sec_efs"));
-
 # Permissions
 
-run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-0");
-run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-1");
-run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-2");
-run_program("/tmp/scripts/busybox","blockdev","--setrw","/dev/block/dm-3");
+ifelse(is_mounted("/system_root"), unmount("/system_root"));
+ifelse(is_mounted("/vendor"), unmount("/vendor"));
 
 
 ui_print(" ");
 ui_print("@ThundeRStormS - Mounting partitions...");
-mount("ext4", "EMMC", "/dev/block/dm-0", "/system_root");
-mount("ext4", "EMMC", "/dev/block/dm-1", "/vendor");
-mount("ext4", "EMMC", "/dev/block/dm-2", "/product");
+
+run_program("/tmp/scripts/busybox","blockdev","--setrw",map_partition("system"));
+run_program("/tmp/scripts/busybox","blockdev","--setrw",map_partition("vendor"));
+mount("ext4", "EMMC", map_partition("system"), "/system_root");
+mount("ext4", "EMMC", map_partition("vendor"), "/vendor");
+
 
 
 #Cleanning
@@ -104,6 +96,8 @@ package_extract_dir("system/system", "/system_root/system");
 #package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
+#n986
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("N986", getprop("ro.boot.bootloader")) then
 ui_print("@N986B Detected");
@@ -114,11 +108,13 @@ package_extract_dir("system/system", "/system_root/system");
 #package_extract_dir("bootstock", "/system_root/system/media");
 endif;
 
+#n985
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 if is_substring("N985", getprop("ro.boot.bootloader")) then
 ui_print("@N985F Detected");
 ui_print("@Installation : ThunderStormS Kernel");
-package_extract_file("thunderstorm/n986/SMN986B-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
+package_extract_file("thunderstorm/n985/SMN985F-boot.img", "/dev/block/platform/13100000.ufs/by-name/boot");
 endif;
 package_extract_dir("system/system", "/system_root/system");
 #package_extract_dir("bootstock", "/system_root/system/media");
@@ -204,6 +200,14 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 
+# Run install script
+ui_print(" ");
+ui_print("@ThundeRStormS - System Patching...");
+package_extract_dir("data", "system_root/data");
+package_extract_dir("vendor", "/vendor");
+run_program("/tmp/scripts/perms.sh");
+
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 # Updating root
 ui_print(" ");
@@ -214,14 +218,6 @@ run_program("/tmp/scripts/busybox", "sh", "/tmp/magisk/META-INF/com/google/andro
 ui_print(" ");
 ui_print(" ");
 endif;
-
-# Run install script
-ui_print(" ");
-ui_print("@ThundeRStormS - System Patching...");
-package_extract_dir("data", "/data");
-package_extract_dir("vendor", "/vendor");
-run_program("/tmp/scripts/perms.sh");
-
 
 
 #####################################################################################
