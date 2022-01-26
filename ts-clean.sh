@@ -20,6 +20,16 @@ rm -f arch/arm64/boot/dts/samsung/*.dtbo.dtout
 rm -f arch/arm64/boot/dts/exynos/*.dtbo.dtout
 rm -f arch/arm64/boot/dts/exynos/*.img
 rm -f arch/arm64/boot/dts/samsung/*.img
+rm -f out/SM-980F/*.img
+rm -f out/SM-980F/*.gz
+rm -f out/SM-981B/*.img
+rm -f out/SM-981B/*.gz
+rm -f out/SM-985F/*.img
+rm -f out/SM-985F/*.gz
+rm -f out/SM-986B/*.img
+rm -f out/SM-986B/*.gz
+rm -f out/SM-988B/*.img
+rm -f out/SM-988B/*.gz
 
 # Locate placeholder in empty Ramdisk folders
 echo "" > $PWD/builds/ramdisk/ramdisk/avb/.placeholder
