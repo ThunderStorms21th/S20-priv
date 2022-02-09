@@ -8,6 +8,7 @@
 #include <linux/sched/jobctl.h>
 #include <linux/sched/task.h>
 #include <linux/cred.h>
+#include <linux/pid.h>
 
 /*
  * Types defining task->signal and task->sighand and APIs using them:
