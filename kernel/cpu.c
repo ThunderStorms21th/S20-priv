@@ -1014,10 +1014,10 @@ static int do_cpu_down(unsigned int cpu, enum cpuhp_state target)
 	cpumask_andnot(&newmask, cpu_online_mask, cpumask_of(cpu));
 	preempt_enable();
 
-	/* One big cluster CPU and one little cluster CPU must remain online */
-	if (!cpumask_intersects(&newmask, cpu_prime_mask) ||
-		!cpumask_intersects(&newmask, cpu_perf_mask) ||
-		!cpumask_intersects(&newmask, cpu_lp_mask))
+	/* One big, LITTLE, and prime CPU must remain online */
+	if (!cpumask_intersects(&newmask, cpu_lp_mask) ||
+	    !cpumask_intersects(&newmask, cpu_perf_mask) ||
+	    !cpumask_intersects(&newmask, cpu_prime_mask))
 		return -EINVAL;
 
 	/*
@@ -1031,6 +1031,11 @@ static int do_cpu_down(unsigned int cpu, enum cpuhp_state target)
 	 * happens on from other CPUs in the root domain.
 	 */
 	cpumask_andnot(&newmask, cpu_online_mask, cpumask_of(cpu));
+	/* One big cluster CPU and one little cluster CPU must remain online */
+	if (!cpumask_intersects(&newmask, cpu_prime_mask) ||
+		!cpumask_intersects(&newmask, cpu_perf_mask) ||
+		!cpumask_intersects(&newmask, cpu_lp_mask))
+		return -EINVAL;
 
 	cpu_maps_update_begin();
 	err = cpu_down_maps_locked(cpu, target);
@@ -1197,6 +1202,7 @@ int freeze_secondary_cpus(int primary)
 {
 	int cpu, error = 0;
 
+	unaffine_perf_irqs();
 	cpu_maps_update_begin();
 	unaffine_perf_irqs();
 	if (!cpu_online(primary))
@@ -1293,6 +1299,7 @@ void enable_nonboot_cpus(void)
 	reaffine_perf_irqs(false);
 out:
 	cpu_maps_update_done();
+	reaffine_perf_irqs();
 }
 
 static int __init alloc_frozen_cpus(void)
