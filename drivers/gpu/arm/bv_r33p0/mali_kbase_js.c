@@ -36,6 +36,7 @@
 #include "mali_kbase_hwaccess_jm.h"
 #include <linux/priority_control_manager.h>
 
+#include <mali_exynos_kbase_entrypoint.h>
 /*
  * Private types
  */
@@ -1364,6 +1365,8 @@ bool kbasep_js_add_job(struct kbase_context *kctx,
 		/* Setting atom status back to queued as it still has unresolved
 		 * dependencies
 		 */
+		if (atom->status == KBASE_JD_ATOM_STATE_IN_JS)
+			mali_exynos_set_count(atom, KBASE_JD_ATOM_STATE_QUEUED, true);
 		atom->status = KBASE_JD_ATOM_STATE_QUEUED;
 		dev_dbg(kbdev->dev, "Atom %pK status to queued\n", (void *)atom);
 
@@ -3283,6 +3286,9 @@ struct kbase_jd_atom *kbase_js_complete_atom(struct kbase_jd_atom *katom,
 	if (katom->will_fail_event_code)
 		katom->event_code = katom->will_fail_event_code;
 
+	if (katom->status != KBASE_JD_ATOM_STATE_HW_COMPLETED)
+			mali_exynos_set_count(katom, KBASE_JD_ATOM_STATE_HW_COMPLETED, false);
+
 	katom->status = KBASE_JD_ATOM_STATE_HW_COMPLETED;
 	dev_dbg(kbdev->dev, "Atom %pK status to HW completed\n", (void *)katom);
 
@@ -3293,6 +3299,9 @@ struct kbase_jd_atom *kbase_js_complete_atom(struct kbase_jd_atom *katom,
 
 	KBASE_TLSTREAM_AUX_EVENT_JOB_SLOT(kbdev, NULL,
 		katom->slot_nr, 0, TL_JS_EVENT_STOP);
+
+	/* Exynos TODO: see if this call can be  move to kbase_pm_metrics_update */
+	mali_exynos_update_job_load(katom, end_timestamp);
 
 	trace_sysgraph_gpu(SGR_COMPLETE, kctx->id,
 			kbase_jd_atom_id(katom->kctx, katom), katom->slot_nr);

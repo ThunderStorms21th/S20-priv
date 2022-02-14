@@ -132,7 +132,7 @@ config MALI_DMA_BUF_MAP_ON_DEMAND
 config MALI_DMA_BUF_LEGACY_COMPAT
 	bool "Enable legacy compatibility cache flush on dma-buf map"
 	depends on MALI_MIDGARD && !MALI_DMA_BUF_MAP_ON_DEMAND
-	default n
+	default y
 	help
 	  This option enables compatibility with legacy dma-buf mapping
 	  behavior, then the dma-buf is mapped on import, by adding cache
@@ -266,12 +266,14 @@ comment "Instrumentation options"
 config MALI_PRFCNT_SET_PRIMARY
 	bool "Primary"
 	depends on MALI_MIDGARD && MALI_EXPERT
+	default y
 	help
 	  Select this option to use primary set of performance counters.
 
 config MALI_PRFCNT_SET_SECONDARY
 	bool "Secondary"
 	depends on MALI_MIDGARD && MALI_EXPERT
+	default n
 	help
 	  Select this option to use secondary set of performance counters. Kernel
 	  features that depend on an access to the primary set of counters may
@@ -284,6 +286,7 @@ config MALI_PRFCNT_SET_SECONDARY
 config MALI_PRFCNT_SET_TERTIARY
 	bool "Tertiary"
 	depends on MALI_MIDGARD && MALI_EXPERT
+	default n
 	help
 	  Select this option to use tertiary set of performance counters. Kernel
 	  features that depend on an access to the primary set of counters may
@@ -344,6 +347,8 @@ config MALI_PWRSOFT_765
 config MALI_HW_ERRATA_1485982_NOT_AFFECTED
 	bool "Disable workaround for BASE_HW_ISSUE_GPU2017_1336"
 	depends on MALI_MIDGARD && MALI_EXPERT
+	default y if SOC_EXYNOS2100
+	default y if SOC_EXYNOS9830
 	default n
 	help
 	  This option disables the default workaround for GPU2017-1336. The

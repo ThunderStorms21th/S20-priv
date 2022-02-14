@@ -56,6 +56,8 @@
 
 #include <linux/of.h>
 
+#include <mali_exynos_kbase_entrypoint.h>
+
 #ifdef CONFIG_MALI_CORESTACK
 bool corestack_driver_control = true;
 #else

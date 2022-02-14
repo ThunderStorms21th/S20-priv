@@ -28,6 +28,8 @@
 #include <backend/gpu/mali_kbase_pm_internal.h>
 #include <mali_kbase_hwaccess_gpuprops.h>
 
+#include <mali_exynos_kbase_entrypoint.h>
+
 int kbase_backend_gpuprops_get(struct kbase_device *kbdev,
 					struct kbase_gpuprops_regdump *regdump)
 {
@@ -120,6 +122,11 @@ int kbase_backend_gpuprops_get(struct kbase_device *kbdev,
 		registers.gpu_features_hi = 0;
 	}
 
+	/* EXYNOS TODO: determine if needed by userspace */
+	mali_exynos_coherency_set_coherency_feature();
+	registers.coherency_features = kbase_reg_read(kbdev,
+				GPU_CONTROL_REG(COHERENCY_FEATURES));
+
 	if (!kbase_is_gpu_removed(kbdev)) {
 		*regdump = registers;
 		return 0;
@@ -161,6 +168,8 @@ int kbase_backend_gpuprops_get_features(struct kbase_device *kbdev,
 
 	/* Ensure we can access the GPU registers */
 	kbase_pm_register_access_enable(kbdev);
+
+	mali_exynos_coherency_set_coherency_feature();
 
 	coherency_features =
 		kbase_reg_read(kbdev, GPU_CONTROL_REG(COHERENCY_FEATURES));

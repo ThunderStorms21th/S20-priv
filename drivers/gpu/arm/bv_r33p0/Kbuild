@@ -78,7 +78,7 @@ else
 endif
 MALI_COVERAGE ?= 0
 
-CONFIG_MALI_PLATFORM_NAME ?= "devicetree"
+CONFIG_MALI_PLATFORM_NAME ?= "exynos"
 
 # Kconfig passes in the name with quotes for in-tree builds - remove them.
 MALI_PLATFORM_DIR := $(shell echo $(CONFIG_MALI_PLATFORM_NAME))
@@ -124,10 +124,10 @@ ccflags-y = \
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/../$(CONFIG_MALI_PLATFORM_NAME)
 else
 # out-of-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/../$(CONFIG_MALI_PLATFORM_NAME)
 endif
 
 ccflags-y += \

@@ -163,6 +163,9 @@ void kbase_sync_fence_out_remove(struct kbase_jd_atom *katom);
  */
 static inline void kbase_sync_fence_close_fd(int fd)
 {
+/* MALI_SEC_INTEGRATION
+ * Change KERNEL_VERSION check from 5.10 to 5.11 for close_fd
+ */
 #if KERNEL_VERSION(5, 11, 0) <= LINUX_VERSION_CODE
 	close_fd(fd);
 #elif KERNEL_VERSION(4, 17, 0) <= LINUX_VERSION_CODE
