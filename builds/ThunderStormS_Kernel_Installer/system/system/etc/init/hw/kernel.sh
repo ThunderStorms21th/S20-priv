@@ -102,7 +102,7 @@ rm -f $LOG
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    echo "650000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
+    echo "806000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
     echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
     #echo "2000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/down_rate_limit_us
     #echo "4000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/up_rate_limit_us
@@ -172,7 +172,7 @@ rm -f $LOG
     # GPU set at max/min freq
     echo "800000" > /sys/kernel/gpu/gpu_max_clock
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
-    echo "coarse_demand" > /sys/devices/platform/18500000.mali/power_policy
+    echo "adaptive" > /sys/devices/platform/18500000.mali/power_policy
     echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
     echo "455000" > /sys/devices/platform/18500000.mali/highspeed_clock
     echo "90" > /sys/devices/platform/18500000.mali/highspeed_load
@@ -188,14 +188,14 @@ rm -f $LOG
    # I/O sched settings
    echo "noop" > /sys/block/sda/queue/scheduler
    # echo "256" > /sys/block/sda/queue/read_ahead_kb
-   echo "none" > /sys/block/mmcblk0/queue/scheduler
+   echo "kyber" > /sys/block/mmcblk0/queue/scheduler
    # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
    echo "0" > /sys/block/sda/queue/iostats
    echo "0" > /sys/block/mmcblk0/queue/iostats
    echo "1" > /sys/block/sda/queue/rq_affinity
    echo "1" > /sys/block/mmcblk0/queue/rq_affinity
    echo "256" > /sys/block/sda/queue/nr_requests
-   echo "256" > /sys/block/mmcblk0/queue/nr_requests
+   echo "128" > /sys/block/mmcblk0/queue/nr_requests
    echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
    echo "500" > /sys/block/sda/queue/iosched/target_latency
 
@@ -296,8 +296,8 @@ rm -f $LOG
    echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms  #30
    echo "64" > /proc/sys/kernel/sched_nr_migrate
    echo "0" > /sys/module/cpuidle/parameters/off  # 0
-   echo "default" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
-   echo "0f" > /proc/irq/default_smp_affinity  #ff
+   echo "performance" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
+   echo "ff" > /proc/irq/default_smp_affinity  #ff
    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
    echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
    echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
