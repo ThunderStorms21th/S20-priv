@@ -8,7 +8,7 @@ Cruel Kernel Team.
 
 Based on samsung sources and android common tree.
 Supported devices:
-G980F
+G980F G981B G985F G986B G988B N985F N986B
 
 ## Credits
 
@@ -91,7 +91,7 @@ $ chmod +x mkbootimg.py
 $ sudo mv mkbootimg.py /usr/local/bin/mkbootimg
 
 # Get the sources
-$ git clone https://github.com/ThunderStorms21th/Galaxy-S10
+$ git clone https://github.com/ThunderStorms21th/Galaxy-S20
 $ cd Galaxy-S20
 # List available branches
 $ git branch -a | grep remotes | grep ts | cut -d '/' -f 3
@@ -104,7 +104,8 @@ $ ./ts-build.sh
 ```
 ----------------------------------------------------------------------------------------
 # Available toolchains:
-- default - standard toolchain from samsung's kernel archives for S20/Note20 models (clang8.0.8/gcc4.9)
+- default - standard toolchain from Samsung's kernel archives for S20/Note20 models (clang8.0.8/gcc4.9)
+- clang   - standard toolchain from Google's clang archives (clang14.0.1/gcc4.9)
 
 ----------------------------------------------------------------------------------------
 # WHAT IS LINUX KERNEL:
