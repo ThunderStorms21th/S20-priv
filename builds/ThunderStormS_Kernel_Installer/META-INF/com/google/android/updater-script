@@ -9,8 +9,10 @@ ui_print("*********************************************************");
 ui_print(" ");
 ui_print(" ");
 
+# Extract files to tmp directory
 
 package_extract_dir("minstall/bin", "/tmp");
+package_extract_dir("thunderstorm", "/tmp");
 set_metadata_recursive("/tmp/scripts", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0777);
 
 # Permissions
@@ -27,14 +29,14 @@ run_program("/tmp/scripts/busybox","blockdev","--setrw",map_partition("vendor"))
 mount("ext4", "EMMC", map_partition("system"), "/system_root");
 mount("ext4", "EMMC", map_partition("vendor"), "/vendor");
 
-
-
-#Cleanning
+# Cleanning
 
 run_program("/tmp/scripts/initial_settings.sh");
 
 
-#Extracting scripts	
+# Flashing kernel	
+
+# with Magisk
 
 #g980
 
@@ -121,8 +123,10 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 
-## without Magisk
+# without Magisk
+
 #g980
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G980", getprop("ro.boot.bootloader")) then
 ui_print("@G980F Detected");
@@ -134,6 +138,7 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 #g981
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G981", getprop("ro.boot.bootloader")) then
 ui_print("@G981B Detected");
@@ -156,6 +161,7 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 #g986
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G986B", getprop("ro.boot.bootloader")) then
 ui_print("@G986B Detected");
@@ -167,6 +173,7 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 #g988
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("G988", getprop("ro.boot.bootloader")) then
 ui_print("@G988B Detected");
@@ -178,6 +185,7 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 #n986
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("N986", getprop("ro.boot.bootloader")) then
 ui_print("@N986B Detected");
@@ -189,6 +197,7 @@ package_extract_dir("system/system", "/system_root/system");
 endif;
 
 #n985
+
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "2"  then
 if is_substring("N985", getprop("ro.boot.bootloader")) then
 ui_print("@N985F Detected");
@@ -198,7 +207,6 @@ endif;
 package_extract_dir("system/system", "/system_root/system");
 #package_extract_dir("bootstock", "/system_root/system/media");
 endif;
-
 
 # Run install script
 ui_print(" ");
@@ -206,7 +214,9 @@ ui_print("@ThundeRStormS - System Patching...");
 package_extract_dir("data", "system_root/data");
 package_extract_dir("vendor", "/vendor");
 run_program("/tmp/scripts/perms.sh");
+package_extract_dir("*.apk", "/system_root/data/media/0/Apkinstaller");
 
+# Install Magisk
 
 if file_getprop("/tmp/aroma/boot.prop", "selected.1") == "1"  then
 # Updating root
@@ -219,11 +229,16 @@ ui_print(" ");
 ui_print(" ");
 endif;
 
-
 #####################################################################################
 #	Finishing																		#
 #####################################################################################
 set_progress(1.0);
+ui_print(" ");
+ui_print("@ThundeRStormS - Unmounting Partition...");
+delete_recursive("/tmp/scripts");
+delete_recursive("/tmp/*.*");
+ifelse(is_mounted("/system_root"), unmount("/system_root"));
+ifelse(is_mounted("/vendor"), unmount("/vendor"));
 ui_print(" ");
 ui_print(" ");
 ui_print("*****************************************************");

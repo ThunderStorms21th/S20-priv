@@ -6,24 +6,6 @@
 TS_DIR="/data/.tskernel"
 LOG="$TS_DIR/tskernel.log"
 
-## VARIABLES
-BL=`getprop ro.bootloader`
-MODEL=${BL:0:5}
-MODEL1=G980F
-MODEL1_DESC="SM980F"
-MODEL2=G985F
-MODEL2_DESC="SM985F"
-MODEL3=G981B
-MODEL3_DESC="SM981B"
-MODEL4=G986B
-MODEL4_DESC="SM986B"
-MODEL5=G988B
-MODEL5_DESC="SM988B"
-MODEL6=N986B
-MODEL6_DESC="SMN986B"
-MODEL6=N985F
-MODEL6_DESC="SMN985F"
-
 sleep 20
 
 rm -f $LOG
@@ -102,27 +84,18 @@ rm -f $LOG
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    echo "806000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
+    echo "650000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
     echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-    #echo "2000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/down_rate_limit_us
-    #echo "4000" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/up_rate_limit_us
-    #echo "1" > /sys/devices/system/cpu/cpu0/cpufreq/schedutil/fb_legacy
 
     # Midle CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor
-    echo "507000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq   # 507000
-    echo "2504000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq
-    #echo "2000" > /sys/devices/system/cpu/cpu4/cpufreq/schedutil/down_rate_limit_us
-    #echo "4000" > /sys/devices/system/cpu/cpu4/cpufreq/schedutil/up_rate_limit_us
-    #echo "1" > /sys/devices/system/cpu/cpu4/cpufreq/schedutil/fb_legacy
+    echo "377000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq   # 507000
+    echo "2600000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq # 2504
 
     # BIG CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor
     echo "546000" > /sys/devices/system/cpu/cpu6/cpufreq/scaling_min_freq
     echo "2730000" > /sys/devices/system/cpu/cpu6/cpufreq/scaling_max_freq
-    #echo "2000" > /sys/devices/system/cpu/cpu6/cpufreq/schedutil/down_rate_limit_us
-    #echo "4000" > /sys/devices/system/cpu/cpu6/cpufreq/schedutil/up_rate_limit_us
-    #echo "1" > /sys/devices/system/cpu/cpu6/cpufreq/schedutil/fb_legacy
 
     # Wakelock settigs
     echo "N" > /sys/module/wakeup/parameters/enable_sensorhub_wl
@@ -138,17 +111,17 @@ rm -f $LOG
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
-    echo "256" > /proc/sys/kernel/random/write_wakeup_threshold
+    echo "512" > /proc/sys/kernel/random/write_wakeup_threshold
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
     echo "100" > /proc/sys/vm/vfs_cache_pressure
     echo "140" > /proc/sys/vm/swappiness
-    echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
-    echo "2000" > /proc/sys/vm/dirty_expire_centisecs
+    echo "3000" > /proc/sys/vm/dirty_writeback_centisecs
+    echo "3000" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
-    echo "25" > /proc/sys/vm/dirty_ratio
-    echo "10" > /proc/sys/vm/dirty_background_ratio
+    echo "75" > /proc/sys/vm/dirty_ratio
+    echo "20" > /proc/sys/vm/dirty_background_ratio
 
     # Fs
     echo "0" > /proc/sys/fs/dir-notify-enable
@@ -212,7 +185,7 @@ rm -f $LOG
 
    ## Kernel Stune											DEFAULT VALUES
    # GLOBAL
-   echo "5" > /dev/stune/schedtune.boost					# 0
+   echo "6" > /dev/stune/schedtune.boost					# 0
    #echo "0" > /dev/stune/schedtune.band					# 0
    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
@@ -220,7 +193,7 @@ rm -f $LOG
    #echo "0" > /dev/stune/schedtune.ontime_en				# 0
    
    # TOP-APP
-   echo "5" > /dev/stune/top-app/schedtune.boost			# 0
+   echo "6" > /dev/stune/top-app/schedtune.boost			# 0
    #echo "0" > /dev/stune/top-app/schedtune.band			# 0
    echo "0" > /dev/stune/top-app/schedtune.prefer_idle		# 1
    echo "0" > /dev/stune/top-app/schedtune.prefer_perf		# 0
@@ -228,7 +201,7 @@ rm -f $LOG
    #echo "1" > /dev/stune/top-app/schedtune.ontime_en		# 0
    
    # RT
-   echo "5" > /dev/stune/rt/schedtune.boost					# 0
+   echo "6" > /dev/stune/rt/schedtune.boost					# 0
    #echo "0" > /dev/stune/rt/schedtune.band					# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_idle			# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_perf			# 0
@@ -271,23 +244,8 @@ rm -f $LOG
    # DEXOPT
    echo "0-7" > /dev/cpuset/dexopt/cpus					    # 0-3
 
-   ## CPU Fluid RT
-   #echo "10" > sys/kernel/ems/frt/coregroup0/active_ratio
-   #echo "30" > sys/kernel/ems/frt/coregroup0/active_ratio_boost
-   #echo "15" > sys/kernel/ems/frt/coregroup0/coverage_ratio
-   #echo "20" > sys/kernel/ems/frt/coregroup0/coverage_ratio_boost
-
-   #echo "25" > sys/kernel/ems/frt/coregroup1/active_ratio
-   #echo "30" > sys/kernel/ems/frt/coregroup1/active_ratio_boost
-   #echo "5" > sys/kernel/ems/frt/coregroup1/coverage_ratio
-   #echo "10" > sys/kernel/ems/frt/coregroup1/coverage_ratio_boost
-
-   #echo "25" > sys/kernel/ems/frt/coregroup2/active_ratio
-   #echo "30" > sys/kernel/ems/frt/coregroup2/active_ratio_boost
-   #echo "10" > sys/kernel/ems/frt/coregroup2/coverage_ratio
-   #echo "15" > sys/kernel/ems/frt/coregroup2/coverage_ratio_boost
-
    ## Kernel Scheduler
+   echo "## -- Kernel scheduler settings" >> $LOG;
    echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
    #echo "10000000" > /proc/sys/kernel/sched_latency_ns
    #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
@@ -295,14 +253,15 @@ rm -f $LOG
    #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
    echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms  #30
    echo "64" > /proc/sys/kernel/sched_nr_migrate
-   echo "0" > /sys/module/cpuidle/parameters/off  # 0
-   echo "performance" > /sys/module/pcie_aspm/parameters/policy   # default performance powersave powersupersave
+   echo "1" > /sys/module/cpuidle/parameters/off  # 0
+   echo "performance" > /sys/module/pcie_aspm/parameters/policy
+   # policy - default performance powersave powersupersave
    echo "ff" > /proc/irq/default_smp_affinity  #ff
    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
    echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
-   echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
+   echo "10" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
    echo "100000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
-   echo "516" > /proc/sys/kernel/perf_event_mlock_kb  #516
+   echo "565" > /proc/sys/kernel/perf_event_mlock_kb  #516
    echo "0" > /dev/cpuset/sched_load_balance   # 0
 
    # Thermal Governors
@@ -328,7 +287,7 @@ rm -f $LOG
    echo 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd' > /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
 	echo " " >> $LOG;
 
-	# echo "## -- Sched features Fix" >> $LOG;
+	echo "## -- Sched features Fix" >> $LOG;
 
     ## Enhanched SlickSleep
     echo "NO_NORMALIZED_SLEEPER" > /sys/kernel/debug/sched_features

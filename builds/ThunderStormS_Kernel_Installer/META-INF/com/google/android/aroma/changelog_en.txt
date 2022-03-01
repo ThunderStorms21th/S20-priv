@@ -1,5 +1,22 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>ThunderStormS Kernel v2.2
+- Linux 4.19.87
+- Samsung source DEVA9 Android 12
+- Some debugs off
+- Added new ADAPTIVE_POWER_POLICY GPU
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- Imported GPU Mali drivers r36p0 from ARM
+- Support Battery Saver
+- Support Game Misc Control
+- Compiled with CLang 14.0.1
+- READ_AHEAD_KB = 64
+- Magisk 24.1 (24101)
+- rest like in v2.1
+</*>
+------------------------------------------------
+
 <*>ThunderStormS Kernel v2.1
 - Linux 4.19.87
 - Samsung source DEVA9 Android 12
@@ -16,6 +33,7 @@
 - rest like in v2.0.1
 </*>
 ------------------------------------------------
+
 <*>ThunderStormS Kernel v2.0.1
 - Linux 4.19.87
 - Samsung source CEUL7 Android 12

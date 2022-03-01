@@ -24,8 +24,12 @@ sed -i '/init.ts.rc/d' /system_root/system/etc/init/hw/init.rc
 sed -i '/init.services.rc/d' /system_root/system/etc/init/hw/init.rc
 sed -i '/init.custom.rc/d' /system_root/system/etc/init/hw/init.rc
 
-
 # Import init.ts.rc to init.rc
 # sed -i '/import \/prism\/etc\/init\/init.rc/a\import \/init.custom.rc' /system_root/system/etc/init/hw/init.rc
 sed -i '/import \/init.container.rc/a\import \/system\/etc\/init\/hw\/init.custom.rc' /system_root/system/etc/init/hw/init.rc
+
+# Create init.d folder
+mkdir -p system_root/vendor/etc/init.d;
+chown -R root.root system_root/vendor/etc/init.d;
+chmod 755 system_root/vendor/etc/init.d;
 

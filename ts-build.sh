@@ -30,7 +30,7 @@ export CC=$(pwd)/toolchain/clang-14/host/linux-x86/clang-r437112b/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v2.1"
+export K_VERSION="v2.2"
 export K_NAME="ThundeRStormS-Kernel-S20N20"
 export K_BASE="DEVA9"
 ANDROID=OneUI-S

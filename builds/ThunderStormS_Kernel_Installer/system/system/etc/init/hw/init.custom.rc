@@ -12,7 +12,6 @@ on property:sys.boot_completed=1
     stop secure_storage
     stop irisd
 
-
 service kernelinit /system/etc/init/hw/kernel.sh
     # class late_start
     user root
@@ -21,9 +20,7 @@ service kernelinit /system/etc/init/hw/kernel.sh
     oneshot
     disabled
 
-
 on boot
-
    write /sys/bus/workqueue/devices/writeback/cpumask 1
 
    # I/O sched settings
@@ -32,51 +29,43 @@ on boot
    write /sys/block/sda/queue/iostats 0
    write /sys/block/mmcblk0/queue/iostats 0
    # VM
-   write /proc/sys/vm/dirty_expire_centisecs 2000
-   write /proc/sys/vm/dirty_writeback_centisecs 2000
+   write /proc/sys/vm/dirty_expire_centisecs 3000
+   write /proc/sys/vm/dirty_writeback_centisecs 3000
    write /proc/sys/vm/vfs_cache_pressure 100
    # MISC
    write > /sys/module/mmc_core/parameters/use_spi_crc N
-   # Boeffla wakelocks
-   chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
-   write /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd'
-
-## Build.prop settings
-    # setprop hw3d.force 1
-    # setprop hw2d.force 1
-    # setprop debug.composition.type gpu  #gpu cd2 dyn cpu
-    # setprop persist.sys.composition.type gpu  #gpu c2d dyn cpu
-    # setprop debug.egl.profiler 1
-    # setprop debug.egl.hw 1
-    # setprop debug.sf.hw 1
-    # setprop ro.debuggable 0
-    # setprop hwui.render_dirty_regions false
+   
+## GPU rendering
+    setprop hw3d.force 1
+    setprop hw2d.force 1
+    ## composition.type - gpu cd2 dyn cpu
+    setprop debug.composition.type gpu
+    setprop persist.sys.composition.type gpu
+    setprop hwui.render_dirty_regions false
     setprop debug.gr.numframebuffers 3
     setprop debug.egl.swapinterval -60
-    # setprop debug.gr.swapinterval 0
+    setprop debug.gr.swapinterval 0
     setprop ro.config.hw_power_saving 1
     setprop persist.sys.ui.hw 1
     setprop ro.sf.compbypass.enable 0
     setprop debug.performance.tuning 1
-    # setprop hwui.disable_vsync true
-    # setprop debug.hwc.force_gpu 1
-    # setprop debug.hwc.nodirtyregion 1
+    setprop hwui.disable_vsync true
+    setprop debug.hwc.force_gpu 1
+    setprop debug.hwc.nodirtyregion 1
     setprop debug.hwc.winupdate 1
+    setprop sys.hwc.gpu_perf_mode 1
     setprop vidc.debug.level 0
-    # setprop ro.product.gpu.driver 1
-    # setprop persist.sys.scrollingcache 3
-    setprop ro.config.hw_quickpoweron true
-    setprop ro.config.hw_power_saving 1
-    setprop power.saving.mode 1
-    setprop persist.radio.add_power_save 1
-    setprop ro.ril.sensor.sleep.control 1
-    setprop ro.config.nocheckin 1
-
+    setprop video.accelerate.hw 1
+    ## Increase GPU buffer count
+    setprop debug.egl.buffcount 4
+    setrpop persist.sys.force_highendgfx true
+    ## Fix Rendering Android 12
+    setprop debug.hwui.renderer opengl
+    setprop ro.hwui.use_vulkan false
 ## Disable logs and debugs
     setprop profiler.debugmonitor 0
     setprop profiler.launch 0
     setprop profiler.hung.dumpdobugreport 0
-    # setprop logcat.live 0
     setprop profiler.force_disable_err_rpt 1
     setprop profiler.force_disable_ulog 1
     setprop profiler.force_disable_ulog true
@@ -90,118 +79,216 @@ on boot
     setprop profiler.launch false
     setprop profiler.hung.dumpdobugreport false
     setprop libc.debug.malloc 0
-
 ## Decrease time for screen off/on durrign call
     setprop ro.telephony.call_ring.delay 0
     setprop ring.delay 0
     setprop ro.lge.proximity.delay 15
     setprop mot.proximity.delay 15
     setprop ro.mot.buttonlight.timeout 0
-
+    setprop ro.config.vc_call_steps 20
 ## VM
     write /proc/sys/vm/page-cluster 0
-
+    ## Native VM bridges    
+    setprop ro.enable.native.bridge.exec 1
+    setprop ro.enable.native.bridge.exec64 1
 ## Mobile Data Tweaks
-    setprop ro.ril.hsxpa=5
-    setprop ro.ril.hspa=36
-    setprop ro.ril.lte=5
-    setprop ro.ril.ltea=5
-    setprop ro.ril.hep=0
-    setprop ro.ril.def.agps.mode=2
-    setprop ro.ril.enable.3g.prefix=1
-    setprop ro.ril.enable.4g.prefix=1
-    setprop ro.ril.htcmaskw1.bitmask=4294967295
-    setprop ro.ril.htcmaskw1=14449
-    setprop ro.ril.enable.dtm=1
-    setprop ro.ril.hspaclass=12
-    setprop ro.ril.lteclass=12
-    setprop ro.ril.gprsclass=12
-    setprop ro.ril.hsupa.category=8
-    setprop ro.ril.hsdpa.category=28
-    setprop ro.ril.lte.category=8
-    setprop ro.ril.ltea.category=28
-    setprop ro.ril.enable.a51=1
-    setprop ro.ril.enable.a52=1
-    setprop ro.ril.enable.a53=1
-    setprop ro.ril.enable.a54=1
-    setprop ro.ril.enable.a55=1
-
+    setprop ro.ril.hsxpa 5
+    setprop ro.ril.hspa 36
+    setprop ro.ril.lte 5
+    setprop ro.ril.ltea 5
+    setprop ro.ril.hep 0
+    setprop ro.ril.def.agps.mode 2
+    setprop ro.ril.enable.dtm 1
+    setprop ro.ril.hspaclass 12
+    setprop ro.ril.lteclass 12
+    setprop ro.ril.gprsclass 12
+    setprop ro.ril.hsupa.category 8
+    setprop ro.ril.hsdpa.category 28
+    setprop ro.ril.lte.category 8
+    setprop ro.ril.ltea.category 28
 ## Signal Tweaks
-    setprop persist.cust.tel.eons=1 
-    setprop ro.config.hw_fast_dormancy=1
-    setprop ro.config.combined_signal=true
-    setprop telephony.lteOnCdmaDevice=1
-    setprop ro.telephony.default_network=33,33
-
+    setprop persist.cust.tel.eons 1 
+    setprop ro.config.hw_fast_dormancy 1
+    setprop ro.config.combined_signal true
+    setprop telephony.lteOnCdmaDevice 1
 ## Support For IPV4 and IPV6
-    setprop persist.telephony.support.ipv6=1
-    setprop persist.telephony.support.ipv4=1
-
+    setprop persist.telephony.support.ipv6 1
+    setprop persist.telephony.support.ipv4 1
+    setprop af.fast_period_size 192
+    setprop af.fast_track_multipler 1
 ## DNS Tweaks
-    setprop net.rmnet0.dns1=1.1.1.1
-    setprop net.rmnet0.dns2=1.0.0.1
-    setprop net.rmnet1.dns1=1.1.1.1
-    setprop net.rmnet1.dns2=1.0.0.1
-    setprop net.dns1=1.1.1.1
-    setprop net.dns2=1.0.0.1
-    setprop net.gprs.dns1=1.1.1.1
-    setprop net.gprs.dns2=1.0.0.1
-    setprop net.wcdma.dns1=1.1.1.1
-    setprop net.wcdma.dns2=1.0.0.1
-    setprop net.hspa.dns1=1.1.1.1
-    setprop net.hspa.dns2=1.0.0.1
-    setprop net.hsdpa.dns1=1.1.1.1
-    setprop net.hsdpa.dns2=1.0.0.1
-    setprop net.lte.dns1=1.1.1.1
-    setprop net.lte.dns2=1.0.0.1
-    setprop net.ltea.dns1=1.1.1.1
-    setprop net.ltea.dns2=1.0.0.1
-    setprop net.ppp0.dns1=1.1.1.1
-    setprop net.ppp0.dns2=1.0.0.1
-    setprop net.pdpbr1.dns1=1.1.1.1
-    setprop net.pdpbr1.dns2=1.0.0.1
-    setprop net.wlan0.dns1=1.1.1.1
-    setprop net.wlan0.dns2=1.0.0.1
-    setprop net.eth0.dns1=1.1.1.1
-    setprop net.eth0.dns2=1.0.0.1
-
-## Internet Buffer Tweaks
-    setprop net.tcp.buffersize.default=4096,87380,256960,4096,16384,256960
-    setprop net.tcp.buffersize.wifi=4096,87380,256960,4096,16384,256960
-    setprop net.tcp.buffersize.lte=524288,1048576,2097152,524288,1048576,2097152
-    setprop net.tcp.buffersize.umts=4096,87380,256960,4096,16384,256960
-    setprop net.tcp.buffersize.evdo=4096,87380,563200,4096,16384,262144
-    setprop net.tcp.buffersize.evdo_b=6144,262144,1048576,6144,262144,1048576
-    setprop net.tcp.buffersize.gprs=4096,87380,256960,4096,16384,256960
-    setprop net.tcp.buffersize.edge=4096,87380,256960,4096,16384,256960
-    setprop net.tcp.buffersize.hsdpa=6144,87380,1048576,6144,87380,1048576
-    setprop net.tcp.buffersize.hspa=6144,87380,524288,6144,16384,262144
-    setprop net.tcp.buffersize.hspap=4096,87380,1220608,4096,16384,393216
-    setprop net.tcp.buffersize.hsupa=4096,87380,704512,4096,16384,262144
-
-## Internet Tweaks
-    setprop net.ipv4.icmp_echo_ignore_all=1
-    setprop net.ipv4.icmp_ignore_bogus_error_responses=1
-    # setprop net.ipv4.tcp_window_scaling=1
-    setprop net.ipv4.tcp_timestamps=1 
-    setprop net.core.rmem_default=31457280
-    setprop net.core.rmem_max=12582912
-    setprop net.core.wmem_default=31457280
-    setprop net.core.wmem_max=12582912
-    setprop net.core.somaxconn=4096
-    setprop net.core.netdev_max_backlog=65536
-    setprop net.core.optmem_max=25165824
-    setprop net.ipv4.tcp_mem=65536 131072 262144
-    setprop net.ipv4.udp_mem=65536 131072 262144
-    setprop net.ipv4.tcp_rmem=8192 87380 16777216
-    setprop net.ipv4.udp_rmem_min=16384
-    setprop net.ipv4.tcp_wmem=8192 65536 16777216
-    setprop net.ipv4.udp_wmem_min=16384
-    setprop net.ipv4.tcp_max_tw_buckets=1440000
-    setprop net.ipv4.tcp_tw_recycle=1
-    setprop net.ipv4.tcp_tw_reuse=1
-
-#   stop logd
+    setprop net.rmnet0.dns1 1.1.1.1
+    setprop net.rmnet0.dns2 1.0.0.1
+    setprop net.rmnet1.dns1 1.1.1.1
+    setprop net.rmnet1.dns2 1.0.0.1
+    setprop net.dns1 1.1.1.1
+    setprop net.dns2 1.0.0.1
+    setprop net.gprs.dns1 1.1.1.1
+    setprop net.gprs.dns2 1.0.0.1
+    setprop net.wcdma.dns1 1.1.1.1
+    setprop net.wcdma.dns2 1.0.0.1
+    setprop net.hspa.dns1 1.1.1.1
+    setprop net.hspa.dns2 1.0.0.1
+    setprop net.hsdpa.dns1 1.1.1.1
+    setprop net.hsdpa.dns2 1.0.0.1
+    setprop net.lte.dns1 1.1.1.1
+    setprop net.lte.dns2 1.0.0.1
+    setprop net.ltea.dns1 1.1.1.1
+    setprop net.ltea.dns2 1.0.0.1
+    setprop net.ppp0.dns1 1.1.1.1
+    setprop net.ppp0.dns2 1.0.0.1
+    setprop net.pdpbr1.dns1 1.1.1.1
+    setprop net.pdpbr1.dns2 1.0.0.1
+    setprop net.wlan0.dns1 1.1.1.1
+    setprop net.wlan0.dns2 1.0.0.1
+    setprop net.eth0.dns1 1.1.1.1
+    setprop net.eth0.dns2 1.0.0.1
+## General Tweaks
+    setprop persist.sys.purgeable_assets 1
+    setprop ro.config.disable.hw_accel false
+    setprop ro.config.iccc_version iccc_disabled
+    setprop ro.fb.mode 1
+    setprop debug.fb.rgb565 1
+    setprop ro.media.enc.jpeg.quality 100
+    setprop ro.opa.eligible_device true
+    setprop ro.ril.enable.amr.wideband 1
+    setprop ro.ril.power_collapse 1
+    setprop ro.sf.compbypass.enable 0
+    setprop wifi.supplicant_scan_interval 300
+    setprop wlan.wfd.hdcp disable
+    setprop net.tethering.noprovisioning true
+    setprop ro.config.nocheckin 1
+## Game tweaks
+    setprop persist.sys.NV_FPSLIMIT 160
+    setprop persist.sys.NV_POWERMODE 1
+    setprop persist.sys.NV_PROFVER 15
+    setprop persist.sys.NV_STEREOCTRL 0
+    setprop persist.sys.NV_STEREOSEPCHG 0
+    setprop persist.sys.NV_STEREOSEP 20
+## FPS Lock
+    setprop ro.fps_enable 1
+    setprop ro.fps.capsmin 70
+    setprop ro.fps.capsmax 160
+## Grpahics tweaks
+    setprop debug.enabletr true
+    setprop debug.overlayui.enable 1
+    setprop dev.pm.dyn_samplingrate 1
+    setprop ro.vendor.qti.sys.fw.bservice_enable true
+    setprop persist.vendor.ssr.enable_ramdumps 0
+    setprop debug.sf.no_hw_vsync 0
+    setprop debug.hwui.use_buffer_age false
+    setprop hwui.use_gpu_pixel_buffers true
+    setprop ro.bq.gpu_to_cpu_unsupported 1
+    setprop debugtool.anrhistory 0
+    setprop debug.hwui.disable_vsync true
+    setprop debug.sf.disable_backpressure 1
+    setprop debug.gralloc.gfx_ubwc_disable 0
+    setprop ro.surface_flinger.protected_contents true
+    setprop ro.surface_flinger.use_color_management true
+    setprop ro.surface_flinger.running_without_sync_framework true
+    setprop persist.hwc.enable_vds 1
+    setprop ro.surface_flinger.has_HDR_display true
+    setprop ro.surface_flinger.has_wide_color_display true
+## Render dirty region
+    setprop DEBUG_DIRTY_REGION false
+    setprop debug.hwui.profile false
+    setprop debug.hwui.profile.maxframes 70
+    setprop debug.hwui.skip_empty_damage true
+    setprop debug.hwui.use_partial_updates true
+    setprop debug.hwui.use_gpu_pixel_buffers false
+    setprop debug.hwui.render_dirty_regions false
+    setprop debug.hwui.show_dirty_regions false
+## Launcher Is Kept in Memory
+    setprop ro.HOME_APP_ADJ 1
+    setprop ro.FOREGROUND_APP_ADJ 0
+    setprop ro.VISIBLE_APP_ADJ 4
+    setprop ro.HIDDEN_APP_MIN_ADJ 7
+## Battery save
+    setprop pm.sleep_mode 1
+    setprop power_supply.wakeup enable
+    setprop ro.mot.eri.losalert.delay 1000
+    setprop ro.vold.umsdirtyratio 20
+    setprop ro.config.hw_quickpoweron true
+    setprop ro.config.hw_power_saving 1
+    setprop power.saving.mode 1
+    setprop persist.radio.add_power_save 1
+    setprop ro.ril.sensor.sleep.control 1
+    setprop persist.sys.shutdown.mode hibernate
+## Faster streaming videos
+    setprop media.stagefright.enable-player true
+    setprop media.stagefright.enable-meta true
+    setprop media.stagefright.enable-scan false
+    setprop media.stagefright.enable-http true
+## Sensor Sleep Control
+    setprop ro.ril.sensor.sleep.control 1
+    setprop ro.wifi.hotspotUI 1
+    setprop ro.tether.denied false
+## Disable Sending Usage Data
+    setprop ro.config.htc.nocheckin 1
+## Disable Strict Mode Checking
+    setprop persist.android.strictmode 0
+    setprop persist.sys.strictmode.disable 1
+    setprop persist.sys.strictmode.visual 0
+    setprop persist.sys.strictmode.disable true
+## Bluetooth quality increase
+    setprop persist.bt.enableAptXHD true
+    setprop persist.service.btui.use_aptx 1
+    setprop persist.bluetooth.a2dp_offload.cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
+    setprop persist.vendor.btstack.a2dp_offload_cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
+    setprop persist.bluetooth.disableabsvol true
+    setprop persist.vendor.btstack.enable.splita2dp true
+    setprop persist.vendor.btstack.aac_frm_ctl.enabled true
+    setprop persist.vendor.btstack.enable.twsplus true
+    setprop persist.vendor.btstack.connect.peer_earbud true
+    setprop persist.vendor.btstack.enable.twsplussho true
+    setprop ro.bluetooth.emb_wp_mode false
+    setprop ro.bluetooth.wipower false
+    setprop ro.bluetooth.remote.autoconnect true
+    setprop ro.bluetooth.request.master true
+    setprop ro.vendor.bluetooth.wipower false
+    setprop persistent.bt.a2dp_offload_cap sbc-aptx-aptXHD
+    setprop ro.bluetooth.hfp.ver 1.6
+    setprop persist.bt.a2dp.aptx_hd_disable false
+    setprop persist.vendor.bt.a2dp_offload_cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
+## Scrolling Responsiveness
+    setprop windowsmgr.max_events_per_sec 90
+    setprop persist.cust.tel.eons 1
+# RIL Wakelock Optimization
+    setprop ro.ril.wake_lock_timeout 10000
+# Enable Fast Dormancy
+    setprop ro.fast.dormancy 1
+    setprop ro.semc.enable.fast_dormancy true
+# Dalvik Virtual Machine Tweaks
+    setprop dalvik.vm.checkjni false
+    setprop dalvik.vm.dexopt-data-only 1
+    setprop dalvik.vm.verify-bytecode false
+    setprop dalvik.vm.heaptargetutilization 0.80
+    setprop dalvik.vm.dexopt-flags m=y,v=n,o=y,u=y
+# Disable vsync for CPU rendered apps
+    setprop debug.cpurend.vsync false
+# System tweak
+    setprop ro.config.hw.logsystem.send 0
+# Signal Boost
+    setprop bt.max.hfpclient.connections 1
+# SQL Tweaks
+    setprop debug.sqlite.journalmode WAL
+    setprop debug.sqlite.syncmode 1
+## ART compilation
+    setprop vm.scan_unevictable_pages 0
+    setprop dalvik.vm.check-dex-sum false
+## RmNet Data
+    setprop persist.rmnet.data.enable true
+    setprop persist.data.wda.enable true
+    setprop persist.data.df.dev_name rmnet_usb0
+## Faster App launch
+    setprop fs.lease-break-time 20
+    setprop fs.epoll.max_user_watches 206530
+    setprop fs.file-max 533104
+    setprop fs.nr_open 1048576
+    setprop fs.inotify.max_queued_events 32000
+    setprop fs.inotify.max_user_instances 512
+    setprop fs.inotify.max_user_watches 10240
+    setprop vold.post_fs_data_done 1
 
 on property:sys.boot_completed=1
       resetprop ro.build.selinux 1
