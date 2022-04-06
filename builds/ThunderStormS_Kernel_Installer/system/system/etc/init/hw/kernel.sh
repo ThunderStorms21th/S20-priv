@@ -75,22 +75,19 @@ rm -f $LOG
     # POWER EFFCIENT WORKQUEUE (0/N = Disabled, 1/Y = Enabled)
     echo "N" > /sys/module/workqueue/parameters/power_efficient
 
-    # FINGERPRINT BOOST (0 = Disabled, 1 = Enabled)
-    # echo "1" > /sys/kernel/fp_boost/enabled
-
     # BATTERY SAVER (0/N = Disabled, 1/Y = Enabled)
     echo "Y" > /sys/module/battery_saver/parameters/enabled
 
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    echo "650000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
+    echo "442000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
     echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
 
     # Midle CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor
     echo "377000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq   # 507000
-    echo "2600000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq # 2504
+    echo "2504000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq # 2504
 
     # BIG CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor
@@ -107,7 +104,7 @@ rm -f $LOG
     echo "N" > /sys/module/wakeup/parameters/enable_wlan_rx_wake_wl
     echo "N" > /sys/module/wakeup/parameters/enable_wlan_wd_wake_wl
     echo "Y" > /sys/module/wakeup/parameters/enable_mmc0_detect_wl
-    echo "6" > /sys/module/sec_battery/parameters/wl_polling
+    echo "8" > /sys/module/sec_battery/parameters/wl_polling
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
@@ -115,17 +112,17 @@ rm -f $LOG
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
-    echo "100" > /proc/sys/vm/vfs_cache_pressure
-    echo "140" > /proc/sys/vm/swappiness
-    echo "3000" > /proc/sys/vm/dirty_writeback_centisecs
-    echo "3000" > /proc/sys/vm/dirty_expire_centisecs
+    echo "130" > /proc/sys/vm/vfs_cache_pressure
+    echo "100" > /proc/sys/vm/swappiness
+    echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
+    echo "2000" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
     echo "75" > /proc/sys/vm/dirty_ratio
-    echo "20" > /proc/sys/vm/dirty_background_ratio
+    echo "25" > /proc/sys/vm/dirty_background_ratio
 
     # Fs
     echo "0" > /proc/sys/fs/dir-notify-enable
-    echo "10" > /proc/sys/fs/lease-break-time
+    echo "20" > /proc/sys/fs/lease-break-time
     echo "131072" > /proc/sys/fs/aio-max-nr
 
     # ZRAM
@@ -138,6 +135,8 @@ rm -f $LOG
     # echo "2684354560" > /sys/block/zram0/disksize  # 2,5 GB
     # echo "3221225472" > /sys/block/zram0/disksize  # 3,0 GB
     # echo "4194304000" > /sys/block/zram0/disksize  # 4,0 GB
+    # echo "6291456000" > /sys/block/zram0/disksize  # 6,0 GB
+    # echo "8388608000" > /sys/block/zram0/disksize  # 8,0 GB
     # chmod 644 /dev/block/zram0
     # mkswap /dev/block/zram0 > /dev/null 2>&1
     # swapon /dev/block/zram0 > /dev/null 2>&1
@@ -147,8 +146,8 @@ rm -f $LOG
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
     echo "adaptive" > /sys/devices/platform/18500000.mali/power_policy
     echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
-    echo "455000" > /sys/devices/platform/18500000.mali/highspeed_clock
-    echo "90" > /sys/devices/platform/18500000.mali/highspeed_load
+    echo "377000" > /sys/devices/platform/18500000.mali/highspeed_clock
+    echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
     echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
     echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable  # 0
 
@@ -165,12 +164,12 @@ rm -f $LOG
    # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
    echo "0" > /sys/block/sda/queue/iostats
    echo "0" > /sys/block/mmcblk0/queue/iostats
-   echo "1" > /sys/block/sda/queue/rq_affinity
-   echo "1" > /sys/block/mmcblk0/queue/rq_affinity
+   echo "0" > /sys/block/sda/queue/rq_affinity
+   echo "0" > /sys/block/mmcblk0/queue/rq_affinity
    echo "256" > /sys/block/sda/queue/nr_requests
    echo "128" > /sys/block/mmcblk0/queue/nr_requests
-   echo "24" > /sys/block/mmcblk0/queue/iosched/fifo_batch
-   echo "500" > /sys/block/sda/queue/iosched/target_latency
+   #echo "16" > /sys/block/mmcblk0/queue/iosched/fifo_batch
+   #echo "600" > /sys/block/sda/queue/iosched/target_latency
 
    #Devfreq
    # default 2730 MHz
@@ -185,44 +184,29 @@ rm -f $LOG
 
    ## Kernel Stune											DEFAULT VALUES
    # GLOBAL
-   echo "6" > /dev/stune/schedtune.boost					# 0
-   #echo "0" > /dev/stune/schedtune.band					# 0
+   echo "3" > /dev/stune/schedtune.boost					# 0
    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
-   #echo "1" > /dev/stune/schedtune.util_est_en				# 0
-   #echo "0" > /dev/stune/schedtune.ontime_en				# 0
    
    # TOP-APP
-   echo "6" > /dev/stune/top-app/schedtune.boost			# 0
-   #echo "0" > /dev/stune/top-app/schedtune.band			# 0
+   echo "3" > /dev/stune/top-app/schedtune.boost			# 0
    echo "0" > /dev/stune/top-app/schedtune.prefer_idle		# 1
    echo "0" > /dev/stune/top-app/schedtune.prefer_perf		# 0
-   #echo "1" > /dev/stune/top-app/schedtune.util_est_en		# 0
-   #echo "1" > /dev/stune/top-app/schedtune.ontime_en		# 0
    
    # RT
-   echo "6" > /dev/stune/rt/schedtune.boost					# 0
-   #echo "0" > /dev/stune/rt/schedtune.band					# 0
+   echo "3" > /dev/stune/rt/schedtune.boost					# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_idle			# 0
    echo "0" > /dev/stune/rt/schedtune.prefer_perf			# 0
-   #echo "0" > /dev/stune/rt/schedtune.util_est_en			# 0
-   #echo "0" > /dev/stune/rt/schedtune.ontime_en			# 0
  
    # FOREGROUND-APP
    echo "0" > /dev/stune/foreground/schedtune.boost			# 0
-   #echo "0" > /dev/stune/foreground/schedtune.band			# 0
    echo "0" > /dev/stune/foreground/schedtune.prefer_idle	# 0
    echo "0" > /dev/stune/foreground/schedtune.prefer_perf	# 0
-   #echo "0" > /dev/stune/foreground/schedtune.util_est_en	# 0
-   #echo "0" > /dev/stune/foreground/schedtune.ontime_en	# 0
  
    # BACKGROUND-APP
    echo "0" > /dev/stune/background/schedtune.boost		    # 0
-   #echo "0" > /dev/stune/background/schedtune.band			# 0
-   echo "1" > /dev/stune/background/schedtune.prefer_idle	# 0
+   echo "0" > /dev/stune/background/schedtune.prefer_idle	# 0
    echo "0" > /dev/stune/background/schedtune.prefer_perf	# 0
-   #echo "1" > /dev/stune/background/schedtune.util_est_en	# 0
-   #echo "1" > /dev/stune/background/schedtune.ontime_en	# 0
 
    # CPU SET
    # RESTRICKTED 
@@ -234,9 +218,9 @@ rm -f $LOG
    # TOP-APP
    echo "0-7" > /dev/cpuset/top-app/cpus					# 0-7
    # FOREGROUND
-   echo "0-3,4-5" > /dev/cpuset/foreground/cpus				# 0-2,4-7
+   echo "0-2,4-7" > /dev/cpuset/foreground/cpus				# 0-2,4-7
    # BACKGROUND
-   echo "0-2" > /dev/cpuset/background/cpus				    # 0-2
+   echo "0-1" > /dev/cpuset/background/cpus				    # 0-2
    # SYSTEM-BACKGROUND
    echo "0-2" > /dev/cpuset/system-background/cpus		    # 0-2
    # MODERATE
@@ -246,20 +230,21 @@ rm -f $LOG
 
    ## Kernel Scheduler
    echo "## -- Kernel scheduler settings" >> $LOG;
-   echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns
-   #echo "10000000" > /proc/sys/kernel/sched_latency_ns
-   #echo "950000" > /proc/sys/kernel/sched_min_granularity_ns
-   #echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
-   #echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "30" > /proc/sys/kernel/sched_rr_timeslice_ms  #30
+   echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns # 2000000
+   # echo "11000000" > /proc/sys/kernel/sched_latency_ns # 10000000
+   echo "900000" > /proc/sys/kernel/sched_min_granularity_ns # 950000
+   echo "100000" > /proc/sys/kernel/sched_rt_runtime_us # 950000
+   # echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
+   # echo "1000000" > /proc/sys/kernel/sched_rt_period_us
+   echo "50" > /proc/sys/kernel/sched_rr_timeslice_ms  #4
    echo "64" > /proc/sys/kernel/sched_nr_migrate
    echo "1" > /sys/module/cpuidle/parameters/off  # 0
-   echo "performance" > /sys/module/pcie_aspm/parameters/policy
-   # policy - default performance powersave powersupersave
-   echo "ff" > /proc/irq/default_smp_affinity  #ff
+   echo "default" > /sys/module/pcie_aspm/parameters/policy
+   ## policy - default performance powersave powersupersave
+   echo "0f" > /proc/irq/default_smp_affinity  #ff
    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
    echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
-   echo "10" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
+   echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
    echo "100000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
    echo "565" > /proc/sys/kernel/perf_event_mlock_kb  #516
    echo "0" > /dev/cpuset/sched_load_balance   # 0
@@ -289,21 +274,6 @@ rm -f $LOG
 
 	echo "## -- Sched features Fix" >> $LOG;
 
-    ## Enhanched SlickSleep
-    echo "NO_NORMALIZED_SLEEPER" > /sys/kernel/debug/sched_features
-    echo "NO_GENTLE_FAIR_SLEEPERS" > /sys/kernel/debug/sched_features
-    echo "NO_NORMALIZED_SLEEPER" > /sys/kernel/debug/sched_features
-    echo "NO_NEW_FAIR_SLEEPERS" > /sys/kernel/debug/sched_features
-    echo "NO_START_DEBIT" > /sys/kernel/debug/sched_features
-    echo "NO_HRTICK" > /sys/kernel/debug/sched_features
-    echo "NO_CACHE_HOT_BUDDY" > /sys/kernel/debug/sched_features
-    echo "NO_LB_BIAS" > /sys/kernel/debug/sched_features
-    echo "NO_OWNER_SPIN" > /sys/kernel/debug/sched_features
-    echo "NO_DOUBLE_TICK" > /sys/kernel/debug/sched_features
-    echo "NO_AFFINE_WAKEUPS" > /sys/kernel/debug/sched_features
-    echo "NO_NEXT_BUDDY" > /sys/kernel/debug/sched_features
-    echo "NO_WAKEUP_OVERLAP" > /sys/kernel/debug/sched_features
-	
 	## Kernel no debugs
     echo "NO_AFFINE_WAKEUPS" >> /sys/kernel/debug/sched_features
     echo "NO_ARCH_POWER" >> /sys/kernel/debug/sched_features
@@ -323,6 +293,7 @@ rm -f $LOG
     echo "NO_RT_RUNTIME_SHARE" >> /sys/kernel/debug/sched_features
     echo "NO_START_DEBIT" >> /sys/kernel/debug/sched_features
     echo "NO_TTWU_QUEUE" >> /sys/kernel/debug/sched_features
+    echo "NO_WAKEUP_OVERLAP" > /sys/kernel/debug/sched_features
 	echo " " >> $LOG;
 
 	# Init.d support

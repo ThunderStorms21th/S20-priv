@@ -30,9 +30,9 @@ export CC=$(pwd)/toolchain/clang-14/host/linux-x86/clang-r437112b/bin/clang
 export PATH=$PATH:$LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN:$CLANG_PREBUILT_BIN:$CC
 export LLVM=1
 
-export K_VERSION="v2.2"
-export K_NAME="ThundeRStormS-Kernel-S20N20"
-export K_BASE="DEVA9"
+export K_VERSION="v2.3"
+export K_NAME="ThundeRStormS-Kernel"
+export K_BASE="DFVC7"
 ANDROID=OneUI-S
 MODEL=G98XX-N986B-N985F
 # -----------------------------
@@ -521,14 +521,14 @@ MAIN()
         BUILD_RAMDISK_981B
         BUILD_KERNEL_986B
         BUILD_RAMDISK_986B
-        BUILD_KERNEL_980F
-        BUILD_RAMDISK_980F
-        BUILD_KERNEL_985F
-        BUILD_RAMDISK_985F
         BUILD_KERNEL_N986B
         BUILD_RAMDISK_N986B
         BUILD_KERNEL_N985F
         BUILD_RAMDISK_N985F
+        BUILD_KERNEL_980F
+        BUILD_RAMDISK_980F
+        BUILD_KERNEL_985F
+        BUILD_RAMDISK_985F
 		rm $(pwd)/arch/arm64/configs/tmp_defconfig
 
         # BUILD_DTB

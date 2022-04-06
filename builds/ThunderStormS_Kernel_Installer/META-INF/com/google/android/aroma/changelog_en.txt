@@ -1,5 +1,20 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>ThunderStormS Kernel v2.3
+- Linux 4.19.87
+- Samsung source DFVC7 Android 12
+- Some debugs off
+- Added new ADAPTIVE_POWER_POLICY GPU
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- HZ TICK set at 200Hz
+- Compiled with Clang 14.0.1
+- READ_AHEAD_KB = 128
+- Magisk 24.3 (24305)
+- rest like in v2.2
+</*>
+------------------------------------------------
+
 <*>ThunderStormS Kernel v2.2
 - Linux 4.19.87
 - Samsung source DEVA9 Android 12
@@ -10,7 +25,7 @@
 - Imported GPU Mali drivers r36p0 from ARM
 - Support Battery Saver
 - Support Game Misc Control
-- Compiled with CLang 14.0.1
+- Compiled with Clang 14.0.1
 - READ_AHEAD_KB = 64
 - Magisk 24.1 (24101)
 - rest like in v2.1
@@ -27,7 +42,7 @@
 - Imported GPU Mali drivers r33p0 from ARM
 - Support Battery Saver
 - Added Sustinable GPU freq - set at 702MHz
-- Compiled with CLang 14.0.1
+- Compiled with Clang 14.0.1
 - READ_AHEAD_KB = 256; TS=256
 - Magisk 24.1 (24101)
 - rest like in v2.0.1
@@ -41,7 +56,7 @@
 - CPU MASK, SCHED, EMS, VM & DTS improvements
 - Linux source improvements
 - Support Battery Saver
-- COmpiled with CLang 14.0.1
+- COmpiled with Clang 14.0.1
 - READ_AHEAD_KB = 256; TS=256
 - Magisk 23.1 (23017)
 - rest like in v2.0

@@ -29,9 +29,9 @@ on boot
    write /sys/block/sda/queue/iostats 0
    write /sys/block/mmcblk0/queue/iostats 0
    # VM
-   write /proc/sys/vm/dirty_expire_centisecs 3000
-   write /proc/sys/vm/dirty_writeback_centisecs 3000
-   write /proc/sys/vm/vfs_cache_pressure 100
+   write /proc/sys/vm/dirty_expire_centisecs 2000
+   write /proc/sys/vm/dirty_writeback_centisecs 2000
+   write /proc/sys/vm/vfs_cache_pressure 130
    # MISC
    write > /sys/module/mmc_core/parameters/use_spi_crc N
    
@@ -159,7 +159,7 @@ on boot
     setprop net.tethering.noprovisioning true
     setprop ro.config.nocheckin 1
 ## Game tweaks
-    setprop persist.sys.NV_FPSLIMIT 160
+    setprop persist.sys.NV_FPSLIMIT 250
     setprop persist.sys.NV_POWERMODE 1
     setprop persist.sys.NV_PROFVER 15
     setprop persist.sys.NV_STEREOCTRL 0
@@ -167,8 +167,8 @@ on boot
     setprop persist.sys.NV_STEREOSEP 20
 ## FPS Lock
     setprop ro.fps_enable 1
-    setprop ro.fps.capsmin 70
-    setprop ro.fps.capsmax 160
+    setprop ro.fps.capsmin 65
+    setprop ro.fps.capsmax 250
 ## Grpahics tweaks
     setprop debug.enabletr true
     setprop debug.overlayui.enable 1
@@ -192,7 +192,7 @@ on boot
 ## Render dirty region
     setprop DEBUG_DIRTY_REGION false
     setprop debug.hwui.profile false
-    setprop debug.hwui.profile.maxframes 70
+    setprop debug.hwui.profile.maxframes 65
     setprop debug.hwui.skip_empty_damage true
     setprop debug.hwui.use_partial_updates true
     setprop debug.hwui.use_gpu_pixel_buffers false
@@ -213,12 +213,7 @@ on boot
     setprop power.saving.mode 1
     setprop persist.radio.add_power_save 1
     setprop ro.ril.sensor.sleep.control 1
-    setprop persist.sys.shutdown.mode hibernate
-## Faster streaming videos
-    setprop media.stagefright.enable-player true
-    setprop media.stagefright.enable-meta true
-    setprop media.stagefright.enable-scan false
-    setprop media.stagefright.enable-http true
+    #setprop persist.sys.shutdown.mode hibernate
 ## Sensor Sleep Control
     setprop ro.ril.sensor.sleep.control 1
     setprop ro.wifi.hotspotUI 1
@@ -233,8 +228,6 @@ on boot
 ## Bluetooth quality increase
     setprop persist.bt.enableAptXHD true
     setprop persist.service.btui.use_aptx 1
-    setprop persist.bluetooth.a2dp_offload.cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
-    setprop persist.vendor.btstack.a2dp_offload_cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
     setprop persist.bluetooth.disableabsvol true
     setprop persist.vendor.btstack.enable.splita2dp true
     setprop persist.vendor.btstack.aac_frm_ctl.enabled true
@@ -249,9 +242,8 @@ on boot
     setprop persistent.bt.a2dp_offload_cap sbc-aptx-aptXHD
     setprop ro.bluetooth.hfp.ver 1.6
     setprop persist.bt.a2dp.aptx_hd_disable false
-    setprop persist.vendor.bt.a2dp_offload_cap sbc-aptx-aptxtws-aptxhd-aptxadaptive-aac-ldac
 ## Scrolling Responsiveness
-    setprop windowsmgr.max_events_per_sec 90
+    setprop windowsmgr.max_events_per_sec 40
     setprop persist.cust.tel.eons 1
 # RIL Wakelock Optimization
     setprop ro.ril.wake_lock_timeout 10000
@@ -262,7 +254,7 @@ on boot
     setprop dalvik.vm.checkjni false
     setprop dalvik.vm.dexopt-data-only 1
     setprop dalvik.vm.verify-bytecode false
-    setprop dalvik.vm.heaptargetutilization 0.80
+    setprop dalvik.vm.heaptargetutilization 0.70
     setprop dalvik.vm.dexopt-flags m=y,v=n,o=y,u=y
 # Disable vsync for CPU rendered apps
     setprop debug.cpurend.vsync false
