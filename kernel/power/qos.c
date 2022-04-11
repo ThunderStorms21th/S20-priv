@@ -745,7 +745,6 @@ int pm_qos_update_target(struct pm_qos_constraints *c, struct plist_node *node,
 	struct pm_qos_request *req;
 	unsigned long flags;
 	int prev_value, curr_value, new_value;
-	unsigned long flags;
 
 	spin_lock_irqsave(&pm_qos_lock, flags);
 
@@ -1098,6 +1097,21 @@ int pm_qos_remove_notifier(int pm_qos_class, struct notifier_block *notifier)
 }
 EXPORT_SYMBOL_GPL(pm_qos_remove_notifier);
 
+static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,
+		size_t count, loff_t *f_pos);
+static ssize_t pm_qos_power_read(struct file *filp, char __user *buf,
+		size_t count, loff_t *f_pos);
+static int pm_qos_power_open(struct inode *inode, struct file *filp);
+static int pm_qos_power_release(struct inode *inode, struct file *filp);
+
+static const struct file_operations pm_qos_power_fops = {
+	.write = pm_qos_power_write,
+	.read = pm_qos_power_read,
+	.open = pm_qos_power_open,
+	.release = pm_qos_power_release,
+	.llseek = noop_llseek,
+};
+
 /* User space interface to PM QoS classes via misc devices */
 static int register_pm_qos_misc(struct pm_qos_object *qos, struct dentry *d)
 {
@@ -1192,14 +1206,6 @@ static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,
 
 	return count;
 }
-
-static const struct file_operations pm_qos_power_fops = {
-	.write = pm_qos_power_write,
-	.read = pm_qos_power_read,
-	.open = pm_qos_power_open,
-	.release = pm_qos_power_release,
-	.llseek = noop_llseek,
-};
 
 static int __init pm_qos_power_init(void)
 {
