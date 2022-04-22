@@ -1,5 +1,5 @@
 config SAMSUNG_TUI
-	bool "TUI HW Handler"
+	tristate "TUI HW Handler"
 	default n
 	help
 		Provide methods for TUI such as acquisition of buffer
