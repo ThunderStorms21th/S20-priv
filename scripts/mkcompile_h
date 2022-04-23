@@ -77,7 +77,7 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
     CC_VERSION="$KBUILD_COMPILER_STRING"
   fi
 
-  echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | grep ' version ' | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//`\"
+  echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | grep ' version ' | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//'`\"
 ) > .tmpcompile
 
 
