@@ -71,7 +71,7 @@ config CAMERA_HST_V03
         help
           This camera is hst_v03.
 config SECURE_CAMERA_USE
-        tristate "Use secure camera"
+        bool "Use secure camera"
         depends on VENDER_MCD
         default n
         help
