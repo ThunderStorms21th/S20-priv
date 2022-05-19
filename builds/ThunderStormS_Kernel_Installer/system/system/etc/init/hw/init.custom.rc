@@ -21,20 +21,27 @@ service kernelinit /system/etc/init/hw/kernel.sh
     disabled
 
 on boot
-   write /sys/bus/workqueue/devices/writeback/cpumask 1
+    write /sys/bus/workqueue/devices/writeback/cpumask 1
 
-   # I/O sched settings
-   write /sys/block/sda/queue/nr_requests 256
-   write /sys/block/mmcblk0/queue/nr_requests 128
-   write /sys/block/sda/queue/iostats 0
-   write /sys/block/mmcblk0/queue/iostats 0
-   # VM
-   write /proc/sys/vm/dirty_expire_centisecs 2000
-   write /proc/sys/vm/dirty_writeback_centisecs 2000
-   write /proc/sys/vm/vfs_cache_pressure 130
-   # MISC
-   write > /sys/module/mmc_core/parameters/use_spi_crc N
-   
+## I/O sched settings
+    write /sys/block/sda/queue/nr_requests 128
+    write /sys/block/mmcblk0/queue/nr_requests 64
+    write /sys/block/sda/queue/iostats 0
+    write /sys/block/mmcblk0/queue/iostats 0
+## VM
+    write /proc/sys/vm/dirty_expire_centisecs 2500
+    write /proc/sys/vm/dirty_writeback_centisecs 2500
+    write /proc/sys/vm/vfs_cache_pressure 100
+    write /proc/sys/vm/page-cluster 0
+    write /sys/block/zram0/max_comp_streams 1
+## Native VM bridges    
+    setprop ro.enable.native.bridge.exec 1
+    setprop ro.enable.native.bridge.exec64 1
+## MISC
+    write > /sys/module/mmc_core/parameters/use_spi_crc N
+## NET
+    setprop net.core.default_qdisc fq
+    setprop net.ipv4.tcp_congestion_control bbr
 ## GPU rendering
     setprop hw3d.force 1
     setprop hw2d.force 1
@@ -44,7 +51,6 @@ on boot
     setprop hwui.render_dirty_regions false
     setprop debug.gr.numframebuffers 3
     setprop debug.egl.swapinterval -60
-    setprop debug.gr.swapinterval 0
     setprop ro.config.hw_power_saving 1
     setprop persist.sys.ui.hw 1
     setprop ro.sf.compbypass.enable 0
@@ -54,7 +60,6 @@ on boot
     setprop debug.hwc.nodirtyregion 1
     setprop debug.hwc.winupdate 1
     setprop sys.hwc.gpu_perf_mode 1
-    setprop vidc.debug.level 0
     setprop video.accelerate.hw 1
     ## Increase GPU buffer count
     setprop debug.egl.buffcount 4
@@ -62,6 +67,11 @@ on boot
     ## Fix Rendering Android 12
     setprop debug.hwui.renderer opengl
     setprop ro.hwui.use_vulkan false
+## Open Gl Speed
+    setprop pm.dexopt.first-boot=speed
+    setprop pm.dexopt.install=speed
+    setprop pm.dexopt.bg-dexopt=speed
+    setprop pm.dexopt.boot=speed
 ## Disable logs and debugs
     setprop profiler.debugmonitor 0
     setprop profiler.launch 0
@@ -71,10 +81,6 @@ on boot
     setprop profiler.force_disable_ulog true
     setprop profiler.force_disable_err_rpt true
     setprop debug.mdpcomp.logs 0
-    setprop debug.sf.showupdates 0
-    setprop debug.sf.showcpu 0
-    setprop debug.sf.showbackground 0
-    setprop debug.sf.showfps 0
     setprop profiler.debugmonitor false
     setprop profiler.launch false
     setprop profiler.hung.dumpdobugreport false
@@ -86,26 +92,6 @@ on boot
     setprop mot.proximity.delay 15
     setprop ro.mot.buttonlight.timeout 0
     setprop ro.config.vc_call_steps 20
-## VM
-    write /proc/sys/vm/page-cluster 0
-    ## Native VM bridges    
-    setprop ro.enable.native.bridge.exec 1
-    setprop ro.enable.native.bridge.exec64 1
-## Mobile Data Tweaks
-    setprop ro.ril.hsxpa 5
-    setprop ro.ril.hspa 36
-    setprop ro.ril.lte 5
-    setprop ro.ril.ltea 5
-    setprop ro.ril.hep 0
-    setprop ro.ril.def.agps.mode 2
-    setprop ro.ril.enable.dtm 1
-    setprop ro.ril.hspaclass 12
-    setprop ro.ril.lteclass 12
-    setprop ro.ril.gprsclass 12
-    setprop ro.ril.hsupa.category 8
-    setprop ro.ril.hsdpa.category 28
-    setprop ro.ril.lte.category 8
-    setprop ro.ril.ltea.category 28
 ## Signal Tweaks
     setprop persist.cust.tel.eons 1 
     setprop ro.config.hw_fast_dormancy 1
@@ -159,7 +145,7 @@ on boot
     setprop net.tethering.noprovisioning true
     setprop ro.config.nocheckin 1
 ## Game tweaks
-    setprop persist.sys.NV_FPSLIMIT 250
+    setprop persist.sys.NV_FPSLIMIT 160
     setprop persist.sys.NV_POWERMODE 1
     setprop persist.sys.NV_PROFVER 15
     setprop persist.sys.NV_STEREOCTRL 0
@@ -168,7 +154,15 @@ on boot
 ## FPS Lock
     setprop ro.fps_enable 1
     setprop ro.fps.capsmin 65
-    setprop ro.fps.capsmax 250
+    setprop ro.fps.capsmax 160
+    setprop debug.gr.swapinterval 0
+    setprop cpu.fps 65
+    setprop gpu.fps 65
+## FPS stabilizer
+    setprop debug.sf.showupdates 0
+    setprop debug.sf.showcpu 0
+    setprop debug.sf.showbackground 0
+    setprop debug.sf.showfps 0
 ## Grpahics tweaks
     setprop debug.enabletr true
     setprop debug.overlayui.enable 1
@@ -213,7 +207,6 @@ on boot
     setprop power.saving.mode 1
     setprop persist.radio.add_power_save 1
     setprop ro.ril.sensor.sleep.control 1
-    #setprop persist.sys.shutdown.mode hibernate
 ## Sensor Sleep Control
     setprop ro.ril.sensor.sleep.control 1
     setprop ro.wifi.hotspotUI 1
@@ -243,26 +236,28 @@ on boot
     setprop ro.bluetooth.hfp.ver 1.6
     setprop persist.bt.a2dp.aptx_hd_disable false
 ## Scrolling Responsiveness
-    setprop windowsmgr.max_events_per_sec 40
+    setprop windowsmgr.max_events_per_sec 65
     setprop persist.cust.tel.eons 1
-# RIL Wakelock Optimization
+## RIL Wakelock Optimization
     setprop ro.ril.wake_lock_timeout 10000
-# Enable Fast Dormancy
+## Enable Fast Dormancy
     setprop ro.fast.dormancy 1
     setprop ro.semc.enable.fast_dormancy true
-# Dalvik Virtual Machine Tweaks
+    setprop ro.config.hw_fast_dormancy 1
+    setprop ro.ril.fast.dormancy.rule 1
+## Dalvik Virtual Machine Tweaks
     setprop dalvik.vm.checkjni false
     setprop dalvik.vm.dexopt-data-only 1
     setprop dalvik.vm.verify-bytecode false
     setprop dalvik.vm.heaptargetutilization 0.70
     setprop dalvik.vm.dexopt-flags m=y,v=n,o=y,u=y
-# Disable vsync for CPU rendered apps
+## Disable vsync for CPU rendered apps
     setprop debug.cpurend.vsync false
-# System tweak
+## System tweak
     setprop ro.config.hw.logsystem.send 0
-# Signal Boost
+## Signal Boost
     setprop bt.max.hfpclient.connections 1
-# SQL Tweaks
+## SQL Tweaks
     setprop debug.sqlite.journalmode WAL
     setprop debug.sqlite.syncmode 1
 ## ART compilation
@@ -281,6 +276,25 @@ on boot
     setprop fs.inotify.max_user_instances 512
     setprop fs.inotify.max_user_watches 10240
     setprop vold.post_fs_data_done 1
+## Disable LMK debugging
+    setprop persist.sys.lmk.reportkills false
+    setprop sys.lmk.reportkills false
+    setprop ro.lmk.debug false
+    setprop ro.lmk.log_stats false
+## Disable traced
+    setprop persist.traced.enable 0
+    setprop persist.traced_perf.enable 0
+## Disable vidc debugging
+    setprop vendor.vidc.debug.level 0
+    setprop vidc.debug.level 0
+## Zram
+    setprop ro.vendor.qti.config.zram true
+## SafetyNET Fix
+    setprop ro.knox.enhance.zygote.aslr 1
+    setprop ro.securestorage.knox false
+    setprop ro.securestorage.support false
+## Dalvik JIT for Dex
+    setprop debug.usejit true
 
 on property:sys.boot_completed=1
       resetprop ro.build.selinux 1

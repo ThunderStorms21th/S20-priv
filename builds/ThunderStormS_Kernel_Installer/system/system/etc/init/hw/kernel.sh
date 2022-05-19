@@ -5,24 +5,19 @@
 
 TS_DIR="/data/.tskernel"
 LOG="$TS_DIR/tskernel.log"
-
 sleep 20
-
 rm -f $LOG
 
     # Create ThunderStormS and init.d folder
     if [ ! -d $TS_DIR ]; then
 	    mkdir -p $TS_DIR;
     fi
-
     # Create init.d folder
     mkdir -p /vendor/etc/init.d;
 	chown -R root.root /vendor/etc/init.d;
 	chmod 755 /vendor/etc/init.d;
-
 	echo $(date) "TS-Kernel LOG" >> $LOG;
 	echo " " >> $LOG;
-
 	# SafetyNet
 	# SELinux (0 / 640 = Permissive, 1 / 644 = Enforcing)
 	echo "## -- SafetyNet permissions" >> $LOG;
@@ -30,10 +25,8 @@ rm -f $LOG
 	chmod 440 /sys/fs/selinux/policy;
     echo "1" > /sys/fs/selinux/enforce
 	echo " " >> $LOG;
-
 	# deepsleep fix
 	echo "## -- DeepSleep Fix" >> $LOG;
-
     dmesg -n 1 -C
 	echo "N" > /sys/kernel/debug/debug_enabled
 	echo "N" > /sys/kernel/debug/seclog/seclog_debug
@@ -44,10 +37,9 @@ rm -f $LOG
     echo "0" > /sys/module/binder_alloc/parameters/debug_mask
     echo "0" > /sys/module/xt_qtaguid/parameters/debug_mask
     echo "0" > /sys/module/kernel/parameters/initcall_debug
-
+    echo "off" > /proc/sys/kernel/printk_devkmsg
     # disable cpuidle log
     echo "0" > /sys/module/cpuidle_exynos64/parameters/log_en
-
     debug="/sys/module/*" 2>/dev/null
     for i in \$debug
     do
@@ -56,14 +48,12 @@ rm -f $LOG
 		    echo "0" >  \$i/parameters/debug_mask
 	    fi
     done
-	
     for i in `ls /sys/class/scsi_disk/`; do
 	    cat /sys/class/scsi_disk/$i/write_protect 2>/dev/null | grep 1 >/dev/null
 	    if [ $? -eq 0 ]; then
 		    echo 'temporary none' > /sys/class/scsi_disk/$i/cache_type
 	    fi
     done
-
 	echo " " >> $LOG;
 
     # Initial ThundeRStormS settings
@@ -81,13 +71,13 @@ rm -f $LOG
     # CPU set at max/min freq
     # Little CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    echo "442000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq   # 442000
+    echo "442000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq
     echo "2002000" > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
 
     # Midle CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor
-    echo "377000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq   # 507000
-    echo "2504000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq # 2504
+    echo "377000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq
+    echo "2504000" > /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq
 
     # BIG CPU
     #echo "schedutil" > /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor
@@ -108,17 +98,19 @@ rm -f $LOG
     echo "1" > /sys/module/sec_nfc/parameters/wl_nfc
 
     # Entropy
-    echo "512" > /proc/sys/kernel/random/write_wakeup_threshold
+    echo "1024" > /proc/sys/kernel/random/write_wakeup_threshold
     echo "64" > /proc/sys/kernel/random/read_wakeup_threshold
 
     # VM
-    echo "130" > /proc/sys/vm/vfs_cache_pressure
-    echo "100" > /proc/sys/vm/swappiness
-    echo "2000" > /proc/sys/vm/dirty_writeback_centisecs
-    echo "2000" > /proc/sys/vm/dirty_expire_centisecs
+    echo "100" > /proc/sys/vm/vfs_cache_pressure
+    echo "130" > /proc/sys/vm/swappiness
+    echo "2500" > /proc/sys/vm/dirty_writeback_centisecs
+    echo "2500" > /proc/sys/vm/dirty_expire_centisecs
     echo "50" > /proc/sys/vm/overcommit_ratio
-    echo "75" > /proc/sys/vm/dirty_ratio
-    echo "25" > /proc/sys/vm/dirty_background_ratio
+    echo "55" > /proc/sys/vm/dirty_ratio
+    echo "20" > /proc/sys/vm/dirty_background_ratio
+    echo "750" > /proc/sys/vm/extfrag_threshold
+    echo "20" > /proc/sys/vm/stat_interval
 
     # Fs
     echo "0" > /proc/sys/fs/dir-notify-enable
@@ -140,160 +132,141 @@ rm -f $LOG
     # chmod 644 /dev/block/zram0
     # mkswap /dev/block/zram0 > /dev/null 2>&1
     # swapon /dev/block/zram0 > /dev/null 2>&1
+    echo "1" > /sys/block/zram0/max_comp_streams
 
     # GPU set at max/min freq
-    echo "800000" > /sys/kernel/gpu/gpu_max_clock
+    echo "897000" > /sys/kernel/gpu/gpu_max_clock
     echo "156000" > /sys/kernel/gpu/gpu_min_clock
     echo "adaptive" > /sys/devices/platform/18500000.mali/power_policy
     echo "1" > /sys/devices/platform/18500000.mali/dvfs_governor
-    echo "377000" > /sys/devices/platform/18500000.mali/highspeed_clock
-    echo "95" > /sys/devices/platform/18500000.mali/highspeed_load
-    echo "1" > /sys/devices/platform/18500000.mali/highspeed_delay
+    echo "455000" > /sys/devices/platform/18500000.mali/highspeed_clock
+    echo "80" > /sys/devices/platform/18500000.mali/highspeed_load
+    echo "0" > /sys/devices/platform/18500000.mali/highspeed_delay
     echo "0" > /sys/kernel/gpu/gpu_cl_boost_disable  # 0
 
-   # Misc settings : bbr2, bbr, cubic or westwood
-   echo "bbr" > /proc/sys/net/ipv4/tcp_congestion_control
-   echo "N" > /sys/module/mmc_core/parameters/use_spi_crc
-   echo "1" > /sys/module/sync/parameters/fsync_enabled
-   echo "0" > /sys/kernel/sched/gentle_fair_sleepers
+    # Misc settings : bbr, cubic or westwood
+    echo "westwood" > /proc/sys/net/ipv4/tcp_congestion_control
+    echo "0" > /proc/sys/net/ipv4/tcp_timestamps
+    echo "1" > /proc/sys/net/ipv4/tcp_ecn
+    echo "N" > /sys/module/mmc_core/parameters/use_spi_crc
+    echo "1" > /sys/module/sync/parameters/fsync_enabled
+    echo "0" > /sys/kernel/sched/gentle_fair_sleepers
 
-   # I/O sched settings
-   echo "noop" > /sys/block/sda/queue/scheduler
-   # echo "256" > /sys/block/sda/queue/read_ahead_kb
-   echo "kyber" > /sys/block/mmcblk0/queue/scheduler
-   # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
-   echo "0" > /sys/block/sda/queue/iostats
-   echo "0" > /sys/block/mmcblk0/queue/iostats
-   echo "0" > /sys/block/sda/queue/rq_affinity
-   echo "0" > /sys/block/mmcblk0/queue/rq_affinity
-   echo "256" > /sys/block/sda/queue/nr_requests
-   echo "128" > /sys/block/mmcblk0/queue/nr_requests
-   #echo "16" > /sys/block/mmcblk0/queue/iosched/fifo_batch
-   #echo "600" > /sys/block/sda/queue/iosched/target_latency
+    # I/O sched settings
+    echo "cfq" > /sys/block/sda/queue/scheduler
+    # echo "256" > /sys/block/sda/queue/read_ahead_kb
+    echo "bfq" > /sys/block/mmcblk0/queue/scheduler
+    # echo "256" > /sys/block/mmcblk0/queue/read_ahead_kb
+    echo "0" > /sys/block/sda/queue/iostats
+    echo "0" > /sys/block/mmcblk0/queue/iostats
+    echo "1" > /sys/block/sda/queue/rq_affinity
+    echo "1" > /sys/block/mmcblk0/queue/rq_affinity
+    echo "128" > /sys/block/sda/queue/nr_requests
+    echo "64" > /sys/block/mmcblk0/queue/nr_requests
+    #echo "16" > /sys/block/mmcblk0/queue/iosched/fifo_batch
+    #echo "600" > /sys/block/sda/queue/iosched/target_latency
 
-   #Devfreq
-   # default 2730 MHz
-   # echo "2288000" > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq
+    if [ -e /proc/sys/kernel/sched_schedstats ]; then
+      echo 0 > /proc/sys/kernel/sched_schedstats
+    fi
+      echo off > /proc/sys/kernel/printk_devkmsg
+    for queue in /sys/block/*/queue
+    do
+      echo 0 > "$queue/iostats"
+    done
 
-   # Better DeepSleep 
-   # echo "mem" > /sys/power/autosleep
-   echo "deep" > /sys/power/mem_sleep
+    ## Devfreq
+    # default 2730 MHz
+    echo "2730000" > /sys/devices/platform/17000010.devfreq_mif/devfreq/17000010.devfreq_mif/max_freq
 
-   # Initial ThundeRStormS Stune and CPU set settings
-   echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
+    # Better DeepSleep 
+    # echo "mem" > /sys/power/autosleep
+    echo "deep" > /sys/power/mem_sleep  # s2idle deep
 
-   ## Kernel Stune											DEFAULT VALUES
-   # GLOBAL
-   echo "3" > /dev/stune/schedtune.boost					# 0
-   echo "0" > /dev/stune/schedtune.prefer_idle				# 0
-   echo "0" > /dev/stune/schedtune.prefer_perf				# 0
+    # Initial ThundeRStormS Stune and CPU set settings
+    echo "## -- Initial Stune settings by ThundeRStormS" >> $LOG;
+
+    ## Kernel Stune								 DEFAULT VALUES
+    # GLOBAL
+    echo "0" > /dev/stune/schedtune.boost					# 0
+    echo "0" > /dev/stune/schedtune.prefer_idle				# 0
+    echo "0" > /dev/stune/schedtune.prefer_perf				# 0
    
-   # TOP-APP
-   echo "3" > /dev/stune/top-app/schedtune.boost			# 0
-   echo "0" > /dev/stune/top-app/schedtune.prefer_idle		# 1
-   echo "0" > /dev/stune/top-app/schedtune.prefer_perf		# 0
-   
-   # RT
-   echo "3" > /dev/stune/rt/schedtune.boost					# 0
-   echo "0" > /dev/stune/rt/schedtune.prefer_idle			# 0
-   echo "0" > /dev/stune/rt/schedtune.prefer_perf			# 0
+    # TOP-APP
+    echo "3" > /dev/stune/top-app/schedtune.boost			# 0
+    echo "0" > /dev/stune/top-app/schedtune.prefer_idle		# 1
+    echo "0" > /dev/stune/top-app/schedtune.prefer_perf		# 0
+  
+    # RT
+    echo "0" > /dev/stune/rt/schedtune.boost				# 0
+    echo "0" > /dev/stune/rt/schedtune.prefer_idle			# 0
+    echo "0" > /dev/stune/rt/schedtune.prefer_perf			# 0
  
-   # FOREGROUND-APP
-   echo "0" > /dev/stune/foreground/schedtune.boost			# 0
-   echo "0" > /dev/stune/foreground/schedtune.prefer_idle	# 0
-   echo "0" > /dev/stune/foreground/schedtune.prefer_perf	# 0
+    # FOREGROUND-APP
+    echo "0" > /dev/stune/foreground/schedtune.boost		# 0
+    echo "0" > /dev/stune/foreground/schedtune.prefer_idle	# 0
+    echo "0" > /dev/stune/foreground/schedtune.prefer_perf	# 0
  
-   # BACKGROUND-APP
-   echo "0" > /dev/stune/background/schedtune.boost		    # 0
-   echo "0" > /dev/stune/background/schedtune.prefer_idle	# 0
-   echo "0" > /dev/stune/background/schedtune.prefer_perf	# 0
+    # BACKGROUND-APP
+    echo "0" > /dev/stune/background/schedtune.boost		# 0
+    echo "0" > /dev/stune/background/schedtune.prefer_idle	# 0
+    echo "0" > /dev/stune/background/schedtune.prefer_perf	# 0
 
-   # CPU SET
-   # RESTRICKTED 
-   echo "0-7" >   /dev/cpuset/restricted/cpus				# 0-7
-   # ABNORMAL 
-   echo "0-3" >   /dev/cpuset/abnormal/cpus					# 0-3
-   # GLOBAL
-   echo "0-7" > /dev/cpuset/cpus							# 0-7
-   # TOP-APP
-   echo "0-7" > /dev/cpuset/top-app/cpus					# 0-7
-   # FOREGROUND
-   echo "0-2,4-7" > /dev/cpuset/foreground/cpus				# 0-2,4-7
-   # BACKGROUND
-   echo "0-1" > /dev/cpuset/background/cpus				    # 0-2
-   # SYSTEM-BACKGROUND
-   echo "0-2" > /dev/cpuset/system-background/cpus		    # 0-2
-   # MODERATE
-   echo "0-2,4-6" > /dev/cpuset/moderate/cpus				# 0-2,4-6
-   # DEXOPT
-   echo "0-7" > /dev/cpuset/dexopt/cpus					    # 0-3
+    # CPU SET
+    # RESTRICKTED 
+    echo "0-7" >   /dev/cpuset/restricted/cpus			# 0-7
+    # ABNORMAL 
+    echo "0-3" >   /dev/cpuset/abnormal/cpus			# 0-3
+    # GLOBAL
+    echo "0-7" > /dev/cpuset/cpus						# 0-7
+    # TOP-APP
+    echo "0-7" > /dev/cpuset/top-app/cpus				# 0-7
+    # FOREGROUND
+    echo "0-3,5-6" > /dev/cpuset/foreground/cpus		# 0-2,4-7
+    # BACKGROUND
+    echo "0-1" > /dev/cpuset/background/cpus			# 0-2
+    # SYSTEM-BACKGROUND
+    echo "0-3" > /dev/cpuset/system-background/cpus		# 0-2
+    # MODERATE
+    echo "0-2,4-6" > /dev/cpuset/moderate/cpus			# 0-2,4-6
+    # DEXOPT
+    echo "0-5" > /dev/cpuset/dexopt/cpus				# 0-3
 
-   ## Kernel Scheduler
-   echo "## -- Kernel scheduler settings" >> $LOG;
-   echo "3000000" > /proc/sys/kernel/sched_wakeup_granularity_ns # 2000000
-   # echo "11000000" > /proc/sys/kernel/sched_latency_ns # 10000000
-   echo "900000" > /proc/sys/kernel/sched_min_granularity_ns # 950000
-   echo "100000" > /proc/sys/kernel/sched_rt_runtime_us # 950000
-   # echo "1000000" > /proc/sys/kernel/sched_migration_cost_ns
-   # echo "1000000" > /proc/sys/kernel/sched_rt_period_us
-   echo "50" > /proc/sys/kernel/sched_rr_timeslice_ms  #4
-   echo "64" > /proc/sys/kernel/sched_nr_migrate
-   echo "1" > /sys/module/cpuidle/parameters/off  # 0
-   echo "default" > /sys/module/pcie_aspm/parameters/policy
-   ## policy - default performance powersave powersupersave
-   echo "0f" > /proc/irq/default_smp_affinity  #ff
-   echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
-   echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
-   echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
-   echo "100000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
-   echo "565" > /proc/sys/kernel/perf_event_mlock_kb  #516
-   echo "0" > /dev/cpuset/sched_load_balance   # 0
+    ## Kernel Scheduler
+    echo "## -- Kernel scheduler settings" >> $LOG;
+    echo "5000000" > /proc/sys/kernel/sched_wakeup_granularity_ns # 2000000
+    echo "400000" > /proc/sys/kernel/sched_latency_ns # 10000000
+    echo "1000000" > /proc/sys/kernel/sched_min_granularity_ns # 950000
+    echo "600000" > /proc/sys/kernel/sched_migration_cost_ns # 500000
+    echo "1000000" > /proc/sys/kernel/sched_rt_period_us
+    echo "1000000" > /proc/sys/kernel/sched_rt_runtime_us # 950000
+    echo "20" > /proc/sys/kernel/sched_rr_timeslice_ms  #4
+    echo "64" > /proc/sys/kernel/sched_nr_migrate # 0, 64
+    echo "1" > /sys/module/cpuidle/parameters/off  # 0
+    echo "default" > /sys/module/pcie_aspm/parameters/policy
+    ## policy - default performance powersave powersupersave
+    echo "ff" > /proc/irq/default_smp_affinity  #ff
+    echo "ff" > /sys/bus/workqueue/devices/writeback/cpumask   # ff
+    echo "ff" > /sys/devices/virtual/workqueue/cpumask   # ff
+    echo "15" > /proc/sys/kernel/perf_cpu_time_max_percent  #25
+    echo "150000" > /proc/sys/kernel/perf_event_max_sample_rate #100000
+    echo "565" > /proc/sys/kernel/perf_event_mlock_kb  #516
+    echo "0" > /dev/cpuset/sched_load_balance   # 0
+    echo "0" > /proc/sys/kernel/timer_migration # 1
+    echo "0" > /proc/sys/kernel/sched_schedstats # 1
 
-   # Thermal Governors
-   # BIG Cluster
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone0/policy
-   # MID Cluster
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone1/policy
-   # LITTLE Cluster
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone2/policy
-   # GPU
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone3/policy
-   # ISP
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone4/policy
-   # NPU
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone5/policy
-   # AC
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone6/policy
-   # BATTERY
-   #echo "step_wise" > /sys/devices/virtual/thermal/thermal_zone7/policy
-
-   # Boeffla wakelocks
-   chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
-   echo 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;umts_ipc0;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd' > /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
+    # Boeffla wakelocks
+    chmod 0644 /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
+    # umts_ipc0 - CPU max freq bug, 19050000.decon.f - bug wakeup - black screen
+    # echo 'wlan_pm_wake;wlan_rx_wake;wlan_wake;wlan_ctrl_wake;wlan_txfl_wake;BT_bt_wake;BT_host_wake;nfc_wake_lock;rmnet0;nfc_wake_lock;bluetooth_timer;event0;GPSD;NETLINK;ssp_comm_wake_lock;epoll_system_server_file:[timerfd4_system_server];epoll_system_server_file:[timerfd7_system_server];epoll_InputReader_file:event1;epoll_system_server_file:[timerfd5_system_server];epoll_InputReader_file:event10;epoll_InputReader_file:event0;epoll_InputReader_epollfd;epoll_system_server_epollfd' > /sys/devices/virtual/misc/boeffla_wakelock_blocker/wakelock_blocker
 	echo " " >> $LOG;
 
-	echo "## -- Sched features Fix" >> $LOG;
-
-	## Kernel no debugs
-    echo "NO_AFFINE_WAKEUPS" >> /sys/kernel/debug/sched_features
-    echo "NO_ARCH_POWER" >> /sys/kernel/debug/sched_features
-    echo "NO_CACHE_HOT_BUDDY" >> /sys/kernel/debug/sched_features
-    echo "NO_DOUBLE_TICK" >> /sys/kernel/debug/sched_features
-    echo "NO_FORCE_SD_OVERLAP" >> /sys/kernel/debug/sched_features
-    echo "NO_GENTLE_FAIR_SLEEPERS" >> /sys/kernel/debug/sched_features
-    echo "NO_HRTICK" >> /sys/kernel/debug/sched_features
-    echo "NO_LAST_BUDDY" >> /sys/kernel/debug/sched_features
-    echo "NO_LB_BIAS" >> /sys/kernel/debug/sched_features
-    echo "NO_LB_MIN" >> /sys/kernel/debug/sched_features
-    echo "NO_NEW_FAIR_SLEEPERS" >> /sys/kernel/debug/sched_features
-    echo "NO_NEXT_BUDDY" >> /sys/kernel/debug/sched_features
-    echo "NO_NONTASK_POWER" >> /sys/kernel/debug/sched_features
-    echo "NO_NORMALIZED_SLEEPERS" >> /sys/kernel/debug/sched_features
-    echo "NO_OWNER_SPIN" >> /sys/kernel/debug/sched_features
-    echo "NO_RT_RUNTIME_SHARE" >> /sys/kernel/debug/sched_features
-    echo "NO_START_DEBIT" >> /sys/kernel/debug/sched_features
-    echo "NO_TTWU_QUEUE" >> /sys/kernel/debug/sched_features
-    echo "NO_WAKEUP_OVERLAP" > /sys/kernel/debug/sched_features
+	## Noatime settings
+    echo "## -- Noatime mount settings" >> $LOG;
+    busybox mount -o remount,nosuid,nodev,noatime,nodiratime -t auto /;
+    busybox mount -o remount,nosuid,nodev,noatime,nodiratime -t auto /proc;
+    busybox mount -o remount,nosuid,nodev,noatime,nodiratime -t auto /sys;
+    busybox mount -o remount,nodev,noatime,nodiratime,barrier=0,noauto_da_alloc,discard -t auto /system;
 	echo " " >> $LOG;
 
 	# Init.d support
@@ -301,17 +274,13 @@ rm -f $LOG
 	if [ ! -d /vendor/etc/init.d ]; then
 	    	mkdir -p /vendor/etc/init.d;
 	fi
-
 	chown -R root.root /vendor/etc/init.d;
 	chmod 755 /vendor/etc/init.d;
-
 	# remove detach script
 	rm -f /vendor/etc/init.d/*detach* 2>/dev/null;
 	rm -rf /data/magisk_backup_* 2>/dev/null;
-
 	if [ "$(ls -A /vendor/etc/init.d)" ]; then
 		chmod 755 /vendor/etc/init.d/*;
-
 		for FILE in /vendor/etc/init.d/*; do
 			echo "## -- Executing init.d script: $FILE" >> $LOG;
 			sh $FILE >/dev/null;
@@ -321,6 +290,5 @@ rm -f $LOG
 	fi
 	echo "## -- End Init.d support" >> $LOG;
 	echo " " >> $LOG;
-
-chmod 777 $LOG;
+    chmod 777 $LOG;
 

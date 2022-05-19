@@ -1,5 +1,29 @@
 <@center><b><#selectbg_g>ThunderStormS Kernel Installer</#></b></@> 
 
+<*>ThunderStormS Kernel v2.4
+- Linux 4.19.87
+- Samsung source EFVDB Android 12
+- Some debugs off
+- Added new ADAPTIVE_POWER_POLICY GPU
+- CPU MASK, SCHED, EMS, VM & DTS improvements
+- Linux source improvements
+- HZ TICK set at 200Hz
+- NET: added SCHED_FQ (Fair Queue) support
+- I/O sched - added BFQ
+- SDFAT as FVAT and EXFAT
+- EXT4 as EXT2 and EXT3
+- zRam use updated LZ4
+- Support for Wakeup stats (backport)
+- GPU OC to 832 and 897MHz
+- Added support for CPU Boost by Sultan K
+- Imported GPU Mali drivers R37P0 ValHall
+- Compiled with Clang 14.0.1
+- READ_AHEAD_KB = 128
+- Magisk 24.3 (24308)
+- rest like in v2.3
+</*>
+------------------------------------------------
+
 <*>ThunderStormS Kernel v2.3
 - Linux 4.19.87
 - Samsung source DFVC7 Android 12
